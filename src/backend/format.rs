@@ -86,8 +86,14 @@ mod tests {
             location: Location {
                 uri: Url::parse("file:///test.kt").unwrap(),
                 range: Range {
-                    start: Position { line: 1, character: 1 },
-                    end: Position { line: 1, character: 10 },
+                    start: Position {
+                        line: 1,
+                        character: 1,
+                    },
+                    end: Position {
+                        line: 1,
+                        character: 10,
+                    },
                 },
             },
             name: name.into(),
@@ -103,10 +109,7 @@ mod tests {
     fn hover_uses_code_fence() {
         let sym = make_sym("greet", "fun greet(name: String): String", "");
         let md = format_symbol_hover(&sym, "test.kt");
-        assert!(
-            md.contains("```kotlin"),
-            "Expected code fence, got: {md}"
-        );
+        assert!(md.contains("```kotlin"), "Expected code fence, got: {md}");
     }
 
     #[test]
