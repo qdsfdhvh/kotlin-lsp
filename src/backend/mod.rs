@@ -671,6 +671,7 @@ fn server_capabilities() -> ServerCapabilities {
             work_done_progress_options: Default::default(),
         })),
         folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+        selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
         signature_help_provider: Some(SignatureHelpOptions {
             trigger_characters: Some(vec!["(".into(), ",".into()]),
@@ -1135,6 +1136,15 @@ impl LanguageServer for Backend {
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
         self.folding_range_impl(params).await
+    }
+
+    // ── textDocument/selectionRange ─────────────────────────────────────────
+
+    async fn selection_range(
+        &self,
+        params: SelectionRangeParams,
+    ) -> Result<Option<Vec<SelectionRange>>> {
+        self.selection_range_impl(params).await
     }
 
     // ── textDocument/codeAction ──────────────────────────────────────────────

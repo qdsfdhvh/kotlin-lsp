@@ -13,6 +13,7 @@
 | `textDocument/signatureHelp` | Active function signature + highlighted parameter as you type |
 | `textDocument/rename` | Renames symbol across all files via `WorkspaceEdit`; index updated via file watcher |
 | `textDocument/foldingRange` | Brace-based region folds + consecutive comment block folds |
+| `textDocument/selectionRange` | Smart expand-selection via tree-sitter CST ancestor chain |
 | `textDocument/inlayHint` | Type hints for lambda `it`, named lambda params, `this`, untyped `val`/`var` |
 | `textDocument/semanticTokens/full` | Two-phase: Phase 1 CST classification + Phase 2 cross-file resolution. Kotlin, Java, Swift |
 | `textDocument/publishDiagnostics` | Syntax errors from tree-sitter (ERROR/MISSING nodes) — not type checking |
@@ -32,7 +33,6 @@ parsing only (no type resolution):
 |---|---|---|
 | ~~`textDocument/semanticTokens/full`~~ | ~~High~~ | ✅ **Implemented in 0.11.0.** Two-phase pipeline: Phase 1 (CST classification) + Phase 2 (cross-file index resolution). Kotlin, Java, Swift. |
 | `textDocument/prepareCallHierarchy` + `callHierarchy/incomingCalls` + `callHierarchy/outgoingCalls` | Medium | Call tree viewer. Would need `rg`-based caller search similar to `references`. |
-| `textDocument/selectionRange` | Medium | Smart expand-selection by CST node boundaries. tree-sitter has the structure. |
 | `completionItem` — `deprecated` tag (`CompletionItemTag::DEPRECATED`) | Medium | Strikethrough for `@Deprecated`/`@deprecated` symbols. Requires detecting the annotation at index time and storing a flag on `SymbolEntry`. |
 | `completionItem` — `label_details` | Medium | Inline param list + right-aligned return type in the completion list (RA-style). Would require splitting `SymbolEntry.detail` into params + return type at parse time. |
 | `textDocument/gotoDeclaration` | Trivial | Identical to `goto_definition` for our use-case (no separate declaration/definition concept in Kotlin/Java). |
