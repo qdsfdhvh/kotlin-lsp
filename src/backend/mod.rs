@@ -1132,7 +1132,10 @@ impl LanguageServer for Backend {
             return Ok(None);
         }
 
-        let Some(lines) = self.indexer.mem_lines_for(params.text_document_position.text_document.uri.as_str()) else {
+        let Some(lines) = self
+            .indexer
+            .mem_lines_for(params.text_document_position.text_document.uri.as_str())
+        else {
             return Ok(None);
         };
 
@@ -1152,8 +1155,7 @@ impl LanguageServer for Backend {
                 match c {
                     '{' => {
                         if depth == 0 {
-                            target_indent =
-                                Some(lines[i].len() - lines[i].trim_start().len());
+                            target_indent = Some(lines[i].len() - lines[i].trim_start().len());
                             break;
                         }
                         depth -= 1;
