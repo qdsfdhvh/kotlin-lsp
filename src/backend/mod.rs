@@ -1140,10 +1140,7 @@ impl LanguageServer for Backend {
 
     // ── textDocument/formatting ─────────────────────────────────────────────
 
-    async fn formatting(
-        &self,
-        params: DocumentFormattingParams,
-    ) -> Result<Option<Vec<TextEdit>>> {
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         self.formatting_impl(params).await
     }
 
