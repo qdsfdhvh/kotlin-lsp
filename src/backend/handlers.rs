@@ -620,8 +620,14 @@ impl Backend {
             let Some(line_text) = text.lines().nth(line_idx) else {
                 results.push(SelectionRange {
                     range: Range {
-                        start: Position { line: pos.line, character: pos.character },
-                        end: Position { line: pos.line, character: pos.character },
+                        start: Position {
+                            line: pos.line,
+                            character: pos.character,
+                        },
+                        end: Position {
+                            line: pos.line,
+                            character: pos.character,
+                        },
                     },
                     parent: None,
                 });
@@ -635,8 +641,14 @@ impl Backend {
             let Some(node) = root.descendant_for_point_range(point, point) else {
                 results.push(SelectionRange {
                     range: Range {
-                        start: Position { line: pos.line, character: pos.character },
-                        end: Position { line: pos.line, character: pos.character },
+                        start: Position {
+                            line: pos.line,
+                            character: pos.character,
+                        },
+                        end: Position {
+                            line: pos.line,
+                            character: pos.character,
+                        },
                     },
                     parent: None,
                 });
@@ -663,7 +675,10 @@ impl Backend {
                 };
                 // Skip nodes that are the same as the previous (parent)
                 if chain.last().map_or(true, |prev| prev.range != range) {
-                    chain.push(SelectionRange { range, parent: None });
+                    chain.push(SelectionRange {
+                        range,
+                        parent: None,
+                    });
                 }
                 max_depth -= 1;
                 match cur.parent() {
@@ -683,7 +698,11 @@ impl Backend {
             }
         }
 
-        Ok(if results.is_empty() { None } else { Some(results) })
+        Ok(if results.is_empty() {
+            None
+        } else {
+            Some(results)
+        })
     }
     // ── callHierarchy ───────────────────────────────────────────────────────
 

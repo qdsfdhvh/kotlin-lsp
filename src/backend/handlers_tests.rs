@@ -193,8 +193,14 @@ mod selection_range_tests {
                     character: end.column as u32,
                 },
             };
-            if chain.last().map_or(true, |prev: &SelectionRange| prev.range != range) {
-                chain.push(SelectionRange { range, parent: None });
+            if chain
+                .last()
+                .map_or(true, |prev: &SelectionRange| prev.range != range)
+            {
+                chain.push(SelectionRange {
+                    range,
+                    parent: None,
+                });
             }
             max_depth -= 1;
             match cur.parent() {
@@ -229,12 +235,15 @@ mod selection_range_tests {
             line: 0,
             character: 21, // 'w' in "world" (UTF-16)
         };
-        let chain =
-            build_selection_chain(src, pos, tree_sitter_kotlin::language())
-                .expect("should build chain");
+        let chain = build_selection_chain(src, pos, tree_sitter_kotlin::language())
+            .expect("should build chain");
 
         // Should expand: word → string → assignment → block → function
-        assert!(chain_depth(&chain) >= 3, "Expected at least 3 levels, got {}", chain_depth(&chain));
+        assert!(
+            chain_depth(&chain) >= 3,
+            "Expected at least 3 levels, got {}",
+            chain_depth(&chain)
+        );
     }
 
     #[test]
@@ -244,9 +253,8 @@ mod selection_range_tests {
             line: 0,
             character: 14, // 'p' in "println"
         };
-        let chain =
-            build_selection_chain(src, pos, tree_sitter_kotlin::language())
-                .expect("should build chain");
+        let chain = build_selection_chain(src, pos, tree_sitter_kotlin::language())
+            .expect("should build chain");
         assert!(chain_depth(&chain) >= 4);
     }
 
@@ -257,18 +265,24 @@ mod selection_range_tests {
             line: 0,
             character: 29, // 'u' in "fun"
         };
-        let chain =
-            build_selection_chain(src, pos, tree_sitter_kotlin::language())
-                .expect("should build chain");
+        let chain = build_selection_chain(src, pos, tree_sitter_kotlin::language())
+            .expect("should build chain");
         // Should expand: fun → function_body → class_body → class → source_file
-        assert!(chain_depth(&chain) >= 3, "Expected at least 3 levels, got {}", chain_depth(&chain));
+        assert!(
+            chain_depth(&chain) >= 3,
+            "Expected at least 3 levels, got {}",
+            chain_depth(&chain)
+        );
     }
 
     #[test]
     fn empty_chain_given_no_parent() {
         let chain = build_selection_chain(
             "",
-            Position { line: 0, character: 0 },
+            Position {
+                line: 0,
+                character: 0,
+            },
             tree_sitter_kotlin::language(),
         );
         assert!(chain.is_none());
@@ -278,7 +292,10 @@ mod selection_range_tests {
     fn java_method_selection_expands() {
         let src = "class Foo { void bar() { int x = 1; } }";
         // Position on 'x'
-        let pos = Position { line: 0, character: 27 };
+        let pos = Position {
+            line: 0,
+            character: 27,
+        };
         let chain = build_selection_chain(src, pos, tree_sitter_java::language())
             .expect("should build chain");
         assert!(chain_depth(&chain) >= 4);
@@ -446,7 +463,12 @@ mod folding_range_tests {
             .iter()
             .filter(|f| f.kind == Some(FoldingRangeKind::Imports))
             .collect();
-        assert_eq!(import_folds.len(), 1, "Expected 1 import fold, got {:?}", folds);
+        assert_eq!(
+            import_folds.len(),
+            1,
+            "Expected 1 import fold, got {:?}",
+            folds
+        );
         assert_eq!(import_folds[0].start_line, 2);
         assert_eq!(import_folds[0].end_line, 4);
     }
@@ -481,18 +503,16 @@ mod folding_range_tests {
 
     #[test]
     fn detects_block_comment() {
-        let folds = compute_folds(&[
-            "/*",
-            " * Multi-line",
-            " * comment",
-            " */",
-            "class Foo",
-        ]);
+        let folds = compute_folds(&["/*", " * Multi-line", " * comment", " */", "class Foo"]);
         let comment_folds: Vec<_> = folds
             .iter()
             .filter(|f| f.kind == Some(FoldingRangeKind::Comment))
             .collect();
-        assert!(comment_folds.len() >= 1, "Expected block comment fold, got {:?}", folds);
+        assert!(
+            comment_folds.len() >= 1,
+            "Expected block comment fold, got {:?}",
+            folds
+        );
     }
 
     #[test]
@@ -500,20 +520,20 @@ mod folding_range_tests {
         let folds = compute_folds(&["class Foo /* comment */ {", "}"]);
         let comment_folds: Vec<_> = folds
             .iter()
-            .filter(|f| f.kind == Some(FoldingRangeKind::Comment) && f.collapsed_text == Some("/* ...".into()))
+            .filter(|f| {
+                f.kind == Some(FoldingRangeKind::Comment)
+                    && f.collapsed_text == Some("/* ...".into())
+            })
             .collect();
-        assert!(comment_folds.is_empty(), "Single-line /* ... */ should not fold");
+        assert!(
+            comment_folds.is_empty(),
+            "Single-line /* ... */ should not fold"
+        );
     }
 
     #[test]
     fn detects_consecutive_line_comments() {
-        let folds = compute_folds(&[
-            "// header 1",
-            "// header 2",
-            "// header 3",
-            "",
-            "class Foo",
-        ]);
+        let folds = compute_folds(&["// header 1", "// header 2", "// header 3", "", "class Foo"]);
         let comment_folds: Vec<_> = folds
             .iter()
             .filter(|f| f.collapsed_text == Some("// ...".into()))
@@ -543,15 +563,18 @@ mod folding_range_tests {
 
     #[test]
     fn no_comment_fold_for_single_line() {
-        let folds = compute_folds(&[
-            "// just one comment",
-            "class Foo",
-        ]);
+        let folds = compute_folds(&["// just one comment", "class Foo"]);
         let comment_folds: Vec<_> = folds
             .iter()
-            .filter(|f| f.kind == Some(FoldingRangeKind::Comment) && f.collapsed_text == Some("// ...".into()))
+            .filter(|f| {
+                f.kind == Some(FoldingRangeKind::Comment)
+                    && f.collapsed_text == Some("// ...".into())
+            })
             .collect();
-        assert!(comment_folds.is_empty(), "Single comment line should not fold");
+        assert!(
+            comment_folds.is_empty(),
+            "Single comment line should not fold"
+        );
     }
 
     #[test]
@@ -565,7 +588,10 @@ mod folding_range_tests {
         ]);
         let comment_folds: Vec<_> = folds
             .iter()
-            .filter(|f| f.kind == Some(FoldingRangeKind::Comment) && f.collapsed_text == Some("// ...".into()))
+            .filter(|f| {
+                f.kind == Some(FoldingRangeKind::Comment)
+                    && f.collapsed_text == Some("// ...".into())
+            })
             .collect();
         assert_eq!(comment_folds.len(), 1);
         assert_eq!(comment_folds[0].start_line, 2);
