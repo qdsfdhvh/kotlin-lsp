@@ -786,7 +786,7 @@ impl Backend {
 
         // Walk the function body and collect call expressions.
         let mut calls: Vec<CallHierarchyOutgoingCall> = Vec::new();
-        collect_outgoing_calls(&decl_node, uri, text, &*self.indexer, &mut calls);
+        collect_outgoing_calls(&decl_node, uri, text, &self.indexer, &mut calls);
 
         Ok((!calls.is_empty()).then_some(calls))
     }
