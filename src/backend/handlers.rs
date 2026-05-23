@@ -523,7 +523,8 @@ impl Backend {
         let path = uri.path();
 
         // Determine which formatter to use based on file extension.
-        let (formatter, args): (&str, &[&str]) = if path.ends_with(".kt") || path.ends_with(".kts") {
+        let (formatter, args): (&str, &[&str]) = if path.ends_with(".kt") || path.ends_with(".kts")
+        {
             ("ktfmt", &["--stdin", path])
         } else if path.ends_with(".java") {
             ("google-java-format", &["-"])
@@ -554,9 +555,10 @@ impl Backend {
         // Write input to stdin and wait.
         use tokio::io::AsyncWriteExt;
         if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(input.as_bytes()).await.map_err(|_| {
-                tower_lsp::jsonrpc::Error::internal_error()
-            })?;
+            stdin
+                .write_all(input.as_bytes())
+                .await
+                .map_err(|_| tower_lsp::jsonrpc::Error::internal_error())?;
             drop(stdin);
         }
 
@@ -569,8 +571,8 @@ impl Backend {
             return Ok(None);
         }
 
-        let formatted =
-            String::from_utf8(output.stdout).map_err(|_| tower_lsp::jsonrpc::Error::internal_error())?;
+        let formatted = String::from_utf8(output.stdout)
+            .map_err(|_| tower_lsp::jsonrpc::Error::internal_error())?;
 
         // If the formatter produces no changes, return None.
         if formatted == input {
