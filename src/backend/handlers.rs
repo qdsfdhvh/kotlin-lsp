@@ -596,6 +596,7 @@ impl Backend {
             },
             new_text: formatted,
         }]))
+    }
     // ── textDocument/selectionRange ─────────────────────────────────────────
 
     pub(super) async fn selection_range_impl(
