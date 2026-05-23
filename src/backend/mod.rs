@@ -1219,6 +1219,7 @@ impl LanguageServer for Backend {
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         self.formatting_impl(params).await
+    }
     // ── callHierarchy ───────────────────────────────────────────────────────
 
     async fn prepare_call_hierarchy(

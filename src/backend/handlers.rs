@@ -596,6 +596,7 @@ impl Backend {
             },
             new_text: formatted,
         }]))
+    }
     // ── callHierarchy ───────────────────────────────────────────────────────
 
     pub(super) async fn prepare_call_hierarchy_impl(
