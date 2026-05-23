@@ -78,7 +78,7 @@ mod selection_range_tests {
             };
             if chain
                 .last()
-                .map_or(true, |prev: &SelectionRange| prev.range != range)
+                .is_none_or(|prev: &SelectionRange| prev.range != range)
             {
                 chain.push(SelectionRange {
                     range,

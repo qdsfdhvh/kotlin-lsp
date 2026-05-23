@@ -674,7 +674,7 @@ impl Backend {
                     },
                 };
                 // Skip nodes that are the same as the previous (parent)
-                if chain.last().map_or(true, |prev| prev.range != range) {
+                if chain.last().is_none_or(|prev| prev.range != range) {
                     chain.push(SelectionRange {
                         range,
                         parent: None,
