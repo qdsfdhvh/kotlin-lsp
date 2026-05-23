@@ -38,9 +38,7 @@ fn no_match() {
 
 #[cfg(test)]
 mod call_hierarchy_tests {
-    use super::super::{
-        extract_call_hierarchy_name, find_cst_ident_range, is_keyword,
-    };
+    use super::super::{extract_call_hierarchy_name, find_cst_ident_range, is_keyword};
 
     fn parse_kotlin(source: &str) -> Option<tree_sitter::Tree> {
         let mut parser = tree_sitter::Parser::new();
@@ -49,7 +47,10 @@ mod call_hierarchy_tests {
     }
 
     /// Find the first descendant with the given `kind`, depth-first.
-    fn find_deepest_child<'a>(node: tree_sitter::Node<'a>, kind: &str) -> Option<tree_sitter::Node<'a>> {
+    fn find_deepest_child<'a>(
+        node: tree_sitter::Node<'a>,
+        kind: &str,
+    ) -> Option<tree_sitter::Node<'a>> {
         let mut cursor = node.walk();
         if node.child_count() == 0 {
             return None;
@@ -88,8 +89,8 @@ mod call_hierarchy_tests {
         let tree = parse_kotlin(src).expect("parse");
         let root = tree.root_node();
         // tree-sitter-kotlin may use "function_declaration" for methods inside classes.
-        let decl = find_deepest_child(root, "function_declaration")
-            .expect("should find nested function");
+        let decl =
+            find_deepest_child(root, "function_declaration").expect("should find nested function");
         let name = extract_call_hierarchy_name(&decl, src);
         assert_eq!(name, "bar");
     }

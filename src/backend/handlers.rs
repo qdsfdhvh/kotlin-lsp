@@ -621,7 +621,11 @@ impl Backend {
             crate::indexer::live_tree::utf16_col_to_byte(line_text, pos.character as usize);
         let point = tree_sitter::Point::new(line_idx, byte_col);
 
-        let Some(start_node) = doc.tree.root_node().descendant_for_point_range(point, point) else {
+        let Some(start_node) = doc
+            .tree
+            .root_node()
+            .descendant_for_point_range(point, point)
+        else {
             return Ok(None);
         };
 
@@ -755,10 +759,8 @@ impl Backend {
         // Find the declaration node matching this item.
         let root = doc.tree.root_node();
         let decl_byte_start = params.item.range.start.line as usize;
-        let decl_point = tree_sitter::Point::new(
-            decl_byte_start,
-            params.item.range.start.character as usize,
-        );
+        let decl_point =
+            tree_sitter::Point::new(decl_byte_start, params.item.range.start.character as usize);
         let mut cur = match root.descendant_for_point_range(decl_point, decl_point) {
             Some(n) => n,
             None => return Ok(None),
@@ -1345,7 +1347,10 @@ fn collect_outgoing_calls(
                         // For `x.foo()`, extract `foo`.
                         let mut sub = c.walk();
                         let children: Vec<_> = c.children(&mut sub).collect();
-                        children.last().and_then(|id| id.utf8_text(source.as_bytes()).ok()).map(|s| s.to_string())
+                        children
+                            .last()
+                            .and_then(|id| id.utf8_text(source.as_bytes()).ok())
+                            .map(|s| s.to_string())
                     } else {
                         c.utf8_text(source.as_bytes()).ok().map(|s| s.to_string())
                     }
@@ -1367,8 +1372,7 @@ fn collect_outgoing_calls(
                     };
 
                     // Try to find the callee in the index.
-                    let callee_locs = indexer
-                        .find_definition_qualified(&name, None, caller_uri);
+                    let callee_locs = indexer.find_definition_qualified(&name, None, caller_uri);
 
                     let to_item = if let Some(loc) = callee_locs.first() {
                         CallHierarchyItem {
@@ -1413,11 +1417,34 @@ fn collect_outgoing_calls(
 fn is_keyword(s: &str) -> bool {
     matches!(
         s,
-        "if" | "else" | "when" | "for" | "while" | "do" | "return"
-            | "try" | "catch" | "throw" | "class" | "fun" | "val" | "var"
-            | "this" | "super" | "true" | "false" | "null" | "is" | "as"
-            | "in" | "out" | "object" | "interface" | "enum" | "typealias"
-            | "continue" | "break"
+        "if" | "else"
+            | "when"
+            | "for"
+            | "while"
+            | "do"
+            | "return"
+            | "try"
+            | "catch"
+            | "throw"
+            | "class"
+            | "fun"
+            | "val"
+            | "var"
+            | "this"
+            | "super"
+            | "true"
+            | "false"
+            | "null"
+            | "is"
+            | "as"
+            | "in"
+            | "out"
+            | "object"
+            | "interface"
+            | "enum"
+            | "typealias"
+            | "continue"
+            | "break"
     )
 }
 
