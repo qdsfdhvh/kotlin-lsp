@@ -672,6 +672,7 @@ fn server_capabilities() -> ServerCapabilities {
         })),
         folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+        document_formatting_provider: Some(OneOf::Left(true)),
         signature_help_provider: Some(SignatureHelpOptions {
             trigger_characters: Some(vec!["(".into(), ",".into()]),
             retrigger_characters: None,
@@ -1135,6 +1136,15 @@ impl LanguageServer for Backend {
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
         self.folding_range_impl(params).await
+    }
+
+    // ── textDocument/formatting ─────────────────────────────────────────────
+
+    async fn formatting(
+        &self,
+        params: DocumentFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        self.formatting_impl(params).await
     }
 
     // ── textDocument/codeAction ──────────────────────────────────────────────
