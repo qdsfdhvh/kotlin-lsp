@@ -392,7 +392,7 @@ mod folding_range_tests {
             .filter(|f| f.kind == Some(FoldingRangeKind::Comment))
             .collect();
         assert!(
-            comment_folds.len() >= 1,
+            !comment_folds.is_empty(),
             "Expected block comment fold, got {:?}",
             folds
         );
