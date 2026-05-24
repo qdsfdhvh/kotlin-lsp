@@ -126,3 +126,32 @@ fn context_finds_symbol() {
         "context should find Greeter: {stdout}"
     );
 }
+
+// ── inject ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn inject_finds_types_in_file() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(
+        dir.path(),
+        "src/Main.kt",
+        "package com.example\n\nimport java.util.List\n\nclass Greeter {\n    fun greet(): String = \"hi\"\n}\n\nclass App {\n    val g: Greeter = Greeter()\n}",
+    );
+    index(dir.path());
+    let output = Command::new(BIN)
+        .args([
+            "inject",
+            &dir.path().join("src/Main.kt").to_string_lossy(),
+            "--root",
+            &dir.path().to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should find Greeter (used in App) or App itself
+    assert!(
+        stdout.contains("Greeter") || stdout.contains("App"),
+        "inject should find types in file: {stdout}"
+    );
+}
