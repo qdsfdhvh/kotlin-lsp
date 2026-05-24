@@ -121,7 +121,7 @@ fn extract_idents(line: &str) -> Vec<String> {
                 && current
                     .chars()
                     .next()
-                    .map_or(false, |c| c.is_alphabetic() || c == '_')
+                    .is_some_and(|c| c.is_alphabetic() || c == '_')
             {
                 result.push(std::mem::take(&mut current));
             } else {
@@ -133,7 +133,7 @@ fn extract_idents(line: &str) -> Vec<String> {
         && current
             .chars()
             .next()
-            .map_or(false, |c| c.is_alphabetic() || c == '_')
+            .is_some_and(|c| c.is_alphabetic() || c == '_')
     {
         result.push(current);
     }

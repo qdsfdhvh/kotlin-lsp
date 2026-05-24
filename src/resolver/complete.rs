@@ -742,7 +742,7 @@ impl BareCompleter {
     }
 
     /// Add a symbol for tier 0 (same file) or tier 1 (same pkg).
-    /// Dedup key is `name`. Respects case-mode, annotation-mode, and score gates.
+    #[allow(clippy::too_many_arguments)]
     fn add(
         &mut self,
         name: &str,
@@ -1343,7 +1343,7 @@ fn label_details_from_detail(
     if is_fn {
         // Extract parameter list: everything from `(` to matching `)`.
         let params = extract_params_from_detail(detail);
-        let return_type = extract_return_for_label(&detail);
+        let return_type = extract_return_for_label(detail);
         if params.is_some() || return_type.is_some() {
             return Some(CompletionItemLabelDetails {
                 detail: params,
@@ -1445,7 +1445,7 @@ fn extract_type_for_label(detail: &str) -> Option<String> {
     // Find the first `:` that is not part of a generic parameter
     let mut depth = 0u32;
     let colon_pos = detail.find(':')?;
-    for (_i, c) in detail[..colon_pos].chars().enumerate() {
+    for c in detail[..colon_pos].chars() {
         match c {
             '<' => depth += 1,
             '>' if depth > 0 => depth -= 1,
@@ -1492,8 +1492,8 @@ fn trim_fun_prefix(detail: &str) -> &str {
         "infix fun ",
     ];
     for prefix in PREFIXES {
-        if s.starts_with(prefix) {
-            return &s[prefix.len()..];
+        if let Some(rest) = s.strip_prefix(prefix) {
+            return rest;
         }
     }
     // Handle `fun ` at the start or after modifiers

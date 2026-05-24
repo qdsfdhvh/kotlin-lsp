@@ -218,13 +218,14 @@ impl Backend {
 
         // ── "Add missing import" quick-fix ─────────────────────────────────────
         if !is_import_ln && !cursor_word.is_empty() && cursor_word.starts_with_uppercase() {
-            let imports: Vec<crate::types::ImportEntry> = if is_kotlin {
-                all_lines.parse_imports()
-            } else if crate::Language::from_path(uri.path()) == crate::Language::Java {
-                all_lines.parse_imports()
-            } else {
-                vec![]
-            };
+            let lang = crate::Language::from_path(uri.path());
+            let imports: Vec<crate::types::ImportEntry> =
+                if lang == crate::Language::Kotlin || lang == crate::Language::Java {
+                    all_lines.parse_imports()
+                } else {
+                    vec![]
+                };
+            let needs_semicolons = lang.needs_semicolons();
             let needs_semicolons = crate::Language::from_path(uri.path()).needs_semicolons();
             for a in build_add_missing_import_actions(
                 &self.indexer,
