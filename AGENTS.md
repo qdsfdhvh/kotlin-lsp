@@ -20,7 +20,7 @@ cargo clippy -- -D warnings
 1. **Zero warnings** — fix clippy/fmt, never `#[allow]` without a comment
 2. **No hardcoded node kind strings** — use `KIND_*` constants from `src/queries.rs`
 3. **Prefer generics over `Box<dyn Trait>`** — static dispatch, zero cost
-4. **No `unwrap()` in production** — use `expect("reason")` or `?`
+4. **No bare `unwrap()` — use `expect("reason")`, see .github/skills/rust-guidelines.md
 5. **Tests in `*_tests.rs` files** — not inline `mod tests {}`
 6. **`#[serde(default)]` on new `SymbolEntry` fields** — bump `CACHE_VERSION` too
 
