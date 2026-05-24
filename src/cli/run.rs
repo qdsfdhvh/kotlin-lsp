@@ -717,7 +717,10 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool) {
             })).collect::<Vec<_>>(),
             "signature": sig,
         });
-        println!("{}", serde_json::to_string_pretty(&output).expect("serialize JSON"));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).expect("serialize JSON")
+        );
     } else {
         println!("## Symbol: `{word}`");
         let locs = index.resolve_symbol(&word, None, &uri);
@@ -801,7 +804,10 @@ async fn run_call_hierarchy(
             "incoming": incoming_results,
             "outgoing": serde_json::json!([]),
         });
-        println!("{}", serde_json::to_string_pretty(&output).expect("serialize JSON"));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).expect("serialize JSON")
+        );
     } else {
         println!("## Call hierarchy for `{word}`\n");
         if incoming {
@@ -903,7 +909,10 @@ async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, json: 
                 .collect();
             output["supertypes"] = serde_json::json!(supers);
         }
-        println!("{}", serde_json::to_string_pretty(&output).expect("serialize JSON"));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).expect("serialize JSON")
+        );
     } else {
         println!("## Type hierarchy for `{name}`\n");
         if subtypes {
