@@ -1,11 +1,30 @@
 # kotlin-lsp — Agent Instructions
 
-> For AI coding agents (Claude Code, Copilot, Codex, Cursor, etc.)
+## Rust Skill Files
 
-## Project Identity
+All skill files from [actionbook/rust-skills](https://github.com/actionbook/rust-skills) are in `.github/skills/rust/`. Read the relevant file before writing Rust code:
 
-**kotlin-lsp** is a Rust-based, tree-sitter-backed LSP server for Kotlin, Java, and Swift.  
-Zero JVM, instant startup, <200MB RAM. Designed for agentic use.
+| Topic | File |
+|-------|------|
+| Question routing | `rust/rust-router.md` |
+| Coding style, naming, clippy | `rust/coding-guidelines.md` |
+| Ownership, borrow, lifetime | `rust/m01-ownership.md` |
+| Smart pointers, Box/Rc/Arc | `rust/m02-resource.md` |
+| Mutability, Cell/RefCell | `rust/m03-mutability.md` |
+| Generics, traits, zero-cost | `rust/m04-zero-cost.md` |
+| Type-driven design | `rust/m05-type-driven.md` |
+| Error handling | `rust/m06-error-handling.md` |
+| Concurrency, async, Send/Sync | `rust/m07-concurrency.md` |
+| Domain modeling | `rust/m09-domain.md` |
+| Performance | `rust/m10-performance.md` |
+| Ecosystem, crates | `rust/m11-ecosystem.md` |
+| RAII, Drop, lifecycle | `rust/m12-lifecycle.md` |
+| Domain error handling | `rust/m13-domain-error.md` |
+| Mental models | `rust/m14-mental-model.md` |
+| Anti-patterns | `rust/m15-anti-pattern.md` |
+| Unsafe code | `rust/unsafe-checker.md` |
+| Refactoring | `rust/rust-refactor-helper.md` |
+| CLI design | `rust/domain-cli.md` |
 
 ## Quick Start
 
@@ -20,30 +39,20 @@ cargo clippy -- -D warnings
 1. **Zero warnings** — fix clippy/fmt, never `#[allow]` without a comment
 2. **No hardcoded node kind strings** — use `KIND_*` constants from `src/queries.rs`
 3. **Prefer generics over `Box<dyn Trait>`** — static dispatch, zero cost
-4. **No bare `unwrap()` — use `expect("reason")`, see .github/skills/rust-guidelines.md
+4. **No bare `unwrap()`** — use `expect("reason")`
 5. **Tests in `*_tests.rs` files** — not inline `mod tests {}`
-6. **`#[serde(default)]` on new `SymbolEntry` fields** — bump `CACHE_VERSION` too
+6. **`#[serde(default)]` on new `SymbolEntry` fields** — bump `CACHE_VERSION`
 
-## When to Use LSP vs CLI
+## CLI Reference
 
-| Need | Tool |
-|------|------|
+| Need | Command |
+|------|---------|
 | Find definition | `kotlin-lsp find <NAME>` |
-| Find all references | `kotlin-lsp refs <NAME>` |
-| Get hover/signature | `kotlin-lsp hover <FILE> <LINE> <COL>` |
-| Get completions | `kotlin-lsp complete <FILE> <LINE> [COL]` |
+| Find references | `kotlin-lsp refs <NAME>` |
+| Get signature | `kotlin-lsp hover <FILE> <LINE> <COL>` |
+| Completions | `kotlin-lsp complete <FILE> <LINE> [COL]` |
 | One-stop context | `kotlin-lsp context <FILE> <LINE> <COL>` |
-| Check syntax errors | `kotlin-lsp check <FILE>...` |
+| Syntax errors | `kotlin-lsp check <FILE>...` |
 | Call hierarchy | `kotlin-lsp call-hierarchy <FILE> <LINE> <COL>` |
 | Type hierarchy | `kotlin-lsp type-hierarchy <NAME>` |
 | Organize imports | `kotlin-lsp organize-imports <FILE>...` |
-
-## Common Error Fixes
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| E0382 | Clone everywhere | Use refs or proper ownership |
-| E0597 | Lifetime too short | Restructure data |
-| E0502 | Borrow conflict | Split borrows |
-| `unused variable` | Renamed in refactor | Remove or prefix with `_` |
-| `this if has identical blocks` | Copied code | Merge conditions |
