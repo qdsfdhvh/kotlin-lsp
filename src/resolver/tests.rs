@@ -1866,8 +1866,10 @@ use tower_lsp::lsp_types::CompletionItemKind;
 #[test]
 fn label_details_function_with_params_and_return() {
     let d = crate::resolver::complete::label_details_from_detail(
-        "fun greet(name: String): String", CompletionItemKind::FUNCTION,
-    ).unwrap();
+        "fun greet(name: String): String",
+        CompletionItemKind::FUNCTION,
+    )
+    .unwrap();
     assert_eq!(d.detail.unwrap(), "(name: String)");
     assert_eq!(d.description.unwrap(), ": String");
 }
@@ -1875,8 +1877,10 @@ fn label_details_function_with_params_and_return() {
 #[test]
 fn label_details_parameterless_function() {
     let d = crate::resolver::complete::label_details_from_detail(
-        "fun getValue(): Int", CompletionItemKind::FUNCTION,
-    ).unwrap();
+        "fun getValue(): Int",
+        CompletionItemKind::FUNCTION,
+    )
+    .unwrap();
     assert_eq!(d.detail.unwrap(), "()");
     assert_eq!(d.description.unwrap(), ": Int");
 }
@@ -1884,8 +1888,10 @@ fn label_details_parameterless_function() {
 #[test]
 fn label_details_property_shows_type() {
     let d = crate::resolver::complete::label_details_from_detail(
-        "val isChecked: Boolean", CompletionItemKind::PROPERTY,
-    ).unwrap();
+        "val isChecked: Boolean",
+        CompletionItemKind::PROPERTY,
+    )
+    .unwrap();
     assert!(d.detail.is_none());
     assert_eq!(d.description.unwrap(), ": Boolean");
 }
@@ -1893,22 +1899,27 @@ fn label_details_property_shows_type() {
 #[test]
 fn label_details_class_returns_none() {
     assert!(crate::resolver::complete::label_details_from_detail(
-        "class Foo", CompletionItemKind::CLASS,
-    ).is_none());
+        "class Foo",
+        CompletionItemKind::CLASS,
+    )
+    .is_none());
 }
 
 #[test]
 fn label_details_empty_detail_returns_none() {
-    assert!(crate::resolver::complete::label_details_from_detail(
-        "", CompletionItemKind::FUNCTION,
-    ).is_none());
+    assert!(
+        crate::resolver::complete::label_details_from_detail("", CompletionItemKind::FUNCTION,)
+            .is_none()
+    );
 }
 
 #[test]
 fn label_details_method_with_multi_params() {
     let d = crate::resolver::complete::label_details_from_detail(
-        "fun validate(a: Int, b: String): Result", CompletionItemKind::METHOD,
-    ).unwrap();
+        "fun validate(a: Int, b: String): Result",
+        CompletionItemKind::METHOD,
+    )
+    .unwrap();
     assert_eq!(d.detail.unwrap(), "(a: Int, b: String)");
     assert_eq!(d.description.unwrap(), ": Result");
 }

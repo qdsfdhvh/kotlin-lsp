@@ -1349,7 +1349,11 @@ fn deprecated_annotation_on_val_marked() {
 #[test]
 fn no_deprecated_without_annotation() {
     let data = parse_kotlin("class NormalClass");
-    let sym = data.symbols.iter().find(|s| s.name == "NormalClass").unwrap();
+    let sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "NormalClass")
+        .unwrap();
     assert!(!sym.deprecated);
 }
 
