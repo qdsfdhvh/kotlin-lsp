@@ -420,10 +420,20 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Context { file, line, col } => {
             run_context(&file, line, col, json).await;
         }
-        Subcommand::CallHierarchy { file, line, col, incoming, outgoing } => {
+        Subcommand::CallHierarchy {
+            file,
+            line,
+            col,
+            incoming,
+            outgoing,
+        } => {
             run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
         }
-        Subcommand::TypeHierarchy { name, subtypes, supertypes } => {
+        Subcommand::TypeHierarchy {
+            name,
+            subtypes,
+            supertypes,
+        } => {
             run_type_hierarchy(&name, subtypes, supertypes, json).await;
         }
     }
@@ -674,8 +684,9 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool) {
             .as_ref()
             .and_then(|l| {
                 let li = line.saturating_sub(1) as usize;
-                l.get(li)
-                    .map(|ln| crate::StrExt::word_at_utf16_col(ln.as_str(), col.saturating_sub(1) as usize))
+                l.get(li).map(|ln| {
+                    crate::StrExt::word_at_utf16_col(ln.as_str(), col.saturating_sub(1) as usize)
+                })
             })
             .unwrap_or_default()
     };
@@ -714,7 +725,12 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool) {
             println!("  (not found)");
         } else {
             for loc in &locs {
-                println!("  Def: {}:{}:{}", loc.uri, loc.range.start.line + 1, loc.range.start.character + 1);
+                println!(
+                    "  Def: {}:{}:{}",
+                    loc.uri,
+                    loc.range.start.line + 1,
+                    loc.range.start.character + 1
+                );
             }
         }
         if let Some(info) = crate::indexer::resolution::resolve_symbol_info(
@@ -727,7 +743,12 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool) {
         ) {
             println!("  Sig: {}", info.signature);
             if !info.doc.is_empty() {
-                let first: String = info.doc.lines().take_while(|l| !l.trim().is_empty()).collect::<Vec<_>>().join(" ");
+                let first: String = info
+                    .doc
+                    .lines()
+                    .take_while(|l| !l.trim().is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 println!("  Doc: {first}");
             }
         }
@@ -755,8 +776,9 @@ async fn run_call_hierarchy(
             .as_ref()
             .and_then(|l| {
                 let li = line.saturating_sub(1) as usize;
-                l.get(li)
-                    .map(|ln| crate::StrExt::word_at_utf16_col(ln.as_str(), col.saturating_sub(1) as usize))
+                l.get(li).map(|ln| {
+                    crate::StrExt::word_at_utf16_col(ln.as_str(), col.saturating_sub(1) as usize)
+                })
             })
             .unwrap_or_default()
     };
@@ -802,7 +824,11 @@ async fn run_call_hierarchy(
 }
 
 /// Use rg to find functions that call `name`.
-fn find_callers_via_rg(name: &str, root: &Path, _matcher: Option<&crate::rg::IgnoreMatcher>) -> Vec<String> {
+fn find_callers_via_rg(
+    name: &str,
+    root: &Path,
+    _matcher: Option<&crate::rg::IgnoreMatcher>,
+) -> Vec<String> {
     use std::process::Command;
     let escaped = crate::rg::regex_escape(name);
     let mut cmd = Command::new("rg");
@@ -824,12 +850,7 @@ fn find_callers_via_rg(name: &str, root: &Path, _matcher: Option<&crate::rg::Ign
 
 // ── type-hierarchy ────────────────────────────────────────────────────────────
 
-async fn run_type_hierarchy(
-    name: &str,
-    subtypes: bool,
-    supertypes: bool,
-    json: bool,
-) {
+async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, json: bool) {
     let root = resolve_root(None);
     let index = build_index(&root, false).await;
 
@@ -856,19 +877,30 @@ async fn run_type_hierarchy(
             let subs: Vec<serde_json::Value> = index
                 .subtypes
                 .get(name)
-                .map(|locs| locs.iter().map(|l| serde_json::json!({
-                    "uri": l.uri.to_string(),
-                    "line": l.range.start.line + 1,
-                })).collect())
+                .map(|locs| {
+                    locs.iter()
+                        .map(|l| {
+                            serde_json::json!({
+                                "uri": l.uri.to_string(),
+                                "line": l.range.start.line + 1,
+                            })
+                        })
+                        .collect()
+                })
                 .unwrap_or_default();
             output["subtypes"] = serde_json::json!(subs);
         }
         if supertypes {
-            let supers: Vec<serde_json::Value> = super_list.iter().map(|(n, l)| serde_json::json!({
-                "name": n,
-                "uri": l.uri.to_string(),
-                "line": l.range.start.line + 1,
-            })).collect();
+            let supers: Vec<serde_json::Value> = super_list
+                .iter()
+                .map(|(n, l)| {
+                    serde_json::json!({
+                        "name": n,
+                        "uri": l.uri.to_string(),
+                        "line": l.range.start.line + 1,
+                    })
+                })
+                .collect();
             output["supertypes"] = serde_json::json!(supers);
         }
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
@@ -888,7 +920,12 @@ async fn run_type_hierarchy(
                                 .map(|s| s.name.clone())
                         })
                         .unwrap_or_else(|| "?".to_owned());
-                    println!("  - {} ({}:{})", subtype_name, loc.uri, loc.range.start.line + 1);
+                    println!(
+                        "  - {} ({}:{})",
+                        subtype_name,
+                        loc.uri,
+                        loc.range.start.line + 1
+                    );
                 }
             } else {
                 println!("  (none)");
@@ -901,7 +938,11 @@ async fn run_type_hierarchy(
                 println!("  (none)");
             } else {
                 for (super_name, loc) in &super_list {
-                    println!("  - {super_name} ({}:{})", loc.uri, loc.range.start.line + 1);
+                    println!(
+                        "  - {super_name} ({}:{})",
+                        loc.uri,
+                        loc.range.start.line + 1
+                    );
                 }
             }
             println!();

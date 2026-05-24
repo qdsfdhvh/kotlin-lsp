@@ -225,8 +225,7 @@ impl Backend {
             } else {
                 vec![]
             };
-            let needs_semicolons =
-                crate::Language::from_path(uri.path()).needs_semicolons();
+            let needs_semicolons = crate::Language::from_path(uri.path()).needs_semicolons();
             for a in build_add_missing_import_actions(
                 &self.indexer,
                 &cursor_word,
@@ -242,9 +241,10 @@ impl Backend {
         // ── "Suppress warning" quick-fix ────────────────────────────────────────
         let diagnostics = &params.context.diagnostics;
         if !diagnostics.is_empty() && !is_import_ln && is_kotlin {
-            for diag in diagnostics.iter().filter(|d| {
-                d.range.start <= range.start && d.range.end >= range.end
-            }) {
+            for diag in diagnostics
+                .iter()
+                .filter(|d| d.range.start <= range.start && d.range.end >= range.end)
+            {
                 if let Some(a) =
                     build_suppress_warning_action(diag, &all_lines, uri, range.start.line)
                 {
@@ -256,12 +256,9 @@ impl Backend {
 
         // ── "Generate override stubs" quick-fix ──────────────────────────────────
         if is_kotlin && !is_import_ln && !has_selection {
-            if let Some(a) = build_generate_overrides_action(
-                &self.indexer,
-                &all_lines,
-                uri,
-                range.start.line,
-            ) {
+            if let Some(a) =
+                build_generate_overrides_action(&self.indexer, &all_lines, uri, range.start.line)
+            {
                 actions.push(a);
             }
         }
@@ -524,8 +521,7 @@ fn build_add_missing_import_actions(
         return vec![];
     }
 
-    fqns
-        .into_iter()
+    fqns.into_iter()
         .filter(|fqn| !already_imported(fqn, imports))
         .filter(|fqn| {
             let pkg = fqn.rfind('.').map(|i| &fqn[..i]).unwrap_or("");
@@ -702,12 +698,9 @@ fn build_generate_overrides_action(
                 Some(f) => f,
                 None => continue,
             };
-            let super_class_sym = match super_file
-                .symbols
-                .iter()
-                .find(|s| s.name == super_name.as_str()
-                    && s.selection_start() == loc.range.start.line)
-            {
+            let super_class_sym = match super_file.symbols.iter().find(|s| {
+                s.name == super_name.as_str() && s.selection_start() == loc.range.start.line
+            }) {
                 Some(s) => s,
                 None => continue,
             };
@@ -716,26 +709,19 @@ fn build_generate_overrides_action(
             let super_start = super_class_sym.selection_start();
 
             for sym in &super_file.symbols {
-                if sym.selection_start() <= super_start
-                    || sym.selection_start() >= super_end
-                {
+                if sym.selection_start() <= super_start || sym.selection_start() >= super_end {
                     continue;
                 }
                 if !matches!(
                     sym.kind,
-                    SymbolKind::METHOD
-                        | SymbolKind::FUNCTION
-                        | SymbolKind::OPERATOR
+                    SymbolKind::METHOD | SymbolKind::FUNCTION | SymbolKind::OPERATOR
                 ) {
                     continue;
                 }
                 if existing_methods.contains(sym.name.as_str()) {
                     continue;
                 }
-                if matches!(
-                    sym.visibility,
-                    crate::types::Visibility::Private
-                ) {
+                if matches!(sym.visibility, crate::types::Visibility::Private) {
                     continue;
                 }
 

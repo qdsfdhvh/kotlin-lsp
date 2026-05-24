@@ -604,8 +604,7 @@ fn extract_data_class_props(data: &FileData, sym: &SymbolEntry) -> Vec<String> {
     let mut props = Vec::new();
     for s in &data.symbols {
         // Only consider symbols inside the class range.
-        if s.selection_start() <= sym.selection_start()
-            || s.selection_start() >= sym.range.end.line
+        if s.selection_start() <= sym.selection_start() || s.selection_start() >= sym.range.end.line
         {
             continue;
         }

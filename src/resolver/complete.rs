@@ -605,8 +605,7 @@ fn completion_item_for_nested_symbol(
     } else {
         None
     };
-    let label_details =
-        label_details_from_detail(&s.detail, kind);
+    let label_details = label_details_from_detail(&s.detail, kind);
     CompletionItem {
         label: s.name.clone(),
         kind: Some(kind),
@@ -1160,7 +1159,12 @@ fn build_completion_items(idx: &Indexer, file_uri: &str) -> Vec<CompletionItem> 
             let vt = vis_tag(sym.visibility);
             let sort_txt = format!("{vt}{}{}", kind_sort_rank(Some(ck)), sym.name);
             items.push(make_completion_item(
-                &sym.name, ck, sort_txt, true, sym.deprecated, &sym.detail,
+                &sym.name,
+                ck,
+                sort_txt,
+                true,
+                sym.deprecated,
+                &sym.detail,
             ));
         }
         for name in &f.declared_names {
@@ -1188,7 +1192,12 @@ fn build_completion_items(idx: &Indexer, file_uri: &str) -> Vec<CompletionItem> 
                     let vt = vis_tag(sym.visibility);
                     let sort_txt = format!("{vt}{}{}", kind_sort_rank(Some(ck)), sym.name);
                     items.push(make_completion_item(
-                        &sym.name, ck, sort_txt, true, sym.deprecated, &sym.detail,
+                        &sym.name,
+                        ck,
+                        sort_txt,
+                        true,
+                        sym.deprecated,
+                        &sym.detail,
                     ));
                 }
                 for name in &file_data.declared_names {
@@ -1321,9 +1330,7 @@ fn label_details_from_detail(
     }
     let is_fn = matches!(
         kind,
-        CompletionItemKind::FUNCTION
-            | CompletionItemKind::METHOD
-            | CompletionItemKind::CONSTRUCTOR
+        CompletionItemKind::FUNCTION | CompletionItemKind::METHOD | CompletionItemKind::CONSTRUCTOR
     );
     let is_property = matches!(
         kind,

@@ -118,7 +118,10 @@ fn extract_idents(line: &str) -> Vec<String> {
             current.push(c);
         } else {
             if !current.is_empty()
-                && current.chars().next().map_or(false, |c| c.is_alphabetic() || c == '_')
+                && current
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_alphabetic() || c == '_')
             {
                 result.push(std::mem::take(&mut current));
             } else {
@@ -127,7 +130,10 @@ fn extract_idents(line: &str) -> Vec<String> {
         }
     }
     if !current.is_empty()
-        && current.chars().next().map_or(false, |c| c.is_alphabetic() || c == '_')
+        && current
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_alphabetic() || c == '_')
     {
         result.push(current);
     }

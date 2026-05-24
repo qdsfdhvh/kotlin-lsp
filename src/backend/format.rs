@@ -56,10 +56,7 @@ pub(super) fn format_symbol_hover(info: &ResolvedSymbol, uri_path: &str) -> Stri
 
     // Data class properties
     if !info.data_class_props.is_empty() {
-        sections.push(format!(
-            "Properties: {}",
-            info.data_class_props.join(", ")
-        ));
+        sections.push(format!("Properties: {}", info.data_class_props.join(", ")));
     }
 
     let main = if sections.is_empty() {

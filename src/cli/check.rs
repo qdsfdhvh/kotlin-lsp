@@ -82,7 +82,9 @@ pub(crate) fn expand_file_list(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut result = Vec::new();
     for path in paths {
         if path.is_dir() {
-            let walker = walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok());
+            let walker = walkdir::WalkDir::new(path)
+                .into_iter()
+                .filter_map(|e| e.ok());
             for entry in walker {
                 let p = entry.path();
                 if p.is_file() {

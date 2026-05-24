@@ -390,7 +390,13 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             // Flags are currently not parsed via ParsedCliFlags; default to both.
             let (file, line, col) = parse_file_line_col(positionals, "call-hierarchy")?;
             // For now, show both: use the verbose flag approach.
-            Ok(Subcommand::CallHierarchy { file, line, col, incoming: true, outgoing: true })
+            Ok(Subcommand::CallHierarchy {
+                file,
+                line,
+                col,
+                incoming: true,
+                outgoing: true,
+            })
         }
         "type-hierarchy" => build_type_hierarchy_subcommand(positionals),
         _ => unreachable!(),
@@ -493,7 +499,11 @@ fn build_type_hierarchy_subcommand(positionals: Vec<String>) -> Result<Subcomman
         }
     }
     let name = name.ok_or("type-hierarchy requires a NAME argument")?;
-    Ok(Subcommand::TypeHierarchy { name, subtypes, supertypes })
+    Ok(Subcommand::TypeHierarchy {
+        name,
+        subtypes,
+        supertypes,
+    })
 }
 
 fn first_positional(
