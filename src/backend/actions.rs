@@ -226,7 +226,6 @@ impl Backend {
                     vec![]
                 };
             let needs_semicolons = lang.needs_semicolons();
-            let needs_semicolons = crate::Language::from_path(uri.path()).needs_semicolons();
             for a in build_add_missing_import_actions(
                 &self.indexer,
                 &cursor_word,
