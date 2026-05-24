@@ -610,7 +610,7 @@ mod code_action_tests {
         strip_visibility_and_modifiers,
     };
     use crate::types::{SymbolEntry, Visibility};
-    use tower_lsp::lsp_types::{Position, Range, SymbolKind};
+    use tower_lsp::lsp_types::{Range, SymbolKind};
 
     fn make_sym(name: &str, detail: &str) -> SymbolEntry {
         SymbolEntry {
