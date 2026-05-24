@@ -122,23 +122,13 @@ pub(crate) async fn run_inject(
         });
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
-        let total_tokens = entries
-            .iter()
-            .map(|e| e.name.len() + e.signature.len())
-            .sum::<usize>();
-        println!(
-            "<types count=\"{}\" tokens=\"~{}\">",
-            entries.len(),
-            total_tokens
-        );
         for entry in &entries {
             if entry.signature.is_empty() {
-                println!("  {}:{}: <unknown>", entry.line, entry.name);
+                println!("{}:{}: <unknown>", entry.line, entry.name);
             } else {
-                println!("  {}:{}: {}", entry.line, entry.name, entry.signature);
+                println!("{}:{}: {}", entry.line, entry.name, entry.signature);
             }
         }
-        println!("</types>");
     }
 }
 
