@@ -1,0 +1,8 @@
+{
+  "plugins": [
+    {
+      "name": "rust-skills",
+      "source": "actionbook/rust-skills"
+    }
+  ]
+}
