@@ -1,0 +1,6 @@
+[project]
+name = "kotlin-lsp"
+description = "Rust-based tree-sitter LSP server for Kotlin/Java/Swift"
+
+[skills.install]
+rust-skills = "actionbook/rust-skills"
