@@ -151,6 +151,8 @@ mod call_hierarchy_tests {
         assert!(!is_keyword("myFunction"));
         assert!(!is_keyword("println"));
         assert!(!is_keyword("foo"));
+    }
+}
 // ── selectionRange tests ───────────────────────────────────────────────────
 
 #[cfg(test)]
