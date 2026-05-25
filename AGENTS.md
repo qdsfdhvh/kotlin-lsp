@@ -27,6 +27,7 @@ cargo clippy -- -D warnings
 4. **No bare `unwrap()`** — use `expect("reason")`
 5. **Tests in `*_tests.rs` files** — not inline `mod tests {}`
 6. **`#[serde(default)]` on new `SymbolEntry` fields** — bump `CACHE_VERSION`
+7. **Always PR, never push to main** — `git push origin feat/<name>`, create PR, squash-merge on green CI
 
 ## CLI Reference
 
