@@ -16,6 +16,8 @@ Use `kotlin-lsp` whenever you need to:
 - Find **callers / callees** of a function.
 - Find **subtypes / supertypes** of a class.
 - **Organize imports** (sort, dedup, remove unused).
+- **Inject types** in batch for a file.
+- **List all types** in the project.
 - **Inject types** in batch for a file (one call = N context calls).
 - **List all types** in the project with optional filters.
 - Find where a Kotlin/Java/Swift symbol (class, function, property) is **defined**.
@@ -205,10 +207,19 @@ kotlin-lsp list-types [--limit N]
 ```
 
 Lists all known types in the workspace index, grouped by module.
+
 ## When to reach for kotlin-lsp vs rg
+
+
+Reads a file, extracts referenced type names and returns signatures in one batch.
+
+### 11. List all types
+
 
 The win is largest when the query crosses module boundaries or touches code rg can't see:
 
+
+Lists all known types in the workspace index.
 ```
 Query is about Kotlin/Java/Swift symbols?
 ├─ No → rg / Read
