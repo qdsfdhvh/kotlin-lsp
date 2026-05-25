@@ -402,6 +402,11 @@ pub(crate) async fn run(args: CliArgs) {
             dry_run,
             patterns,
         }),
+        Subcommand::ListTypes { limit } => {
+            let root = resolve_root(args.root.as_deref());
+            super::list_types::run_list_types(&root, None, None, limit, json).await;
+        }
+
         Subcommand::Inject { file } => {
             let root = resolve_root_for_file(None, &file);
             super::inject::run_inject(&file, &root, json, 50).await;

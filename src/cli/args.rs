@@ -103,6 +103,10 @@ pub(crate) enum Subcommand {
     Inject {
         file: PathBuf,
     },
+    /// List all known types in the workspace with optional filters.
+    ListTypes {
+        limit: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -382,8 +386,11 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "check" => Ok(Subcommand::Check {
             files: positionals.into_iter().map(PathBuf::from).collect(),
         }),
-        "inject" => Ok(Subcommand::Inject {
-            file: PathBuf::from(first_positional(positionals, "inject requires a FILE argument")?),
+        "inject" | "list-types" => Ok(Subcommand::Inject {
+            file: PathBuf::from(first_positional(
+                positionals,
+                "inject requires a FILE argument",
+            )?),
         }),
         "organize-imports" => Ok(Subcommand::OrganizeImports {
             files: positionals.into_iter().map(PathBuf::from).collect(),
@@ -537,6 +544,7 @@ fn is_subcommand(value: &str) -> bool {
             | "extract-sources"
             | "check"
             | "inject"
+            | "list-types"
             | "organize-imports"
             | "context"
             | "call-hierarchy"
