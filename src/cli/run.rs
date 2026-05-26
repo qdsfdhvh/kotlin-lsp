@@ -177,7 +177,9 @@ async fn build_index_inner(root: &Path, source_paths: Vec<String>) -> Arc<Indexe
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
     if !workspace_roots.is_empty() {
-        *idx.workspace_source_roots.write().expect("workspace_source_roots lock") = workspace_roots;
+        *idx.workspace_source_roots
+            .write()
+            .expect("workspace_source_roots lock") = workspace_roots;
     }
     Arc::clone(&idx)
         .index_workspace_full(root, Arc::new(NoopReporter))
@@ -846,7 +848,11 @@ async fn run_call_hierarchy(
         std::process::exit(1);
     }
 
-    let matcher = index.ignore_matcher.read().expect("ignore_matcher lock").clone();
+    let matcher = index
+        .ignore_matcher
+        .read()
+        .expect("ignore_matcher lock")
+        .clone();
 
     if json {
         let incoming_results = if incoming {
