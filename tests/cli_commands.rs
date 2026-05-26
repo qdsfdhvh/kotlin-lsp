@@ -127,7 +127,6 @@ fn context_finds_symbol() {
 }
 
 #[test]
-#[test]
 fn inject_sorts_by_frequency() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(
