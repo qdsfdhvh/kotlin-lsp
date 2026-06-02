@@ -329,12 +329,10 @@ fn build_explicit_type_action(
                         // Already has a type → skip.
                         return None;
                     }
-                    KIND_EQ => {
-                        if nc.goto_next_sibling() {
-                            let init_node = nc.node();
-                            if init_node.kind() != KIND_EQ {
-                                initializer = Some(init_node);
-                            }
+                    KIND_EQ if nc.goto_next_sibling() => {
+                        let init_node = nc.node();
+                        if init_node.kind() != KIND_EQ {
+                            initializer = Some(init_node);
                         }
                     }
                     _ => {}
