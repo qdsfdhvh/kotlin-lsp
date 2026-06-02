@@ -300,7 +300,10 @@ fun test() {
         let default_hints = hints_for(src);
         let count_default = default_hints.len();
 
-        let off_config = InlayHintConfig { lambda_it: false, ..Default::default() };
+        let off_config = InlayHintConfig {
+            lambda_it: false,
+            ..Default::default()
+        };
         let suppressed = hints_with_config(src, &off_config);
         assert!(
             suppressed.len() <= count_default,
@@ -323,7 +326,10 @@ class Foo {
         let default_hints = hints_for(src);
         // The named param `item` might get a hint; verify only that the config
         // change reduces total hint count.
-        let off_config = InlayHintConfig { lambda_params: false, ..Default::default() };
+        let off_config = InlayHintConfig {
+            lambda_params: false,
+            ..Default::default()
+        };
         let suppressed = hints_with_config(src, &off_config);
         assert!(
             suppressed.len() <= default_hints.len(),
@@ -342,7 +348,10 @@ class Foo {
 }
 "#;
         let default_hints = hints_for(src);
-        let off_config = InlayHintConfig { this_hints: false, ..Default::default() };
+        let off_config = InlayHintConfig {
+            this_hints: false,
+            ..Default::default()
+        };
         let suppressed = hints_with_config(src, &off_config);
         assert!(
             suppressed.len() <= default_hints.len(),
@@ -361,7 +370,10 @@ fun test() {
 }
 "#;
         let default_hints = hints_for(src);
-        let off_config = InlayHintConfig { untyped_vars: false, ..Default::default() };
+        let off_config = InlayHintConfig {
+            untyped_vars: false,
+            ..Default::default()
+        };
         let suppressed = hints_with_config(src, &off_config);
         assert!(
             suppressed.len() <= default_hints.len(),
