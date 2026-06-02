@@ -512,7 +512,7 @@ fn build_name_arguments_action(
     let line_utf16_len: u32 = line_text.chars().map(|c| c.len_utf16() as u32).sum();
     let start_col = open_paren as u32 + 1; // after '('
     let end_col =
-        line_utf16_len.min((open_paren as usize + new_args_text.len()).saturating_add(2) as u32);
+        line_utf16_len.min((open_paren + new_args_text.len()).saturating_add(2) as u32);
 
     Some(CodeActionOrCommand::CodeAction(CodeAction {
         title: format!("Add names to call arguments: \"{}\"", new_args_text,),
