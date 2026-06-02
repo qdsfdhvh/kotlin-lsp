@@ -37,7 +37,7 @@ parsing only (no type resolution):
 | LSP capability | Effort | Notes |
 |---|---|---|
 | ~~`textDocument/semanticTokens/full`~~ | ~~High~~ | ✅ **Implemented in 0.11.0.** Two-phase pipeline: Phase 1 (CST classification) + Phase 2 (cross-file index resolution). Kotlin, Java, Swift. |
-| `textDocument/typeDefinition` | Medium | Jump to the type of a variable. Requires type inference beyond what tree-sitter provides without the compiler. |
+|| ~~`textDocument/typeDefinition`~~ | ~~Medium~~ | ✅ **Implemented.** Resolves `val x: Foo` → `Foo`, `fun foo(): Bar` → `Bar`, `it`/lambda params, and falls back to regular definition.
 
 ## CLI subcommands
 
