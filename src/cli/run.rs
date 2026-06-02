@@ -399,7 +399,7 @@ pub(crate) async fn run(args: CliArgs) {
                 let cache_path = crate::indexer::workspace_cache_path(&root);
                 println!("Cache path: {}", cache_path.display());
                 if cache_path.exists() {
-                    if let Some(meta) = std::fs::metadata(&cache_path).ok() {
+                    if let Ok(meta) = std::fs::metadata(&cache_path) {
                         let size = meta.len();
                         println!("Size: {} bytes", size);
                     }
@@ -410,7 +410,6 @@ pub(crate) async fn run(args: CliArgs) {
                 return;
             }
             eprintln!("Unknown cache subcommand: {sub}. Use: stats");
-            return;
         }
 
         Subcommand::ExtractSources {
