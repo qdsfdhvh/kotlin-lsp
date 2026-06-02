@@ -538,6 +538,7 @@ async fn run_find(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_refs(
     root: &Path,
     mode: Mode,
