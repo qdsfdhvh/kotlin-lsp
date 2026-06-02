@@ -668,35 +668,16 @@ mod range_formatting_tests {
 
     #[test]
     fn single_line_same_content() {
-        let lines = vec!["fun foo() { }".to_owned()];
-        let range = Range {
-            start: Position {
-                line: 0,
-                character: 0,
-            },
-            end: Position {
-                line: 0,
-                character: 13,
-            },
-        };
+        let line = "fun foo() { }";
         // Original and formatted ranges are identical → no edit needed.
-        let orig_text: String = lines[0][0..13].chars().collect();
-        let fmt_text: String = lines[0][0..13].chars().collect();
-        assert_eq!(orig_text, fmt_text);
+        let orig: String = line[0..13].chars().collect();
+        let fmt: String = line[0..13].chars().collect();
+        assert_eq!(orig, fmt);
     }
 
     #[test]
     fn multi_line_range_extraction() {
-        let lines = vec![
-            "fun foo() {".to_owned(),
-            "    return 1".to_owned(),
-            "}".to_owned(),
-        ];
-        let formatted = vec![
-            "fun foo() {".to_owned(),
-            "    return 1".to_owned(),
-            "}".to_owned(),
-        ];
+        let formatted = ["fun foo() {", "    return 1", "}"];
         let range = Range {
             start: Position {
                 line: 1,
@@ -707,7 +688,7 @@ mod range_formatting_tests {
                 character: 0,
             },
         };
-        let formatted_lines: Vec<&str> = formatted.iter().map(|s| s.as_str()).collect();
+        let formatted_lines = &formatted[..];
         let start_line = range.start.line as usize;
         let end_line = (range.end.line as usize).min(formatted_lines.len().saturating_sub(1));
 
@@ -730,8 +711,8 @@ mod range_formatting_tests {
     #[test]
     fn full_document_formatting_unchanged() {
         // When original and formatted are identical, formatting_impl returns None.
-        let lines = vec!["fun foo() { }".to_owned()];
-        let formatted = "fun foo() { }".to_owned();
+        let lines = ["fun foo() { }"];
+        let formatted = "fun foo() { }";
         assert!(formatted == lines.join("\n"), "identical content → no edit");
     }
 
@@ -754,21 +735,14 @@ mod range_formatting_tests {
     #[test]
     fn range_out_of_bounds_is_safe() {
         // If the requested range exceeds the file, range_formatting_impl clamps.
-        let lines = vec!["fun foo() { }".to_owned()];
-        let formatted = "fun foo() { }".to_owned();
-        let formatted_lines: Vec<&str> = formatted.lines().collect();
+        let lines = ["fun foo() { }"];
         let original_count = lines.len();
-        let formatted_count = formatted_lines.len();
 
         // Clamp logic (same as in range_formatting_impl)
-        let end_line = (999u32 as usize).min(formatted_count.saturating_sub(1));
-        let end_line_orig = (999u32 as usize).min(original_count.saturating_sub(1));
-        let start_line = 0usize.min(original_count.saturating_sub(1));
-        let start_line_orig = 0usize.min(original_count.saturating_sub(1));
+        let end_line = (999usize).min(original_count.saturating_sub(1));
+        let end_line_orig = (999usize).min(original_count.saturating_sub(1));
 
         assert_eq!(end_line, 0, "clamped to last available line");
         assert_eq!(end_line_orig, 0, "clamped to last available original line");
-        assert_eq!(start_line, 0);
-        assert_eq!(start_line_orig, 0);
     }
 }
