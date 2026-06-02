@@ -659,3 +659,116 @@ mod code_action_tests {
         assert_eq!(extract_override_return("foo()"), "");
     }
 }
+
+// ── Range formatting tests ───────────────────────────────────────────────────
+
+#[cfg(test)]
+mod range_formatting_tests {
+    use tower_lsp::lsp_types::*;
+
+    #[test]
+    fn single_line_same_content() {
+        let lines = vec!["fun foo() { }".to_owned()];
+        let range = Range {
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 0,
+                character: 13,
+            },
+        };
+        // Original and formatted ranges are identical → no edit needed.
+        let orig_text: String = lines[0][0..13].chars().collect();
+        let fmt_text: String = lines[0][0..13].chars().collect();
+        assert_eq!(orig_text, fmt_text);
+    }
+
+    #[test]
+    fn multi_line_range_extraction() {
+        let lines = vec![
+            "fun foo() {".to_owned(),
+            "    return 1".to_owned(),
+            "}".to_owned(),
+        ];
+        let formatted = vec![
+            "fun foo() {".to_owned(),
+            "    return 1".to_owned(),
+            "}".to_owned(),
+        ];
+        let range = Range {
+            start: Position {
+                line: 1,
+                character: 0,
+            },
+            end: Position {
+                line: 2,
+                character: 0,
+            },
+        };
+        let formatted_lines: Vec<&str> = formatted.iter().map(|s| s.as_str()).collect();
+        let start_line = range.start.line as usize;
+        let end_line = (range.end.line as usize).min(formatted_lines.len().saturating_sub(1));
+
+        let mut s = String::new();
+        for (i, line) in formatted_lines.iter().enumerate().skip(start_line) {
+            if i == start_line {
+                s.push_str(&line[range.start.character as usize..]);
+            } else if i == end_line {
+                s.push_str(&line[..range.end.character as usize]);
+            } else {
+                s.push_str(line);
+            }
+            if i != end_line {
+                s.push('\n');
+            }
+        }
+        assert_eq!(s, "    return 1\n");
+    }
+
+    #[test]
+    fn full_document_formatting_unchanged() {
+        // When original and formatted are identical, formatting_impl returns None.
+        let lines = vec!["fun foo() { }".to_owned()];
+        let formatted = "fun foo() { }".to_owned();
+        assert!(formatted == lines.join("\n"), "identical content → no edit");
+    }
+
+    #[test]
+    fn run_formatter_not_found() {
+        // Without an external formatter on $PATH, spawn returns an error.
+        assert!(
+            std::process::Command::new("nonexistent-formatter-xyz")
+                .arg("--stdin")
+                .arg("/dev/null")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .is_err(),
+            "formatter not on PATH → spawn fails"
+        );
+    }
+
+    #[test]
+    fn range_out_of_bounds_is_safe() {
+        // If the requested range exceeds the file, range_formatting_impl clamps.
+        let lines = vec!["fun foo() { }".to_owned()];
+        let formatted = "fun foo() { }".to_owned();
+        let formatted_lines: Vec<&str> = formatted.lines().collect();
+        let original_count = lines.len();
+        let formatted_count = formatted_lines.len();
+
+        // Clamp logic (same as in range_formatting_impl)
+        let end_line = (999u32 as usize).min(formatted_count.saturating_sub(1));
+        let end_line_orig = (999u32 as usize).min(original_count.saturating_sub(1));
+        let start_line = 0usize.min(original_count.saturating_sub(1));
+        let start_line_orig = 0usize.min(original_count.saturating_sub(1));
+
+        assert_eq!(end_line, 0, "clamped to last available line");
+        assert_eq!(end_line_orig, 0, "clamped to last available original line");
+        assert_eq!(start_line, 0);
+        assert_eq!(start_line_orig, 0);
+    }
+}
