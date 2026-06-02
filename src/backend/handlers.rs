@@ -267,7 +267,15 @@ impl Backend {
     ) -> Result<Option<Vec<InlayHint>>> {
         let uri = &params.text_document.uri;
         let range = params.range;
-        let hints = compute_inlay_hints(&self.indexer, uri, range);
+        let hints = compute_inlay_hints(
+            &self.indexer,
+            uri,
+            range,
+            &*self
+                .inlay_hint_config
+                .read()
+                .expect("inlay_hint_config lock poisoned"),
+        );
         Ok(if hints.is_empty() { None } else { Some(hints) })
     }
 
