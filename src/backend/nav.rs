@@ -394,7 +394,7 @@ impl Backend {
                 let trimmed = after_colon.trim();
                 // Take the first identifier (strip generics).
                 let type_name = trimmed
-                    .split(|c: char| matches!(c, '<' | '(' | ' ' | '?'))
+                    .split(['<', '(', ' ', '?'])
                     .next()?
                     .trim();
                 if !type_name.is_empty() {
@@ -408,7 +408,7 @@ impl Backend {
             if let Some(after_colon) = sig.split("): ").nth(1).or_else(|| sig.split("):").nth(1)) {
                 let trimmed = after_colon.trim();
                 let type_name = trimmed
-                    .split(|c: char| matches!(c, '<' | ' ' | '?'))
+                    .split(['<', ' ', '?'])
                     .next()?
                     .trim();
                 if !type_name.is_empty() {
