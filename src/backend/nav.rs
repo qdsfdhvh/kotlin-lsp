@@ -393,10 +393,7 @@ impl Backend {
             if let Some(after_colon) = sig.split(':').nth(1) {
                 let trimmed = after_colon.trim();
                 // Take the first identifier (strip generics).
-                let type_name = trimmed
-                    .split(['<', '(', ' ', '?'])
-                    .next()?
-                    .trim();
+                let type_name = trimmed.split(['<', '(', ' ', '?']).next()?.trim();
                 if !type_name.is_empty() {
                     return Some(type_name.to_owned());
                 }
@@ -407,10 +404,7 @@ impl Backend {
             // Find the closing paren and look for `: ReturnType` after it.
             if let Some(after_colon) = sig.split("): ").nth(1).or_else(|| sig.split("):").nth(1)) {
                 let trimmed = after_colon.trim();
-                let type_name = trimmed
-                    .split(['<', ' ', '?'])
-                    .next()?
-                    .trim();
+                let type_name = trimmed.split(['<', ' ', '?']).next()?.trim();
                 if !type_name.is_empty() {
                     return Some(type_name.to_owned());
                 }
