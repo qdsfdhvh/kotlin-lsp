@@ -27,6 +27,7 @@
 | `textDocument/didSave` | Re-indexes the saved file so external formatters/codegen are picked up |
 | `textDocument/formatting` | Delegates to `ktfmt` (Kotlin), `google-java-format` (Java), or `swift-format` (Swift) on `$PATH` |
 | `textDocument/rangeFormatting` | Reuses the same external formatters; returns an edit clipped to the requested range |
+| `textDocument/typeDefinition` | Resolves `val x: Foo` → `Foo`, `fun foo(): Bar` → `Bar`, `it`/lambda params, and falls back to regular definition |
 
 ## Not yet implemented
 
