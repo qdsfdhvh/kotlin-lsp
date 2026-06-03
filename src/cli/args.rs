@@ -471,7 +471,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             )?);
             Ok(Subcommand::Batch {
                 file: file_path,
-                dry_run: dry_run,
+                dry_run,
                 imports: true,
                 output: output_dir.as_ref().map(|p| p.to_string_lossy().to_string()),
             })
