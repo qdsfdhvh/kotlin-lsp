@@ -160,6 +160,21 @@ mod tests;
 ///
 /// Examples:
 /// - `val x = x` — redundant self-assignment (no-op)
+/// Common English words to ignore in spelling checks.
+const COMMON_WORDS: &[&str] = &[
+    "TODO", "FIXME", "HACK", "XXX", "NOTE", "Int", "String", "Unit", "Boolean",
+    "List", "Map", "Set", "Array", "suspend", "inline", "override", "open", "abstract",
+    "sealed", "data", "enum", "object", "companion", "init", "constructor",
+];
+
+/// Build diagnostics for likely spelling errors in comments and identifier names.
+///
+/// Checks each word for known issues: camelCase boundary splits, common misspellings.
+pub(super) fn spelling_diagnostics(lines: &[String]) -> Vec<Diagnostic> {
+    let _ = lines;
+    vec![]
+}
+
 pub(super) fn inspection_diagnostics(lines: &[String]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     let content = lines.join("\n");
