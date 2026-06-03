@@ -160,7 +160,12 @@ mod tests;
 ///
 /// Examples:
 /// - `val x = x` — redundant self-assignment (no-op)
+
+/// Build diagnostics for likely spelling errors in comments and identifier names.
+///
+/// Checks each word for known issues: camelCase boundary splits, common misspellings.
 /// Common English words to ignore in spelling checks.
+#[allow(dead_code)]
 const COMMON_WORDS: &[&str] = &[
     "TODO",
     "FIXME",
@@ -189,9 +194,6 @@ const COMMON_WORDS: &[&str] = &[
     "constructor",
 ];
 
-/// Build diagnostics for likely spelling errors in comments and identifier names.
-///
-/// Checks each word for known issues: camelCase boundary splits, common misspellings.
 pub(super) fn spelling_diagnostics(lines: &[String]) -> Vec<Diagnostic> {
     let _ = lines;
     vec![]
