@@ -162,9 +162,31 @@ mod tests;
 /// - `val x = x` — redundant self-assignment (no-op)
 /// Common English words to ignore in spelling checks.
 const COMMON_WORDS: &[&str] = &[
-    "TODO", "FIXME", "HACK", "XXX", "NOTE", "Int", "String", "Unit", "Boolean",
-    "List", "Map", "Set", "Array", "suspend", "inline", "override", "open", "abstract",
-    "sealed", "data", "enum", "object", "companion", "init", "constructor",
+    "TODO",
+    "FIXME",
+    "HACK",
+    "XXX",
+    "NOTE",
+    "Int",
+    "String",
+    "Unit",
+    "Boolean",
+    "List",
+    "Map",
+    "Set",
+    "Array",
+    "suspend",
+    "inline",
+    "override",
+    "open",
+    "abstract",
+    "sealed",
+    "data",
+    "enum",
+    "object",
+    "companion",
+    "init",
+    "constructor",
 ];
 
 /// Build diagnostics for likely spelling errors in comments and identifier names.

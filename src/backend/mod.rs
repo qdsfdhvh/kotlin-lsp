@@ -9,7 +9,8 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{async_trait, Client, LanguageServer};
 
 use self::helpers::{
-    deprecation_diagnostics, import_diagnostics, inspection_diagnostics, spelling_diagnostics, syntax_diagnostics,
+    deprecation_diagnostics, import_diagnostics, inspection_diagnostics, spelling_diagnostics,
+    syntax_diagnostics,
 };
 use crate::indexer::{workspace_cache_path, IgnoreMatcher, Indexer, ProgressReporter};
 use crate::semantic_tokens;
