@@ -12,11 +12,20 @@ RUST_FILES=$(find src tests -name '*.rs')
 
 # Check formatting
 echo "  📝 Checking formatting..."
-rustfmt --edition 2021 --check $RUST_FILES 2>/dev/null || {
-    echo "  ❌ Formatting check failed!"
-    echo "     Run: find src tests -name '*.rs' | xargs rustfmt --edition 2021"
-    exit 1
-}
+if command -v rustfmt >/dev/null 2>&1; then
+    rustfmt --edition 2021 --check $RUST_FILES 2>/dev/null || {
+        echo "  ❌ Formatting check failed!"
+        echo "     Run: find src tests -name '*.rs' | xargs rustfmt --edition 2021"
+        exit 1
+    }
+elif [ -f ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt ]; then
+    ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt --edition 2021 --check $RUST_FILES 2>/dev/null || {
+        echo "  ❌ Formatting check failed!"
+        exit 1
+    }
+else
+    echo "  ⚠️ rustfmt not found, skipping formatting check"
+fi
 
 # Run tests
 echo "  🧪 Running tests..."
