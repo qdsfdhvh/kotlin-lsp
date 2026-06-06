@@ -29,24 +29,9 @@ pub(super) fn walk_kotlin(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawTok
                 break;
             }
         }
-        _ => {}
     }
 }
 
-/// Returns true if the node is a `simple_identifier` whose text is a known
-/// Kotlin keyword (e.g. `constructor`, `init`).
-fn is_keyword_ident(node: Node<'_>, src: &Source<'_>) -> bool {
-    if node.kind() != "simple_identifier" {
-        return false;
-        _ => {}
-    }
-    let text = node.utf8_text(src.bytes).unwrap_or("");
-    matches!(
-        text,
-        "as" | "as?" | "by" | "constructor" | "enum" | "get" | "in" | "!in"
-            | "interface" | "is" | "!is" | "set" | "val" | "where"
-    )
-}
 fn classify_kotlin(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>) {
     let kind = node.kind();
     match kind {
@@ -102,13 +87,10 @@ fn classify_kotlin(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>) {
             || k == KIND_KW_AS_SAFE
             || k == KIND_KW_IN
             || k == KIND_KW_IN_NOT
-            || k == KIND_KW_BY
-            || k == KIND_KW_CONSTRUCTOR
-            || k == "_primary_constructor_keyword" =>
+            || k == KIND_KW_BY || k == KIND_KW_CONSTRUCTOR || k == "_primary_constructor_keyword" =>
         {
-            push_token(node, type_index(&SemanticTokenType::KEYWORD), 0, src, out);
+push_token(node, type_index(&SemanticTokenType::KEYWORD), 0, src, out);
         }
-
         _ => {}
     }
 }
@@ -126,15 +108,12 @@ fn kotlin_class_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>)
     let mut mods = modifier_bit(&SemanticTokenModifier::DECLARATION);
     if has_modifier(node, src, "abstract") {
         mods |= modifier_bit(&SemanticTokenModifier::ABSTRACT);
-        _ => {}
     }
     if has_deprecated_annotation(node, src.bytes) {
         mods |= modifier_bit(&SemanticTokenModifier::DEPRECATED);
-        _ => {}
     }
     if let Some(name) = child_ident(node) {
         push_token(name, token_type, mods, src, out);
-        _ => {}
     }
 }
 
@@ -142,7 +121,6 @@ fn kotlin_object_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>
     let mut mods = modifier_bit(&SemanticTokenModifier::DECLARATION);
     if has_deprecated_annotation(node, src.bytes) {
         mods |= modifier_bit(&SemanticTokenModifier::DEPRECATED);
-        _ => {}
     }
     if let Some(name) = child_ident(node) {
         push_token(
@@ -152,7 +130,6 @@ fn kotlin_object_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>
             src,
             out,
         );
-        _ => {}
     }
 }
 
@@ -164,7 +141,6 @@ fn kotlin_companion_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawTok
         push_token(name, ns_type, mods, src, out);
     } else if let Some(obj_kw) = first_child_of_kind(node, "object") {
         push_token(obj_kw, ns_type, mods, src, out);
-        _ => {}
     }
 }
 
@@ -179,23 +155,18 @@ fn kotlin_fun_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>) {
     let mut mods = modifier_bit(&SemanticTokenModifier::DECLARATION);
     if has_modifier(node, src, "suspend") {
         mods |= modifier_bit(&SemanticTokenModifier::ASYNC);
-        _ => {}
     }
     if has_modifier(node, src, "abstract") {
         mods |= modifier_bit(&SemanticTokenModifier::ABSTRACT);
-        _ => {}
     }
     if has_deprecated_annotation(node, src.bytes) {
         mods |= modifier_bit(&SemanticTokenModifier::DEPRECATED);
-        _ => {}
     }
     if is_in_companion_body(node) || is_top_level(node) {
         mods |= modifier_bit(&SemanticTokenModifier::STATIC);
-        _ => {}
     }
     if let Some(name) = child_ident(node) {
         push_token(name, token_type, mods, src, out);
-        _ => {}
     }
 }
 
@@ -211,15 +182,12 @@ fn kotlin_prop_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>) 
     let mut mods = modifier_bit(&SemanticTokenModifier::DECLARATION);
     if is_val {
         mods |= modifier_bit(&SemanticTokenModifier::READONLY);
-        _ => {}
     }
     if has_deprecated_annotation(node, src.bytes) {
         mods |= modifier_bit(&SemanticTokenModifier::DEPRECATED);
-        _ => {}
     }
     if is_in_companion_body(node) || is_top_level(node) {
         mods |= modifier_bit(&SemanticTokenModifier::STATIC);
-        _ => {}
     }
     if let Some(var_decl) = first_child_of_kind(node, KIND_VAR_DECL) {
         if let Some(name) = child_ident(var_decl) {
@@ -233,7 +201,6 @@ fn kotlin_prop_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>) 
                 }
             }
         }
-        _ => {}
     }
 }
 
@@ -249,7 +216,6 @@ fn kotlin_type_param_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawTo
             src,
             out,
         );
-        _ => {}
     }
 }
 
@@ -280,11 +246,9 @@ fn kotlin_class_param_token(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawT
     };
     if is_in_companion_body(node) {
         mods |= modifier_bit(&SemanticTokenModifier::STATIC);
-        _ => {}
     }
     if has_deprecated_annotation(node, src.bytes) {
         mods |= modifier_bit(&SemanticTokenModifier::DEPRECATED);
-        _ => {}
     }
     push_token(name, token_type, mods, src, out);
 }
