@@ -6,10 +6,10 @@ use tree_sitter::Node;
 use crate::queries::{
     KIND_ANNOTATION, KIND_BINDING_PATTERN_KIND, KIND_CLASS_DECL, KIND_CLASS_PARAM,
     KIND_COMPANION_OBJ, KIND_ENUM_ENTRY, KIND_FUN_DECL, KIND_KW_AS, KIND_KW_AS_SAFE, KIND_KW_BY,
-    KIND_KW_ENUM, KIND_KW_IN, KIND_KW_INTERFACE, KIND_KW_IN_NOT, KIND_KW_IS, KIND_KW_IS_NOT,
-    KIND_KW_VAL, KIND_KW_CONSTRUCTOR, KIND_MULTI_ANNOTATION, KIND_MULTI_VAR_DECL, KIND_OBJECT_DECL, KIND_PARAMETER,
-    KIND_PROP_DECL, KIND_SIMPLE_IDENT, KIND_TYPE_IDENT, KIND_TYPE_PARAM, KIND_VALUE_ARG,
-    KIND_VAR_DECL,
+    KIND_KW_CONSTRUCTOR, KIND_KW_ENUM, KIND_KW_IN, KIND_KW_INTERFACE, KIND_KW_IN_NOT, KIND_KW_IS,
+    KIND_KW_IS_NOT, KIND_KW_VAL, KIND_MULTI_ANNOTATION, KIND_MULTI_VAR_DECL, KIND_OBJECT_DECL,
+    KIND_PARAMETER, KIND_PROP_DECL, KIND_SIMPLE_IDENT, KIND_TYPE_IDENT, KIND_TYPE_PARAM,
+    KIND_VALUE_ARG, KIND_VAR_DECL,
 };
 
 use super::helpers::{
@@ -87,9 +87,11 @@ fn classify_kotlin(node: Node<'_>, src: &Source<'_>, out: &mut Vec<RawToken>) {
             || k == KIND_KW_AS_SAFE
             || k == KIND_KW_IN
             || k == KIND_KW_IN_NOT
-            || k == KIND_KW_BY || k == KIND_KW_CONSTRUCTOR || k == "_primary_constructor_keyword" =>
+            || k == KIND_KW_BY
+            || k == KIND_KW_CONSTRUCTOR
+            || k == "_primary_constructor_keyword" =>
         {
-push_token(node, type_index(&SemanticTokenType::KEYWORD), 0, src, out);
+            push_token(node, type_index(&SemanticTokenType::KEYWORD), 0, src, out);
         }
         _ => {}
     }

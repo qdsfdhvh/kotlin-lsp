@@ -273,8 +273,8 @@ class Foo {
 }
 
 #[test]
-    #[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
-    fn kotlin_object_decl() {
+#[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
+fn kotlin_object_decl() {
     let src = "object Singleton { val x = 1 }";
     let doc = parse_kotlin(src);
     let tokens = decode_all(&doc, Language::Kotlin);
@@ -364,8 +364,8 @@ fn kotlin_range_honors_character_bounds() {
 }
 
 #[test]
-    #[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
-    fn kotlin_reference_sites_resolve_types_functions_and_namespaces() {
+#[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
+fn kotlin_reference_sites_resolve_types_functions_and_namespaces() {
     let src = "class User\nobject Utils { fun run() {} }\nfun greet(): User = User()\nfun use(): User {\n    greet()\n    Utils.run()\n    return User()\n}\n";
     let uri = Url::parse("file:///semantic_tokens_refs.kt").unwrap();
     let indexer = Indexer::new();
@@ -994,8 +994,8 @@ fn ref_constructor_call_as_class() {
 }
 
 #[test]
-    #[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
-    fn ref_object_as_namespace() {
+#[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
+fn ref_object_as_namespace() {
     let src = "object Utils { fun run() {} }\nfun main() { Utils.run() }\n";
     let uri = Url::parse("file:///ref_obj.kt").unwrap();
     let indexer = Indexer::new();
@@ -1096,8 +1096,8 @@ fn keyword_in_loop() {
 }
 
 #[test]
-    #[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
-    fn keyword_constructor() {
+#[ignore = "tree-sitter-kotlin 0.4.0 scanner doesn\'t return constructor/object keywords; needs upstream fix"]
+fn keyword_constructor() {
     let src = "class Foo @Inject constructor(val x: Int)\n";
     let uri = Url::parse("file:///kw_ctor.kt").unwrap();
     let indexer = Indexer::new();
