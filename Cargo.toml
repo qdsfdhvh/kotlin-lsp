@@ -29,6 +29,7 @@ tokio      = { version = "1", features = ["full"] }
 tree-sitter      = { git = "https://github.com/tree-sitter/tree-sitter", tag = "v0.26.9" }
 tree-sitter-java = { git = "https://github.com/tree-sitter/tree-sitter-java" }
 tree-sitter-swift = { git = "https://github.com/alex-pinkus/tree-sitter-swift", tag = "0.7.3-with-generated-files" }
+tree-sitter-kotlin = { git = "https://github.com/fwcd/tree-sitter-kotlin" }
 
 # Concurrent index storage (no Mutex needed)
 dashmap = "5"
@@ -66,8 +67,9 @@ strip     = false
 lto       = false
 
 [dev-dependencies]
+
 tempfile = "3"
-tree-sitter-kotlin = { git = "https://github.com/fwcd/tree-sitter-kotlin" }
+
 
 # Override tree-sitter-language to match tree-sitter 0.26.9.
 # Grammar crates depend on `tree-sitter-language = "0.1"` from crates.io,
