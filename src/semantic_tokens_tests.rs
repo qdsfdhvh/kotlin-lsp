@@ -9,11 +9,15 @@ use crate::Language;
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 fn parse_kotlin(src: &str) -> crate::indexer::LiveDoc {
-    parse_live(src, tree_sitter_kotlin::language()).expect("parse failed")
+    parse_live(
+        src,
+        tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE),
+    )
+    .expect("parse failed")
 }
 
 fn parse_java(src: &str) -> crate::indexer::LiveDoc {
-    parse_live(src, tree_sitter_java::language()).expect("parse failed")
+    parse_live(src, tree_sitter::Language::from(tree_sitter_java::LANGUAGE)).expect("parse failed")
 }
 
 /// Find token type id by name in the legend.
