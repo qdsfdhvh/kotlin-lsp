@@ -5,7 +5,7 @@ description: Use the `kotlin-lsp` CLI for precise symbol lookup in Kotlin/Java/S
 
 # kotlin-lsp
 
-`kotlin-lsp` is a tree-sitter–backed language server that ships a scriptable CLI (no daemon, no JVM). Prefer it over `grep` / `rg` when working in Kotlin, Java, or Swift code, especially in Android / KMP projects — it returns *declaration locations* and *type-aware references*, not text matches.
+`kotlin-lsp` is a tree-sitter–backed language server that ships a scriptable CLI (no daemon, no JVM). Reach for it when working with Kotlin, Java, or Swift symbols, especially in Android / KMP projects — it returns *declaration locations* and *type-aware references*, not text matches.
 
 Check installation:
 
@@ -24,7 +24,7 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Symbol name is unique AND in this repo → rg --type kotlin is fine (and faster)
    ├─ Symbol name is generic (handle, String, Event, …) → kotlin-lsp find/refs --module … --limit
    ├─ Symbol lives in library (Compose, AndroidX, 3rd-party) → kotlin-lsp find (rg cannot reach)
-   ├─ Symbol lives in generated code (build/openapi/, build/i18n/) → kotlin-lsp find (rg blocked by .ignore)
+   ├─ Symbol lives in generated or ignored code → kotlin-lsp find (plain rg may miss it)
    ├─ Need cross-module ref filtering (--module / --source-set / --owner) → kotlin-lsp refs
    ├─ Need one-stop symbol info (def + sig + doc) → kotlin-lsp context <file> <line> <col>
    ├─ Need syntax check on edited files → kotlin-lsp check <file>
@@ -32,7 +32,6 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Need class hierarchy → kotlin-lsp type-hierarchy <Name>
    ├─ Imports are messy → kotlin-lsp organize-imports <file>
    ├─ Need batch type injection for a file → kotlin-lsp inject <file>
-   ├─ Need project-wide type listing → kotlin-lsp list-types
    ├─ Need signature/type at a declaration → kotlin-lsp hover <file> <line> <col>
    └─ Need signature at a call site → kotlin-lsp find <name> (jump to decl), then hover the decl
 ```
@@ -64,6 +63,7 @@ kotlin-lsp find <Name> [--limit N] [--module <fragment>] [--source-set <set>] [-
 - `--module <frag>` narrows to a Gradle module (substring match on path).
 - `--source-set <name>` filters KMP code (comma-separated for OR).
 - `--kind class,fun,interface` filters by symbol kind.
+- `--owner <name>` filters by enclosing class/interface/object.
 
 ```bash
 kotlin-lsp find LoginViewModel --limit 3
@@ -111,10 +111,10 @@ Two calls are still cheaper than reading the file.
 #### complete — cursor completions
 
 ```bash
-kotlin-lsp complete <file> <line> [--dot]
+kotlin-lsp complete <file> <line> [col] [--dot|--eol] [--no-stdlib]
 ```
 
-`--dot` places the cursor after the last `.` on the given line. Text output is tab-separated: `label\tkind\tdetail\timport`. JSON output: `[{label, kind, detail?, import?}]`.
+Pass `col`, or use `--dot` to place the cursor after the last `.` on the line, or `--eol` to use the end of trimmed line content. Text output is tab-separated: `label\tkind\tdetail\timport`. JSON output: `[{label, kind, detail?, import?}]`.
 
 ```bash
 kotlin-lsp complete shared/src/commonMain/kotlin/data/Repo.kt 87 --dot
@@ -162,15 +162,15 @@ kotlin-lsp inject <file>
 
 Reads a file, extracts all referenced type names, and returns their signatures in one batch. One call replaces N context calls.
 
-#### list-types — project-wide type listing
+### Code manipulation
+
+#### code-action — inspect or apply quick fixes
 
 ```bash
-kotlin-lsp list-types [--limit N]
+kotlin-lsp code-action <file> <line> <col> [--apply]
 ```
 
-Lists all known types in the workspace index, grouped by module.
-
-### Code manipulation
+List available code actions first. Use `--apply` only when the intended edit is obvious.
 
 #### organize-imports — import cleanup
 
@@ -183,7 +183,7 @@ Sorts, deduplicates, and removes unused imports from Kotlin/Java files.
 #### insert — code insertion
 
 ```bash
-kotlin-lsp insert <file> <line> --after --content "..." [--in-place]
+kotlin-lsp insert <file> <line> (--before|--after) --content "..." [--in-place]
 ```
 
 Inserts text before or after a given line. With `--in-place`, writes back to file.
@@ -202,9 +202,9 @@ Applies find-replace and insert operations across multiple files atomically via 
 |---|---|
 | _(none)_ | Auto — use cached index if available, else fast `rg`/`fd` fallback |
 | `--fast` | Always use `rg`/`fd`; instant, no index needed |
-| `--smart` | Require index; build it if missing (slower first call, accurate after) |
+| `--smart` | Require a pre-built index; run `kotlin-lsp index` first |
 | `--root <dir>` | Override workspace root (default: nearest `.git` directory) |
-| `--no-stdlib` | Skip library sources; ~5× faster for project-only queries |
+| `--no-stdlib` | For `complete`: skip extracted stdlib/library sources for faster workspace-only suggestions |
 
 ## Indexing & library sources
 
@@ -237,45 +237,6 @@ When using `kotlin-lsp` on a project task, keep track of concrete tool pain poin
 
 **Privacy rule**: never include the current project's repo name, file paths, package names, class/function names, logs, business terminology, screenshots, or source snippets in upstream issues unless the user explicitly provides public repro material. Rewrite examples as generic placeholders like `example-domain`, `FeatureViewModel`, `ScreenState`, and `path/to/File.kt`; prefer minimal synthetic code that reproduces the tool behavior.
 
-## `kotlin-lsp help` output
+## Help and debug commands
 
-```
-Usage: kotlin-lsp [OPTIONS] [COMMAND]
-
-Commands:
-  find              Search for a symbol declaration across the workspace
-  refs              Search for references to a symbol
-  hover             Show hover information at a position
-  complete          Get completions at a cursor position
-  context           One-stop context (definition + signature + docs)
-  check             Check files for syntax errors
-  call-hierarchy    Show call hierarchy for a symbol
-  type-hierarchy    Show type hierarchy (subtypes/supertypes)
-  organize-imports  Sort, dedup, and remove unused imports
-  inject            Batch-resolve all type signatures in a file
-  list-types        List all known types in the workspace
-  insert            Insert code at a given line
-  batch             Apply batch modifications via JSON rules
-  index             Pre-build the symbol cache
-  sources           List detected source roots
-  extract-sources   Unpack library sources from Gradle cache
-  index-jars        Index library symbols from *-sources.jar
-  cache             Index cache diagnostics
-  benchmark         Run performance benchmarks
-  help              Print this message or the help of the given subcommand(s)
-
-Flags (global):
-  --fast         Always use rg/fd fallback (no index)
-  --smart        Require index; build if missing
-  --json         Compact JSON output
-  --relative     Workspace-relative paths (auto-enabled when piped)
-  --absolute     Force absolute paths
-  --flat         Legacy grep-style output
-  --module <f>   Filter by module path fragment
-  --owner <n>    Filter by enclosing type name
-  --source-set <s>  Filter by KMP source set (comma-separated OR)
-  --kind <k>     Filter by symbol kind (class,fun,interface,...)
-  --limit <n>    Cap result count
-  --root <dir>   Workspace root (default: nearest .git)
-  --no-stdlib    Skip library sources
-```
+Run `kotlin-lsp --help` for the exhaustive command list. Keep routine agent output focused on the task; do not paste full help text unless the user asks. Debug commands such as `tokens`, `tree`, and `benchmark` are primarily for kotlin-lsp development, not ordinary project navigation.
