@@ -662,7 +662,6 @@ async fn run_find(
             json,
             relative: filters.relative,
             flat,
-            total: None,
         },
     );
 }
@@ -715,13 +714,34 @@ async fn run_refs(
         results
     };
 
+    // exclude_imports: strip import-statement matches from results
+    let results: Vec<CliResult> = if filters.exclude_imports {
+        results
+            .into_iter()
+            .filter(|r| {
+                if r.kind == "import" {
+                    return false;
+                }
+                if !r.kind.is_empty() {
+                    return true;
+                }
+                std::fs::read_to_string(&r.file)
+                    .ok()
+                    .and_then(|s| s.lines().nth(r.line as usize - 1).map(|l| l.to_owned()))
+                    .map(|line| !line.trim_start().starts_with("import "))
+                    .unwrap_or(true)
+            })
+            .collect()
+    } else {
+        results
+    };
+
     print_results(
         &results,
         &PrintOpts {
             json,
             relative: filters.relative,
             flat,
-            total: None,
         },
     );
 }

@@ -295,8 +295,8 @@ fn cli_insert_target_content() {
 fn cli_sources_detects_kotlin_files() {
     let p = create_test_project();
     // The project has 2 Kotlin files indexed
-    assert!(p.idx.definition_locations("MyViewModel").len() >= 1);
-    assert!(p.idx.definition_locations("MyScreen").len() >= 1);
+    assert!(!p.idx.definition_locations("MyViewModel").is_empty());
+    assert!(!p.idx.definition_locations("MyScreen").is_empty());
 }
 
 // ─── new-file: file templates ────────────────────────────────────────────

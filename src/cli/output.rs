@@ -73,9 +73,6 @@ pub(crate) struct PrintOpts {
     /// output (`rg --heading` style) which is cheaper when multiple matches
     /// share a file.
     pub flat: bool,
-    /// Total count before filtering. When present, printed as a summary line
-    /// after the results.
-    pub total: Option<usize>,
 }
 
 pub(crate) fn print_results(results: &[CliResult], opts: &PrintOpts) {

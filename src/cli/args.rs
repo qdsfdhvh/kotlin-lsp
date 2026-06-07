@@ -623,10 +623,10 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "type-hierarchy" => {
             build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes)
         }
-        _ => unreachable!(),
         "doctor" => Ok(Subcommand::Doctor {
             verbose: parsed.verbose,
         }),
+        _ => unreachable!(),
     }
 }
 
