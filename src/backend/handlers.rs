@@ -558,26 +558,23 @@ impl Backend {
             new_text: formatted,
         }]))
     }
-
-    /// Run the appropriate external formatter for the given file path.
-    ///
-    /// Selects based on file extension (ktfmt for Kotlin, google-java-format for Java,
-    /// swift-format for Swift). Returns `None` if no formatter is available or the
-    /// formatter fails to run.
     pub(super) async fn run_formatter_for_path(&self, path: &str, input: &str) -> Option<String> {
-        // Determine which formatter to use based on file extension.
-        let (formatter, args): (&str, &[&str]) = if path.ends_with(".kt") || path.ends_with(".kts")
-        {
-            ("ktfmt", &["--stdin", path])
+        if path.ends_with(".kt") || path.ends_with(".kts") {
+            let (tool, args) = select_kotlin_formatter(path, self.format_tool.as_deref());
+            let args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            Self::run_tool(tool, &args, input).await
         } else if path.ends_with(".java") {
-            ("google-java-format", &["-"])
+            Self::run_tool("google-java-format", &["-"], input).await
         } else if path.ends_with(".swift") {
-            ("swift-format", &["-"])
+            Self::run_tool("swift-format", &["-"], input).await
         } else {
-            return None;
-        };
+            None
+        }
+    }
 
-        let mut child = tokio::process::Command::new(formatter)
+    /// Pipe `input` into `tool` with `args` via stdin and return stdout on success.
+    async fn run_tool(tool: &str, args: &[&str], input: &str) -> Option<String> {
+        let mut child = tokio::process::Command::new(tool)
             .args(args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -585,7 +582,6 @@ impl Backend {
             .spawn()
             .ok()?;
 
-        // Write input to stdin and wait.
         use tokio::io::AsyncWriteExt;
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(input.as_bytes()).await.ok()?;
@@ -600,7 +596,33 @@ impl Backend {
 
         String::from_utf8(output.stdout).ok()
     }
+}
 
+/// Select the Kotlin formatter tool and its arguments based on `format_tool`
+/// override and file `path`.
+///
+/// - `Some("ktlint")` → `("ktlint", ["--format", "--stdin", "--stdin-path", <path>])`
+/// - `Some("ktfmt")`   → `("ktfmt", ["--stdin", <path>])`
+/// - `None` → ktfmt (native binary, no JVM dependency).
+/// - `Some(other)` → warns and falls back to ktfmt.
+fn select_kotlin_formatter(path: &str, format_tool: Option<&str>) -> (&'static str, Vec<String>) {
+    match format_tool {
+        Some("ktlint") => (
+            "ktlint",
+            vec!["--format", "--stdin", "--stdin-path", path]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+        ),
+        Some("ktfmt") | None => ("ktfmt", vec!["--stdin".to_string(), path.to_string()]),
+        Some(other) => {
+            log::warn!("unknown format_tool={other:?}, falling back to ktfmt");
+            ("ktfmt", vec!["--stdin".to_string(), path.to_string()])
+        }
+    }
+}
+
+impl Backend {
     // ── textDocument/rangeFormatting ───────────────────────────────────────────
 
     pub(super) async fn range_formatting_impl(

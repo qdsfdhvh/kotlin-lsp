@@ -146,7 +146,7 @@ This project's advantages come from:
 
 1. **No type checking** — Only CST-level syntax errors. No type mismatch, null safety, or
    inference errors.
-2. **No code formatting** — Delegates to external tools (`ktfmt`); not bundled.
+2. **No built-in code formatting** — Delegates to external tools (default: `ktfmt`; `--format-tool ktlint` to opt into `ktlint`). Not bundled.
 3. **Completion quality** — Good for symbol names, but lacks type-aware filtering and
    expected-type ranking that IntelliJ provides.
 4. **Diagnostics are sparse** — Only `ERROR`/`MISSING` tree-sitter nodes and import-level

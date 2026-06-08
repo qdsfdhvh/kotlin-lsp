@@ -54,6 +54,25 @@ pub(crate) fn run_organize_imports(files: &[PathBuf], json: bool) {
             }
         }
 
+        // If `by` is used (delegated properties), also mark the operator
+        // functions invoked by the compiler:
+        // - `getValue` — always needed for `val` and `var` delegates
+        // - `setValue` — only needed for `var` delegates (`val` is read-only)
+        if used_idents.contains("by") {
+            used_idents.insert("getValue".to_owned());
+            // Check if any `var x by` pattern exists (not just `val x by`)
+            let has_var_delegate = lines.iter().any(|l| {
+                let t = l.trim_start();
+                !t.starts_with("import")
+                    && !t.starts_with("package")
+                    && t.split_whitespace().any(|w| w == "var")
+                    && t.contains(" by ")
+            });
+            if has_var_delegate {
+                used_idents.insert("setValue".to_owned());
+            }
+        }
+
         let mut used_imports: Vec<String> = Vec::new();
         let mut removed: Vec<String> = Vec::new();
         for imp in &imports {

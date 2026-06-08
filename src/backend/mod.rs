@@ -37,14 +37,13 @@ pub(crate) struct Backend {
     pub(super) client: Client,
     pub(super) indexer: Arc<Indexer>,
     /// Per-URI abort handle for the pending debounced reindex task.
-    /// When a new change arrives we abort the previous pending task so only
-    /// the latest content is ever parsed.
     pub(super) pending_reindex: DashMap<String, AbortHandle>,
     /// True if the client advertised `snippetSupport: true` during initialize.
-    /// Used to decide whether to send `InsertTextFormat::SNIPPET` in completions.
     pub(super) snippet_support: Arc<AtomicBool>,
     /// Inlay hint configuration toggles, parsed from initialization options.
     pub(super) inlay_hint_config: Arc<std::sync::RwLock<InlayHintConfig>>,
+    /// Kotlin formatter tool override.  "ktlint" | "ktfmt" | None = default (ktfmt).
+    pub(super) format_tool: Option<String>,
 }
 
 #[derive(Clone)]
@@ -74,7 +73,14 @@ impl Backend {
             pending_reindex: DashMap::new(),
             snippet_support: Arc::new(AtomicBool::new(false)),
             inlay_hint_config: Arc::new(std::sync::RwLock::new(InlayHintConfig::default())),
+            format_tool: None,
         }
+    }
+
+    /// Override the Kotlin formatter tool ("ktlint" | "ktfmt").
+    pub(crate) fn with_format_tool(mut self, tool: String) -> Self {
+        self.format_tool = Some(tool);
+        self
     }
 
     pub(crate) async fn rg_context(

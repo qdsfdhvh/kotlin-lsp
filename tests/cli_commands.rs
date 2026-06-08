@@ -96,6 +96,82 @@ fn organize_imports_removes_unused() {
     );
 }
 
+#[test]
+fn organize_imports_keeps_delegate_operator_imports() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(
+        dir.path(),
+        "src/Screen.kt",
+        // var delegate — needs both getValue AND setValue
+        r#"package example
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+var x by lazy { 0 }
+"#,
+    );
+    index(dir.path());
+    let output = Command::new(BIN)
+        .args([
+            "organize-imports",
+            &dir.path().join("src/Screen.kt").to_string_lossy(),
+            "--root",
+            &dir.path().to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Both getValue and setValue kept → no changes needed
+    assert!(
+        stdout.contains("All imports are already organized"),
+        "expected no changes for var delegate; got: {stdout}"
+    );
+}
+
+#[test]
+fn organize_imports_removes_setvalue_for_val_delegate() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(
+        dir.path(),
+        "src/Screen.kt",
+        // val delegate — only needs getValue, setValue should be removable
+        r#"package example
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+val x by lazy { 0 }
+"#,
+    );
+    index(dir.path());
+    let output = Command::new(BIN)
+        .args([
+            "organize-imports",
+            &dir.path().join("src/Screen.kt").to_string_lossy(),
+            "--root",
+            &dir.path().to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // setValue should be removed (val is read-only)
+    assert!(
+        stdout.contains("getValue"),
+        "getValue import must be kept for val delegated property: {stdout}"
+    );
+    assert!(
+        stdout.contains("setValue"),
+        "setValue should appear in diff for val delegated property: {stdout}"
+    );
+    assert!(
+        stdout.contains("- import"),
+        "expected at least one removal for val delegate: {stdout}"
+    );
+}
+
 // ── context ──────────────────────────────────────────────────────────────────
 
 #[ignore]

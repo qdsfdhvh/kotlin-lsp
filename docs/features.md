@@ -94,7 +94,7 @@ compatibility.
 |------------|-------|
 | `textDocument/codeAction` | Available via CLI `kotlin-lsp code-action` |
 | `textDocument/rename` | Project-wide rename via `WorkspaceEdit`; index updated via file watcher |
-| `textDocument/formatting` | Delegates to `ktfmt`, `google-java-format`, or `swift-format` on `$PATH` |
+| `textDocument/formatting` | Kotlin: ktfmt (native, default); ktlint via `--format-tool ktlint`. Java: `google-java-format`. Swift: `swift-format`. |
 | `textDocument/rangeFormatting` | Same external formatters, clipped to requested range |
 | `executeCommand` | `kotlin-lsp/reindex`, `kotlin-lsp/clearCache` |
 

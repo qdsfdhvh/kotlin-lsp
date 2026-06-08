@@ -54,12 +54,13 @@ async fn async_main() {
         }
     }
 
-    let mut args = std::env::args().skip(1).peekable();
+    let lsp_flags = parse_lsp_flags();
+    let format_tool = lsp_flags.format_tool;
+    let args: Vec<String> = lsp_flags.remaining;
 
     // --index-only <path>  — build cache and exit
-    if args.peek().map(|s| s == "--index-only").unwrap_or(false) {
-        args.next();
-        let path = args.next().unwrap_or_else(|| {
+    if args.first().map(|s| s == "--index-only").unwrap_or(false) {
+        let path = args.get(1).cloned().unwrap_or_else(|| {
             eprintln!("Usage: kotlin-lsp --index-only <path>");
             std::process::exit(1);
         });
@@ -83,10 +84,9 @@ async fn async_main() {
     }
 
     // --port <N>  — serve a single LSP client over TCP (useful for Android / Sora Editor)
-    if args.peek().map(|s| s == "--port").unwrap_or(false) {
-        args.next();
+    if args.first().map(|s| s == "--port").unwrap_or(false) {
         let port: u16 = args
-            .next()
+            .get(1)
             .unwrap_or_else(|| {
                 eprintln!("Usage: kotlin-lsp --port <port>");
                 std::process::exit(1);
@@ -114,7 +114,14 @@ async fn async_main() {
             });
             eprintln!("Client connected: {peer}");
             let (reader, writer) = tokio::io::split(stream);
-            let (service, socket) = LspService::new(backend::Backend::new);
+            let ft = format_tool.clone();
+            let (service, socket) = LspService::new(move |client| {
+                let mut backend = backend::Backend::new(client);
+                if let Some(tool) = ft.clone() {
+                    backend = backend.with_format_tool(tool);
+                }
+                backend
+            });
             Server::new(reader, writer, socket).serve(service).await;
             eprintln!("Client disconnected, waiting for next connection…");
         }
@@ -123,6 +130,66 @@ async fn async_main() {
     // Default: stdio transport
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(backend::Backend::new);
+    let ft = format_tool.clone();
+    let (service, socket) = LspService::new(move |client| {
+        let mut backend = backend::Backend::new(client);
+        if let Some(tool) = ft.clone() {
+            backend = backend.with_format_tool(tool);
+        }
+        backend
+    });
     Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+/// LSP-server-level CLI flags, parsed before subcommands.
+struct LspCliFlags {
+    format_tool: Option<String>,
+    /// Remaining args after stripping recognised flags (kept in order).
+    remaining: Vec<String>,
+}
+
+/// Extract LSP-level flags from `std::env::args()`.
+/// Recognised flags (`--format-tool`, `--port`, `--index-only` + their values)
+/// are consumed; everything else is returned in `remaining`.
+///
+/// This ensures `--format-tool ktlint --port 1234` and
+/// `--port 1234 --format-tool ktlint` both work.
+fn parse_lsp_flags() -> LspCliFlags {
+    let mut format_tool: Option<String> = None;
+    let mut remaining: Vec<String> = Vec::new();
+    let mut args = std::env::args().skip(1).peekable();
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--format-tool" => {
+                let tool = args.next().unwrap_or_else(|| {
+                    eprintln!("Usage: kotlin-lsp --format-tool <ktlint|ktfmt>");
+                    std::process::exit(1);
+                });
+                if tool != "ktlint" && tool != "ktfmt" {
+                    eprintln!("error: unknown format tool '{tool}'; expected 'ktlint' or 'ktfmt'");
+                    std::process::exit(1);
+                }
+                format_tool = Some(tool);
+            }
+            // --port and --index-only need their values too
+            "--port" | "--index-only" => {
+                remaining.push(arg.clone());
+                if let Some(val) = args.next() {
+                    remaining.push(val);
+                } else {
+                    eprintln!("Usage: kotlin-lsp {arg} <value>");
+                    std::process::exit(1);
+                }
+            }
+            _ => {
+                remaining.push(arg.clone());
+            }
+        }
+    }
+
+    LspCliFlags {
+        format_tool,
+        remaining,
+    }
 }
