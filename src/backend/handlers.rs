@@ -608,7 +608,13 @@ impl Backend {
 /// - `Some(other)` → warns and falls back to ktfmt.
 fn select_kotlin_formatter(path: &str, format_tool: Option<&str>) -> (&'static str, Vec<String>) {
     match format_tool {
-        Some("ktlint") => ("ktlint", vec!["--format", "--stdin", "--stdin-path", path].into_iter().map(String::from).collect()),
+        Some("ktlint") => (
+            "ktlint",
+            vec!["--format", "--stdin", "--stdin-path", path]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+        ),
         Some("ktfmt") | None => ("ktfmt", vec!["--stdin".to_string(), path.to_string()]),
         Some(other) => {
             log::warn!("unknown format_tool={other:?}, falling back to ktfmt");
@@ -625,7 +631,13 @@ pub(crate) async fn auto_detect_kotlin_formatter(path: &str, input: &str) -> Opt
         return Some(formatted);
     }
     // ktlint (linter + formatter, .editorconfig support)
-    if let Some(formatted) = run_tool_str("ktlint", &["--format", "--stdin", "--stdin-path", path], input).await {
+    if let Some(formatted) = run_tool_str(
+        "ktlint",
+        &["--format", "--stdin", "--stdin-path", path],
+        input,
+    )
+    .await
+    {
         return Some(formatted);
     }
     None
@@ -657,7 +669,6 @@ pub(crate) async fn run_tool_str(tool: &str, args: &[&str], input: &str) -> Opti
 }
 
 impl Backend {
-
     // ── textDocument/rangeFormatting ───────────────────────────────────────────
 
     // ── textDocument/rangeFormatting ───────────────────────────────────────────
