@@ -54,6 +54,7 @@ async fn async_main() {
         }
     }
 
+    let format_tool = parse_format_tool_flag();
     let mut args = std::env::args().skip(1).peekable();
 
     // --index-only <path>  — build cache and exit
@@ -114,7 +115,14 @@ async fn async_main() {
             });
             eprintln!("Client connected: {peer}");
             let (reader, writer) = tokio::io::split(stream);
-            let (service, socket) = LspService::new(backend::Backend::new);
+            let ft = format_tool.clone();
+            let (service, socket) = LspService::new(move |client| {
+                let mut backend = backend::Backend::new(client);
+                if let Some(tool) = ft.clone() {
+                    backend = backend.with_format_tool(tool);
+                }
+                backend
+            });
             Server::new(reader, writer, socket).serve(service).await;
             eprintln!("Client disconnected, waiting for next connection…");
         }
@@ -123,6 +131,33 @@ async fn async_main() {
     // Default: stdio transport
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(backend::Backend::new);
+    let ft = format_tool.clone();
+    let (service, socket) = LspService::new(move |client| {
+        let mut backend = backend::Backend::new(client);
+        if let Some(tool) = ft.clone() {
+            backend = backend.with_format_tool(tool);
+        }
+        backend
+    });
     Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+/// Extract `--format-tool <tool>` from `std::env::args()`, returning the tool
+/// name if present.  Validates the value: only "ktlint" and "ktfmt" are accepted.
+fn parse_format_tool_flag() -> Option<String> {
+    let mut args = std::env::args().skip(1).peekable();
+    while let Some(arg) = args.next() {
+        if arg == "--format-tool" {
+            let tool = args.next().unwrap_or_else(|| {
+                eprintln!("Usage: kotlin-lsp --format-tool <ktlint|ktfmt>");
+                std::process::exit(1);
+            });
+            if tool != "ktlint" && tool != "ktfmt" {
+                eprintln!("error: unknown format tool '{tool}'; expected 'ktlint' or 'ktfmt'");
+                std::process::exit(1);
+            }
+            return Some(tool);
+        }
+    }
+    None
 }

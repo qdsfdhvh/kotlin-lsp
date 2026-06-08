@@ -96,6 +96,42 @@ fn organize_imports_removes_unused() {
     );
 }
 
+#[test]
+fn organize_imports_keeps_delegate_operator_imports() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(
+        dir.path(),
+        "src/Screen.kt",
+        r#"package example
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+var x by lazy { 0 }
+"#,
+    );
+    index(dir.path());
+    let output = Command::new(BIN)
+        .args([
+            "organize-imports",
+            &dir.path().join("src/Screen.kt").to_string_lossy(),
+            "--root",
+            &dir.path().to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let contents = std::fs::read_to_string(dir.path().join("src/Screen.kt")).unwrap();
+    assert!(
+        contents.contains("getValue"),
+        "getValue import must be kept for delegated property"
+    );
+    assert!(
+        contents.contains("setValue"),
+        "setValue import must be kept for delegated property"
+    );
+}
+
 // ── context ──────────────────────────────────────────────────────────────────
 
 #[ignore]

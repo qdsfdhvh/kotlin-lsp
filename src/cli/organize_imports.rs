@@ -54,6 +54,15 @@ pub(crate) fn run_organize_imports(files: &[PathBuf], json: bool) {
             }
         }
 
+        // If `by` is used (delegated properties), also mark the operator
+        // functions `getValue` (for val/var) and `setValue` (for var) as
+        // used — they are invoked by the compiler and never appear as
+        // explicit identifiers in the source.
+        if used_idents.contains("by") {
+            used_idents.insert("getValue".to_owned());
+            used_idents.insert("setValue".to_owned());
+        }
+
         let mut used_imports: Vec<String> = Vec::new();
         let mut removed: Vec<String> = Vec::new();
         for imp in &imports {
