@@ -1,6 +1,17 @@
 # Changelog
 
 
+## 0.21.0
+
+- **Configurable Kotlin formatter** — `--format-tool ktlint|ktfmt` CLI flag.
+  ktfmt (native, no JVM) is default; ktlint via `--format-tool ktlint`.
+- **CLI flag parsing fix** — `--format-tool` now works in any position
+  relative to `--port` / `--index-only`.
+- **organize-imports: delegated property fix** (fixes #91) — `getValue`/`setValue`
+  operator imports are no longer incorrectly removed when `by` is used.
+  `val` delegates keep only `getValue`; `var` delegates keep both.
+- **Smoke test fix** — `smoke_inlay_hints` now indexes the source file
+  via `sourcePaths: ["src"]`, fixing a long-standing CI failure.
 ## 0.20.0
 
 - **Named-arg completion** — appends `name =` items when cursor is inside a
