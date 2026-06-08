@@ -896,3 +896,51 @@ mod new_code_action_tests {
         }
     }
 }
+
+// ── Formatter selection tests ──────────────────────────────────────────────
+
+mod formatter_tests {
+    use crate::backend::handlers::select_kotlin_formatter;
+    #[test]
+    fn default_to_ktfmt() {
+        let (tool, args) = select_kotlin_formatter("Foo.kt", None);
+        assert_eq!(tool, "ktfmt");
+        assert_eq!(args, vec!["--stdin".to_string(), "Foo.kt".to_string()]);
+    }
+
+    #[test]
+    fn explicit_ktfmt() {
+        let (tool, args) = select_kotlin_formatter("src/Bar.kt", Some("ktfmt"));
+        assert_eq!(tool, "ktfmt");
+        assert_eq!(args, vec!["--stdin".to_string(), "src/Bar.kt".to_string()]);
+    }
+
+    #[test]
+    fn explicit_ktlint() {
+        let (tool, args) = select_kotlin_formatter("src/Screen.kt", Some("ktlint"));
+        assert_eq!(tool, "ktlint");
+        assert_eq!(
+            args,
+            vec![
+                "--format".to_string(),
+                "--stdin".to_string(),
+                "--stdin-path".to_string(),
+                "src/Screen.kt".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn kts_supported() {
+        let (tool, args) = select_kotlin_formatter("build.gradle.kts", None);
+        assert_eq!(tool, "ktfmt");
+        assert!(args.iter().any(|a: &String| a == "build.gradle.kts"));
+    }
+
+    #[test]
+    fn unknown_tool_falls_back_to_ktfmt() {
+        let (tool, args) = select_kotlin_formatter("Foo.kt", Some("nonexistent"));
+        assert_eq!(tool, "ktfmt");
+        assert_eq!(args, vec!["--stdin".to_string(), "Foo.kt".to_string()]);
+    }
+}

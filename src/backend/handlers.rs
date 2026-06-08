@@ -558,18 +558,11 @@ impl Backend {
             new_text: formatted,
         }]))
     }
-
-    /// Run the appropriate external formatter for the given file path.
-    ///
-    /// Selects based on file extension:
-    /// - Kotlin: uses `self.format_tool` ("ktlint" | "ktfmt") if set,
-    ///   otherwise auto-detects by searching PATH in order: ktlint → ktfmt
-    /// - Java: `google-java-format`
-    /// - Swift: `swift-format`
-    /// Returns `None` if no formatter is available or the formatter fails to run.
     pub(super) async fn run_formatter_for_path(&self, path: &str, input: &str) -> Option<String> {
         if path.ends_with(".kt") || path.ends_with(".kts") {
-            self.run_kotlin_formatter(path, input).await
+            let (tool, args) = select_kotlin_formatter(path, self.format_tool.as_deref());
+            let args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            Self::run_tool(tool, &args, input).await
         } else if path.ends_with(".java") {
             Self::run_tool("google-java-format", &["-"], input).await
         } else if path.ends_with(".swift") {
@@ -577,31 +570,6 @@ impl Backend {
         } else {
             None
         }
-    }
-
-    /// Run the Kotlin formatter.  Priority:
-    /// 1. `self.format_tool` — explicit choice (--format-tool CLI arg)
-    /// 2. Auto-detect: `ktlint --format --stdin`, then `ktfmt --stdin <path>`
-    async fn run_kotlin_formatter(&self, path: &str, input: &str) -> Option<String> {
-        match self.format_tool.as_deref() {
-            Some("ktlint") => Self::run_tool("ktlint", &["--format", "--stdin"], input).await,
-            Some("ktfmt") => Self::run_tool("ktfmt", &["--stdin", path], input).await,
-            Some(other) => {
-                log::warn!("unknown format_tool={other:?}, falling back to auto-detect");
-                Self::auto_detect_kotlin_formatter(path, input).await
-            }
-            None => Self::auto_detect_kotlin_formatter(path, input).await,
-        }
-    }
-
-    /// Auto-detect a Kotlin formatter by trying each tool in order.
-    async fn auto_detect_kotlin_formatter(path: &str, input: &str) -> Option<String> {
-        // ktlint (linter + formatter, .editorconfig support)
-        if let Some(formatted) = Self::run_tool("ktlint", &["--format", "--stdin"], input).await {
-            return Some(formatted);
-        }
-        // ktfmt (native binary, no JVM needed)
-        Self::run_tool("ktfmt", &["--stdin", path], input).await
     }
 
     /// Pipe `input` into `tool` with `args` via stdin and return stdout on success.
@@ -628,6 +596,69 @@ impl Backend {
 
         String::from_utf8(output.stdout).ok()
     }
+}
+
+/// Select the Kotlin formatter tool and its arguments based on `format_tool`
+/// override and file `path`.
+///
+/// - `Some("ktlint")` → `("ktlint", ["--format", "--stdin", "--stdin-path", <path>])`
+/// - `Some("ktfmt")`   → `("ktfmt", ["--stdin", <path>])`
+/// - `None` (auto-detect) → same as `Some("ktfmt")` (ktfmt is tried first at
+///   runtime by `auto_detect_kotlin_formatter`).
+/// - `Some(other)` → warns and falls back to ktfmt.
+fn select_kotlin_formatter(path: &str, format_tool: Option<&str>) -> (&'static str, Vec<String>) {
+    match format_tool {
+        Some("ktlint") => ("ktlint", vec!["--format", "--stdin", "--stdin-path", path].into_iter().map(String::from).collect()),
+        Some("ktfmt") | None => ("ktfmt", vec!["--stdin".to_string(), path.to_string()]),
+        Some(other) => {
+            log::warn!("unknown format_tool={other:?}, falling back to ktfmt");
+            ("ktfmt", vec!["--stdin".to_string(), path.to_string()])
+        }
+    }
+}
+
+/// Try each Kotlin formatter in order: ktfmt (native) → ktlint (opt-in).
+/// Returns the first one that runs successfully.
+pub(crate) async fn auto_detect_kotlin_formatter(path: &str, input: &str) -> Option<String> {
+    // ktfmt (native binary, no JVM needed)
+    if let Some(formatted) = run_tool_str("ktfmt", &["--stdin", path], input).await {
+        return Some(formatted);
+    }
+    // ktlint (linter + formatter, .editorconfig support)
+    if let Some(formatted) = run_tool_str("ktlint", &["--format", "--stdin", "--stdin-path", path], input).await {
+        return Some(formatted);
+    }
+    None
+}
+
+/// Pipe `input` into `tool` with `args` via stdin and return stdout on success.
+pub(crate) async fn run_tool_str(tool: &str, args: &[&str], input: &str) -> Option<String> {
+    let mut child = tokio::process::Command::new(tool)
+        .args(args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+
+    use tokio::io::AsyncWriteExt;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input.as_bytes()).await.ok()?;
+        drop(stdin);
+    }
+
+    let output = child.wait_with_output().await.ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8(output.stdout).ok()
+}
+
+impl Backend {
+
+    // ── textDocument/rangeFormatting ───────────────────────────────────────────
 
     // ── textDocument/rangeFormatting ───────────────────────────────────────────
 

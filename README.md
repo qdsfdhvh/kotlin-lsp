@@ -254,7 +254,7 @@ visual-only editor affordances that are maintained for compatibility.
 | `textDocument/documentSymbol` | &mdash; | Outline / workspace symbol |
 | `textDocument/codeAction` | `kotlin-lsp code-action` | |
 | `textDocument/rename` | &mdash; | Project-wide rename |
-| `textDocument/formatting` | &mdash; | ktfmt / google-java-format / swift-format |
+| `textDocument/formatting` | &mdash; | Kotlin: ktlint (auto-detect) → ktfmt fallback; `--format-tool ktlint|ktfmt` to override. Java/Swift: google-java-format / swift-format |
 | `textDocument/rangeFormatting` | &mdash; | Clips format to requested range |
 | `textDocument/callHierarchy` | `kotlin-lsp call-hierarchy` | |
 | `textDocument/inlayHint` | &mdash; | Configurable inline type hints |
