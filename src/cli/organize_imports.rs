@@ -65,7 +65,7 @@ pub(crate) fn run_organize_imports(files: &[PathBuf], json: bool) {
                 let t = l.trim_start();
                 !t.starts_with("import")
                     && !t.starts_with("package")
-                    && t.contains("var")
+                    && t.split_whitespace().any(|w| w == "var")
                     && t.contains(" by ")
             });
             if has_var_delegate {

@@ -603,8 +603,7 @@ impl Backend {
 ///
 /// - `Some("ktlint")` → `("ktlint", ["--format", "--stdin", "--stdin-path", <path>])`
 /// - `Some("ktfmt")`   → `("ktfmt", ["--stdin", <path>])`
-/// - `None` (auto-detect) → same as `Some("ktfmt")` (
-///   runtime by `auto_detect_kotlin_formatter`).
+/// - `None` → ktfmt (native binary, no JVM dependency).
 /// - `Some(other)` → warns and falls back to ktfmt.
 fn select_kotlin_formatter(path: &str, format_tool: Option<&str>) -> (&'static str, Vec<String>) {
     match format_tool {

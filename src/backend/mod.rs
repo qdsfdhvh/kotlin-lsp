@@ -42,7 +42,7 @@ pub(crate) struct Backend {
     pub(super) snippet_support: Arc<AtomicBool>,
     /// Inlay hint configuration toggles, parsed from initialization options.
     pub(super) inlay_hint_config: Arc<std::sync::RwLock<InlayHintConfig>>,
-    /// Kotlin formatter tool override.  "ktlint" | "ktfmt" | None (auto-detect).
+    /// Kotlin formatter tool override.  "ktlint" | "ktfmt" | None = default (ktfmt).
     pub(super) format_tool: Option<String>,
 }
 
