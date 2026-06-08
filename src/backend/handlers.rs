@@ -603,7 +603,7 @@ impl Backend {
 ///
 /// - `Some("ktlint")` → `("ktlint", ["--format", "--stdin", "--stdin-path", <path>])`
 /// - `Some("ktfmt")`   → `("ktfmt", ["--stdin", <path>])`
-/// - `None` (auto-detect) → same as `Some("ktfmt")` (ktfmt is tried first at
+/// - `None` (auto-detect) → same as `Some("ktfmt")` (
 ///   runtime by `auto_detect_kotlin_formatter`).
 /// - `Some(other)` → warns and falls back to ktfmt.
 fn select_kotlin_formatter(path: &str, format_tool: Option<&str>) -> (&'static str, Vec<String>) {
@@ -623,54 +623,7 @@ fn select_kotlin_formatter(path: &str, format_tool: Option<&str>) -> (&'static s
     }
 }
 
-/// Try each Kotlin formatter in order: ktfmt (native) → ktlint (opt-in).
-/// Returns the first one that runs successfully.
-pub(crate) async fn auto_detect_kotlin_formatter(path: &str, input: &str) -> Option<String> {
-    // ktfmt (native binary, no JVM needed)
-    if let Some(formatted) = run_tool_str("ktfmt", &["--stdin", path], input).await {
-        return Some(formatted);
-    }
-    // ktlint (linter + formatter, .editorconfig support)
-    if let Some(formatted) = run_tool_str(
-        "ktlint",
-        &["--format", "--stdin", "--stdin-path", path],
-        input,
-    )
-    .await
-    {
-        return Some(formatted);
-    }
-    None
-}
-
-/// Pipe `input` into `tool` with `args` via stdin and return stdout on success.
-pub(crate) async fn run_tool_str(tool: &str, args: &[&str], input: &str) -> Option<String> {
-    let mut child = tokio::process::Command::new(tool)
-        .args(args)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .ok()?;
-
-    use tokio::io::AsyncWriteExt;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(input.as_bytes()).await.ok()?;
-        drop(stdin);
-    }
-
-    let output = child.wait_with_output().await.ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    String::from_utf8(output.stdout).ok()
-}
-
 impl Backend {
-    // ── textDocument/rangeFormatting ───────────────────────────────────────────
-
     // ── textDocument/rangeFormatting ───────────────────────────────────────────
 
     pub(super) async fn range_formatting_impl(
