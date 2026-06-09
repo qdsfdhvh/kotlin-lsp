@@ -10,7 +10,7 @@
 | Runtime + version | Rust stable (edition 2021) | Cargo.toml |
 | Package manager | Cargo | Cargo.toml, Cargo.lock |
 | Module/build system | Cargo workspace (single-package) | Cargo.toml `[workspace] members = ["."]` |
-| Published on | crates.io as `kotlin-lsp` | Cargo.toml metadata, release workflow |
+|| **Published on** | crates.io as `kotlin-lsp` (upstream only); this fork distributes via GitHub Releases and install scripts | Cargo.toml metadata |
 | Current version | 0.12.0 | Cargo.toml |
 
 ### 2) Production Frameworks and Dependencies
@@ -46,9 +46,32 @@
 ### 4) Key Commands
 
 ```bash
-# Install from crates.io
-cargo install kotlin-lsp
+# Build from source
+cargo build --release
 
+# Run tests (unit + integration)
+cargo test
+
+# Install from local source
+cargo install --path .
+
+# Lint with strict settings
+cargo clippy -- -W clippy::cognitive_complexity -W clippy::too_many_lines
+
+# Run as LSP server (stdio — default)
+kotlin-lsp
+
+# Run as LSP server over TCP (for remote/mobile clients)
+kotlin-lsp --port 9257
+
+# CLI subcommands
+kotlin-lsp find MyClass --root ./android
+kotlin-lsp refs MyClass --fast
+kotlin-lsp hover src/Foo.kt 42 10 --json
+kotlin-lsp index --root ./android
+kotlin-lsp sources --root ./android
+kotlin-lsp extract-sources --dry-run
+```
 # Build from source
 cargo build --release
 

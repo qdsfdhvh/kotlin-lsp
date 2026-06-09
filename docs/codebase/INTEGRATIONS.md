@@ -9,7 +9,7 @@
 | **ripgrep (rg)** | Text search for cross-file symbol references | Invoked via `Command::new("rg")` when symbol not in index | src/rg.rs |
 | **fd** | Fast file discovery | Primary file enumeration; used in `find_source_files()` | src/indexer/discover.rs |
 | **walkdir** | Fallback file discovery | Used when `fd` unavailable or `ignore` patterns needed | src/indexer/discover.rs |
-| **crates.io** | Binary distribution | `cargo install kotlin-lsp`; automated publish via CI | .github/workflows/release.yml, Cargo.toml |
+|| **crates.io (build dependencies only)** | Rust ecosystem packages for compilation | Cargo.toml |
 | **GitHub Releases** | Binary downloads | Pre-built binaries for 4 targets; built in CI on tag push | .github/workflows/release.yml |
 
 ### 2) Credentials and Secrets
@@ -170,13 +170,8 @@ kotlin-lsp supports two transport modes:
 - **Stdio (default):** JSON-RPC over stdin/stdout; standard for all LSP clients
 - **TCP (`--port N`):** Listens on `127.0.0.1:N`, loopback only; useful for Android Studio (via LSP4J), Sora Editor, or other clients that cannot spawn a subprocess
 
-### crates.io Publish Pipeline
+### crates.io Publishing
 
-**Automated:** The `publish` job in `.github/workflows/release.yml` runs `cargo publish --no-verify` on every tag push (or manual `workflow_dispatch`).
+This fork does not publish to crates.io. Users install via [GitHub Releases and install scripts](../../README.md#install).
 
-**Trigger sequence:**
-1. Push tag `v*.*.*` → `build` job cross-compiles 4 targets
-2. `release` job uploads binaries to GitHub Releases
-3. `publish` job publishes to crates.io (needs `CARGO_REGISTRY_TOKEN` secret)
-
-**crate size:** 309 KB compressed (demo/contrib/docs excluded via `[package] exclude = [...]` in Cargo.toml).
+The original upstream release workflow had a `publish` job that ran `cargo publish --no-verify`; that job has been removed from this fork's workflow.
