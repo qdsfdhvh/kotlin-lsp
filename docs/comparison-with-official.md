@@ -13,7 +13,7 @@ how the two projects complement each other.
 | **Parser** | tree-sitter (CST) | IntelliJ IDEA Kotlin Plugin (full compiler frontend) |
 | **Startup time** | ~milliseconds | ~seconds (JVM warmup) |
 | **Memory footprint** | Low (~tens of MB) | High (~hundreds of MB to GB) |
-| **Distribution** | `cargo install`, prebuilt binaries, GitHub releases | Homebrew, VS Code extension, GitHub releases |
+| **Distribution** | Prebuilt binaries, GitHub releases, install scripts | Homebrew, VS Code extension, GitHub releases |
 | **Primary interface** | **CLI** (standalone commands) | **LSP** (editor integration) |
 | **Completion** | Dot-completion, bare-word, auto-import, scored ranking | IntelliJ-powered full completion (type-aware) |
 | **Diagnostics** | Syntax errors only (tree-sitter ERROR/MISSING nodes) | Full IntelliJ diagnostics + quick fixes |
@@ -127,7 +127,7 @@ This project's advantages come from:
 
 | Method | This project | Official |
 |--------|-------------|----------|
-| Package manager | `cargo install kotlin-lsp` | `brew install JetBrains/utils/kotlin-lsp` |
+|| Package manager | `brew install` (Homebrew, community), install script | `brew install JetBrains/utils/kotlin-lsp` |
 | Prebuilt binaries | ✅ GitHub releases (macOS, Linux, Windows) | ✅ GitHub releases (macOS, Linux, Windows) |
 | Install script | `curl ... install.sh \| bash` | Manual download |
 | Docker | Build from source | Community Docker images |

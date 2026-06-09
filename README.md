@@ -1,10 +1,8 @@
 # kotlin-lsp
 
-[![crates.io](https://img.shields.io/crates/v/kotlin-lsp)](https://crates.io/crates/kotlin-lsp)
-[![downloads](https://img.shields.io/crates/d/kotlin-lsp)](https://crates.io/crates/kotlin-lsp)
 [![release](https://img.shields.io/github/v/release/qdsfdhvh/kotlin-lsp)](https://github.com/qdsfdhvh/kotlin-lsp/releases/latest)
 [![build](https://img.shields.io/github/actions/workflow/status/qdsfdhvh/kotlin-lsp/ci.yml)](https://github.com/qdsfdhvh/kotlin-lsp/actions/workflows/ci.yml)
-[![license](https://img.shields.io/crates/l/kotlin-lsp)](LICENSE)
+[![license](https://img.shields.io/github/license/qdsfdhvh/kotlin-lsp)](LICENSE)
 
 A fast, no-JVM **symbol engine** for Kotlin, Java, and Swift — with a
 scriptable CLI and LSP transport.  
@@ -85,12 +83,6 @@ kotlin-lsp --version
 ```
 
 To update to an exact version, set `KOTLIN_LSP_VERSION` as shown above.
-
-If you installed from crates.io instead of GitHub Releases:
-
-```bash
-cargo install kotlin-lsp --locked --force
-```
 
 ### Manual install
 

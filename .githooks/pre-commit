@@ -10,21 +10,28 @@ echo "🔍 Running pre-commit checks..."
 # Find all Rust source files
 RUST_FILES=$(find src tests -name '*.rs')
 
+# Use toolchain binaries directly (rustup proxy has PATH issues on this machine)
+RUSTUP_TOOLCHAIN="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin"
+export PATH="$RUSTUP_TOOLCHAIN:$PATH"
+
 # Check formatting
 echo "  📝 Checking formatting..."
-if command -v rustfmt >/dev/null 2>&1; then
-    rustfmt --edition 2021 --check $RUST_FILES 2>/dev/null || {
+# rustfmt in PATH is a rustup-init proxy that doesn't understand --edition
+RUSTFMT=""
+if [ -f ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt ]; then
+    RUSTFMT=~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt
+elif command -v rustfmt >/dev/null 2>&1; then
+    RUSTFMT="$(command -v rustfmt)"
+fi
+
+if [ -n "$RUSTFMT" ]; then
+    "$RUSTFMT" --edition 2021 --check $RUST_FILES 2>/dev/null || {
         echo "  ❌ Formatting check failed!"
         echo "     Run: find src tests -name '*.rs' | xargs rustfmt --edition 2021"
         exit 1
     }
-elif [ -f ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt ]; then
-    ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt --edition 2021 --check $RUST_FILES 2>/dev/null || {
-        echo "  ❌ Formatting check failed!"
-        exit 1
-    }
 else
-    echo "  ⚠️ rustfmt not found, skipping formatting check"
+    echo "  ⚠️  rustfmt not found, skipping formatting check"
 fi
 
 # Run tests

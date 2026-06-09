@@ -14,7 +14,7 @@ impl zed::Extension for KotlinLspExtension {
     ) -> Result<zed::Command> {
         let binary = worktree
             .which("kotlin-lsp")
-            .ok_or_else(|| "kotlin-lsp not found on PATH. Install it with: cargo install kotlin-lsp".to_string())?;
+            .ok_or_else(|| "kotlin-lsp not found on PATH. Install it with the install script: https://github.com/qdsfdhvh/kotlin-lsp#install".to_string())?;
 
         Ok(zed::Command {
             command: binary,

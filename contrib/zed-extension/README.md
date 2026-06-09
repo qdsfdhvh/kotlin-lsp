@@ -5,9 +5,9 @@ language server for Kotlin, Java and Swift files.
 
 ## Prerequisites
 
-Install the binary:
+Install the binary via the [install script](https://github.com/qdsfdhvh/kotlin-lsp#readme):
 ```sh
-cargo install kotlin-lsp
+curl -fsSL https://github.com/qdsfdhvh/kotlin-lsp/releases/latest/download/install.sh | bash
 ```
 
 ## Installation (local dev)

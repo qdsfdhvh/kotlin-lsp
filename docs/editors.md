@@ -1,12 +1,12 @@
 # Editor setup
 
-`kotlin-lsp` is at `~/.cargo/bin/kotlin-lsp` after `cargo install`. Run `which kotlin-lsp` to confirm it's on your `PATH`.
+Install `kotlin-lsp` via the [install script](../README.md#install). Run `which kotlin-lsp` to confirm it's on your `PATH`.
 
 ## VS Code
 
 ![VS Code with kotlin-lsp](../demo/vscode.png)
 
-Download the `.vsix` for your platform from the [latest release](https://github.com/Hessesian/kotlin-lsp/releases/latest) and install it:
+Download the `.vsix` for your platform from the [latest release](https://github.com/qdsfdhvh/kotlin-lsp/releases/latest) and install it:
 
 ```bash
 # Linux x86_64
@@ -117,7 +117,7 @@ the preferred setup — no manual `binary.path` wiring required.
 
 **Install the binary first:**
 ```bash
-cargo install kotlin-lsp
+curl -fsSL https://github.com/qdsfdhvh/kotlin-lsp/releases/latest/download/install.sh | bash
 ```
 
 **Install the extension:**

@@ -78,7 +78,7 @@ No mocking framework; real `Indexer` populated with test code snippets.
 
 - **CI/CD:** GitHub Actions release workflow (`.github/workflows/release.yml`)
   - Triggers on version tags (`v*.*.*`) and manual `workflow_dispatch`
-  - Jobs: `build` (cross-compile 4 targets) → `release` (GitHub Release assets) → `publish` (crates.io)
+  - Jobs: `build` (cross-compile 4 targets) → `release` (GitHub Release assets)
   - **No automated test run in CI** — tests are run locally before tagging
 - **Manual testing:** Developers run `cargo test` and `cargo clippy` before pushing
 - **Clippy linting:** Required before every commit; `cargo clippy -- -W clippy::cognitive_complexity -W clippy::too_many_lines`

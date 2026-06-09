@@ -187,18 +187,3 @@ jobs:
           generate_release_notes: true
           draft: false
 
-  publish:
-    needs: build
-    # Only publish from the canonical repo. Forks (incl. qdsfdhvh/kotlin-lsp)
-    # won't have CARGO_REGISTRY_TOKEN and can't claim the crate name anyway.
-    if: github.repository == 'Hessesian/kotlin-lsp'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Publish to crates.io
-        run: cargo publish --no-verify
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
