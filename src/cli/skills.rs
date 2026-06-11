@@ -61,9 +61,7 @@ pub(crate) fn format_list() -> String {
         };
         out.push_str(&format!("  {name:>max_w$}  {desc}\n"));
     }
-    out.push_str(&format!(
-        "\nUse `kotlin-lsp skills read <name>` for the full document.\n"
-    ));
+    out.push_str("\nUse `kotlin-lsp skills read <name>` for the full document.\n");
     out
 }
 
