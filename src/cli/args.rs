@@ -173,6 +173,12 @@ pub(crate) enum Subcommand {
         content: String,
         in_place: bool,
     },
+
+    /// List or read agent skills bundled with the CLI.
+    Skills {
+        /// Sub-args: `list` or `read <name>`.
+        args: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -623,6 +629,10 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "type-hierarchy" => {
             build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes)
         }
+        "skills" => {
+            let args = positionals; // positional args after 'skills'
+            Ok(Subcommand::Skills { args })
+        }
         "doctor" => Ok(Subcommand::Doctor {
             verbose: parsed.verbose,
         }),
@@ -799,6 +809,7 @@ fn is_subcommand(value: &str) -> bool {
             | "call-hierarchy"
             | "type-hierarchy"
             | "benchmark"
+            | "skills"
     )
 }
 
@@ -824,6 +835,7 @@ grep-friendly), and `--json` emits compact JSON (no pretty-print). Pipe to
 
 SUBCOMMANDS:
     find <name>                        Find declarations of a symbol
+    skills <list|read>               List or read bundled agent skills
     refs <name> [explain]              Find references to a symbol
     hover <file> <line> <col>          Show type/doc info at a position
     complete <file> <line> [col]       Show completion candidates
