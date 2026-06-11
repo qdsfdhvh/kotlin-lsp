@@ -384,3 +384,36 @@ fn type_hierarchy_can_request_both_directions() {
         other => panic!("expected type-hierarchy, got {other:?}"),
     }
 }
+
+// ── skills subcommand ────────────────────────────────────────────────────────────
+
+#[test]
+fn skills_list_parses_correctly() {
+    let args = parse(&["skills", "list"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Skills { args: inner } => {
+            assert_eq!(inner, vec!["list"]);
+        }
+        other => panic!("expected Skills, got {other:?}"),
+    }
+}
+
+#[test]
+fn skills_read_parses_name_arg() {
+    let args = parse(&["skills", "read", "kotlin-lsp"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Skills { args: inner } => {
+            assert_eq!(inner, vec!["read", "kotlin-lsp"]);
+        }
+        other => panic!("expected Skills, got {other:?}"),
+    }
+}
+
+#[test]
+fn skills_parses_as_subcommand() {
+    let args = parse(&["skills"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Skills { .. } => {} // no args = defaults to list
+        other => panic!("expected Skills, got {other:?}"),
+    }
+}
