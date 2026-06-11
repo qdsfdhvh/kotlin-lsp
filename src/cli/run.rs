@@ -573,6 +573,8 @@ pub(crate) async fn run(args: CliArgs) {
             }
         }
 
+        Subcommand::Skills { args } => super::skills::run_skills(args),
+
         Subcommand::OrganizeImports { files } => {
             if files.is_empty() {
                 eprintln!("organize-imports requires at least one FILE argument");

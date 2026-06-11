@@ -33,6 +33,7 @@ mod organize_imports;
 mod output;
 mod path_meta;
 mod run;
+mod skills;
 mod sources;
 pub(crate) mod templates;
 mod tokens;
