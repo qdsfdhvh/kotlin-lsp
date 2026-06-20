@@ -116,7 +116,7 @@ pub(crate) fn flatten_workspace_edit(
 
 // ── Apply text edits to lines ────────────────────────────────────────────
 
-fn apply_text_edits_to_lines(
+pub(crate) fn apply_text_edits_to_lines(
     lines: &[String],
     edits: &[TextEdit],
 ) -> Vec<String> {

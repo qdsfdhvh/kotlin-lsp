@@ -163,6 +163,8 @@ pub(crate) enum Subcommand {
         imports: bool,
         /// File to write output to (JSON format).
         output: Option<String>,
+        /// When true, apply the edit directly.
+        apply: bool,
     },
     #[allow(dead_code)]
     Insert {
@@ -567,6 +569,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 dry_run,
                 imports: true,
                 output: output_dir.as_ref().map(|p| p.to_string_lossy().to_string()),
+                apply: apply_action,
             })
         }
         "new-file" => {
@@ -600,6 +603,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             dry_run,
             imports: false,
             output: None,
+            apply: false,
         }),
         "organize-imports" => Ok(Subcommand::OrganizeImports {
             files: positionals.into_iter().map(PathBuf::from).collect(),
