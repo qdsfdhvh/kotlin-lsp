@@ -7,6 +7,7 @@ use tempfile::TempDir;
 use crate::indexer::Indexer;
 use tower_lsp::lsp_types::Url;
 
+#[allow(dead_code)]
 struct TestProject {
     _dir: TempDir,
     root_uri: Url,
