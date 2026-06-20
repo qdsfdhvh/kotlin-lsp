@@ -344,7 +344,20 @@ fn build_explicit_type_action(
     line: u32,
 ) -> Option<CodeActionOrCommand> {
     let _ = idx;
-    let content = all_lines.join("\n");
+
+    // Skip leading empty line (tree-sitter-kotlin v0.3.8 produces
+    // broken tree when content starts with bare newline).
+    let skip_lead = all_lines.first().is_some_and(|l| l.is_empty());
+    let content = if skip_lead {
+        all_lines[1..].join("\n")
+    } else {
+        all_lines.join("\n")
+    };
+    let adjusted_line = if skip_lead {
+        line.saturating_sub(1)
+    } else {
+        line
+    };
     let lang = lang_for_path(uri.path())?;
     let mut parser = tree_sitter::Parser::new();
     parser.set_language(&lang).ok()?;
@@ -354,13 +367,14 @@ fn build_explicit_type_action(
     // Walk root-level children to find a PROP_DECL on the target line.
     let root = tree.root_node();
     let mut cursor = root.walk();
+    cursor.goto_first_child();
     let mut initializer = None;
     let mut name_pos = None;
     let mut found = false;
 
     'outer: loop {
         let node = cursor.node();
-        if node.kind() == KIND_PROP_DECL && node.start_position().row == line as usize {
+        if node.kind() == KIND_PROP_DECL && node.start_position().row == adjusted_line as usize {
             let mut nc = node.walk();
             loop {
                 let c = nc.node();
@@ -1208,4 +1222,106 @@ pub(crate) fn extract_override_return(detail: &str) -> String {
         }
     }
     String::new()
+}
+
+/// Compute code actions for a cursor position, index, and optional diagnostics —
+/// callable from CLI without an LSP server session.
+pub(crate) fn get_code_actions_cli(
+    idx: &Arc<Indexer>,
+    uri: &Url,
+    line: u32,
+    col: u32,
+    diagnostics: &[Diagnostic],
+) -> Vec<CodeActionOrCommand> {
+    let range = Range {
+        start: Position::new(line, col),
+        end: Position::new(line, col),
+    };
+
+    let lines = idx.mem_lines_for(uri.as_str());
+    let line_text: String = lines
+        .as_ref()
+        .and_then(|l| l.get(line as usize).cloned())
+        .unwrap_or_default();
+
+    let trimmed = line_text.trim().to_owned();
+    let is_import_ln = trimmed.starts_with("import ") || trimmed.starts_with("package ");
+    let has_selection = false;
+
+    let mut actions: Vec<CodeActionOrCommand> = Vec::with_capacity(6);
+
+    let all_lines: Vec<String> = lines
+        .as_ref()
+        .map(|l| l.as_ref().clone())
+        .unwrap_or_default();
+
+    let cursor_word = line_text.word_at_utf16_col(col as usize);
+    let is_kotlin = crate::Language::from_path(uri.path()) == crate::Language::Kotlin;
+
+    if let Some(a) = build_import_alias_action(&line_text, &trimmed, uri, range, is_kotlin) {
+        actions.push(a);
+    }
+
+    if is_kotlin && !is_import_ln && !cursor_word.is_empty() && cursor_word.starts_with_uppercase()
+    {
+        if let Some(a) = build_rename_placeholder_action(&cursor_word, &all_lines, uri) {
+            actions.push(a);
+        }
+    }
+
+    if !is_import_ln && !cursor_word.is_empty() && cursor_word.starts_with_uppercase() {
+        let lang = crate::Language::from_path(uri.path());
+        let imports = if lang == crate::Language::Kotlin || lang == crate::Language::Java {
+            all_lines.parse_imports()
+        } else {
+            vec![]
+        };
+        for a in build_add_missing_import_actions(
+            idx,
+            &cursor_word,
+            &imports,
+            &all_lines,
+            uri,
+            lang.needs_semicolons(),
+        ) {
+            actions.push(a);
+        }
+    }
+
+    if !diagnostics.is_empty() && !is_import_ln && is_kotlin {
+        for diag in diagnostics
+            .iter()
+            .filter(|d| d.range.start <= range.start && d.range.end >= range.end)
+        {
+            if let Some(a) = build_suppress_warning_action(diag, &all_lines, uri, line) {
+                actions.push(a);
+                break;
+            }
+        }
+    }
+
+    if is_kotlin
+        && !is_import_ln
+        && !line_text.contains(':')
+        && (line_text.trim_start().starts_with("val ")
+            || line_text.trim_start().starts_with("var "))
+    {
+        if let Some(a) = build_explicit_type_action(idx, &all_lines, uri, line) {
+            actions.push(a);
+        }
+    }
+
+    if is_kotlin && !is_import_ln && !has_selection {
+        if let Some(a) = build_generate_overrides_action(idx, &all_lines, uri, line) {
+            actions.push(a);
+        }
+    }
+
+    if is_kotlin && !is_import_ln && !has_selection {
+        if let Some(a) = build_name_arguments_action(idx, &line_text, uri, range.start) {
+            actions.push(a);
+        }
+    }
+
+    actions
 }

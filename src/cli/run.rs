@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use tower_lsp::lsp_types::Location;
+use tower_lsp::lsp_types::{Location, Url};
 
 use crate::indexer::{Indexer, NoopReporter};
 use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
@@ -551,25 +551,139 @@ pub(crate) async fn run(args: CliArgs) {
             file,
             line,
             col,
-            kind,
+            kind: _kind,
             apply,
         } => {
-            let _root = resolve_root(args.root.as_deref());
+            let root = resolve_root_for_file(args.root.as_deref(), &file);
             let json = args.fmt == OutputFmt::Json;
-            let _ = (&kind, apply);
+            let index = build_index(&root, false).await;
+
+            let uri = Url::from_file_path(&file).expect("valid file path");
+
+            // Run parser diagnostics for the cursor position
             let src = std::fs::read_to_string(&file).unwrap_or_default();
-            let _lines: Vec<&str> = src.lines().collect();
+            let file_data = crate::parser::parse_by_extension(&file.to_string_lossy(), &src);
+            let diagnostics: Vec<_> = file_data
+                .syntax_errors
+                .iter()
+                .map(|se| tower_lsp::lsp_types::Diagnostic {
+                    range: tower_lsp::lsp_types::Range {
+                        start: tower_lsp::lsp_types::Position::new(
+                            se.range.start.line,
+                            se.range.start.character,
+                        ),
+                        end: tower_lsp::lsp_types::Position::new(
+                            se.range.start.line,
+                            se.range.start.character + 1,
+                        ),
+                    },
+                    severity: Some(tower_lsp::lsp_types::DiagnosticSeverity::ERROR),
+                    source: Some("kotlin-lsp".to_owned()),
+                    message: se.message.clone(),
+                    ..Default::default()
+                })
+                .collect();
+
+            let actions = crate::backend::actions::get_code_actions_cli(
+                &index,
+                &uri,
+                line,
+                col,
+                &diagnostics,
+            );
+
+            if apply && actions.len() != 1 {
+                eprintln!(
+                    "error: --apply requires exactly one action (found {})",
+                    actions.len()
+                );
+                std::process::exit(1);
+            }
+
             if json {
+                let action_list: Vec<serde_json::Value> = actions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, action)| {
+                        let (title, kind_str, edit_value) = match action {
+                            tower_lsp::lsp_types::CodeActionOrCommand::Command(cmd) => (
+                                cmd.title.clone(),
+                                "command".to_owned(),
+                                serde_json::Value::Null,
+                            ),
+                            tower_lsp::lsp_types::CodeActionOrCommand::CodeAction(ca) => {
+                                let kind_str = ca
+                                    .kind
+                                    .as_ref()
+                                    .map(|k| k.as_str().to_owned())
+                                    .unwrap_or_default();
+                                let edit_value = ca
+                                    .edit
+                                    .as_ref()
+                                    .map(|we| {
+                                        let mut obj = serde_json::json!({});
+                                        if let Some(changes) = &we.changes {
+                                            let file_edits: Vec<serde_json::Value> = changes
+                                                .iter()
+                                                .map(|(u, edits)| {
+                                                    serde_json::json!({
+                                                        "uri": u.as_str(),
+                                                        "edits": edits,
+                                                    })
+                                                })
+                                                .collect();
+                                            obj["changes"] = serde_json::Value::Array(file_edits);
+                                        }
+                                        if let Some(doc_changes) = &we.document_changes {
+                                            obj["documentChanges"] =
+                                                serde_json::to_value(doc_changes)
+                                                    .unwrap_or_default();
+                                        }
+                                        obj
+                                    })
+                                    .unwrap_or(serde_json::Value::Null);
+                                (ca.title.clone(), kind_str, edit_value)
+                            }
+                        };
+                        serde_json::json!({
+                            "id": i,
+                            "title": title,
+                            "kind": kind_str,
+                            "isPreferred": false,
+                            "edits": edit_value,
+                        })
+                    })
+                    .collect();
+
                 let result = serde_json::json!({
                     "file": file.to_string_lossy(),
                     "line": line + 1,
                     "col": col + 1,
-                    "actions": [],
+                    "actions": action_list,
                 });
-                println!("{}", serde_json::to_string_pretty(&result).expect("json"));
+                println!("{}", serde_json::to_string(&result).expect("json"));
             } else {
-                println!("File: {}:{}", file.display(), line + 1);
-                println!("No code actions available (LSP server not running).");
+                if actions.is_empty() {
+                    println!("File: {}:{}:{}", file.display(), line + 1, col + 1);
+                    println!("No code actions available.");
+                } else {
+                    println!("File: {}:{}:{}", file.display(), line + 1, col + 1);
+                    for (i, action) in actions.iter().enumerate() {
+                        let title = match action {
+                            tower_lsp::lsp_types::CodeActionOrCommand::Command(c) => &c.title,
+                            tower_lsp::lsp_types::CodeActionOrCommand::CodeAction(ca) => &ca.title,
+                        };
+                        let kind_str = match action {
+                            tower_lsp::lsp_types::CodeActionOrCommand::CodeAction(ca) => ca
+                                .kind
+                                .as_ref()
+                                .map(|k| format!(" [{}]", k.as_str()))
+                                .unwrap_or_default(),
+                            _ => String::new(),
+                        };
+                        println!("  {}. {}{}", i + 1, title, kind_str);
+                    }
+                }
             }
         }
 
