@@ -347,7 +347,7 @@ fn build_explicit_type_action(
 
     // Skip leading empty line (tree-sitter-kotlin v0.3.8 produces
     // broken tree when content starts with bare newline).
-    let skip_lead = all_lines.first().map_or(false, |l| l.is_empty());
+    let skip_lead = all_lines.first().is_some_and(|l| l.is_empty());
     let content = if skip_lead {
         all_lines[1..].join("\n")
     } else {
