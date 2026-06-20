@@ -617,16 +617,34 @@ pub(crate) async fn run(args: CliArgs) {
                                         false,
                                     );
                                     if json {
-                                        println!("{}", serde_json::to_string(&summary).expect("json"));
+                                        println!(
+                                            "{}",
+                                            serde_json::to_string(&summary).expect("json")
+                                        );
                                     } else {
                                         println!("Applied: {}", ca.title);
                                         for f in &summary.files {
                                             match f {
-                                                crate::cli::edit::FileEditResult::Ok { path, edits_applied, .. } => {
-                                                    println!("  {}: {} edits applied", path.display(), edits_applied);
+                                                crate::cli::edit::FileEditResult::Ok {
+                                                    path,
+                                                    edits_applied,
+                                                    ..
+                                                } => {
+                                                    println!(
+                                                        "  {}: {} edits applied",
+                                                        path.display(),
+                                                        edits_applied
+                                                    );
                                                 }
-                                                crate::cli::edit::FileEditResult::Error { path, message } => {
-                                                    eprintln!("  {}: error: {}", path.display(), message);
+                                                crate::cli::edit::FileEditResult::Error {
+                                                    path,
+                                                    message,
+                                                } => {
+                                                    eprintln!(
+                                                        "  {}: error: {}",
+                                                        path.display(),
+                                                        message
+                                                    );
                                                 }
                                                 crate::cli::edit::FileEditResult::Noop { path } => {
                                                     println!("  {}: no changes", path.display());
@@ -646,7 +664,10 @@ pub(crate) async fn run(args: CliArgs) {
                         }
                     }
                     tower_lsp::lsp_types::CodeActionOrCommand::Command(cmd) => {
-                        eprintln!("error: action '{}' is a command, not an edit; apply not supported", cmd.title);
+                        eprintln!(
+                            "error: action '{}' is a command, not an edit; apply not supported",
+                            cmd.title
+                        );
                         std::process::exit(1);
                     }
                 }
