@@ -187,6 +187,7 @@ fn apply_text_edits_to_lines(lines: &[String], edits: &[TextEdit]) -> Vec<String
 
 /// Return (old_lines, new_lines) per file without writing.
 #[allow(dead_code)]
+#[allow(clippy::type_complexity)]
 pub(crate) fn preview_file_edits(
     edits: &[FileEdit],
 ) -> Result<HashMap<PathBuf, (Vec<String>, Vec<String>)>, String> {
