@@ -97,7 +97,7 @@ kotlin-lsp hover <file> <line> <col>
 
 Line and column are 1-based, like editor cursors. Returns the type and surrounding signature.
 
-**Important limitation**: hover only resolves at the **declaration site**, not at call sites. Two-step workaround:
+**Context resolves call sites too**: `context` now works at call sites via `cst_call_info`, returning function_name, qualifier, and active_parameter. Use `--expand N` for surrounding source context.
 
 ```bash
 # Step 1: locate the declaration
@@ -209,6 +209,72 @@ kotlin-lsp batch <rule.json> [--dry-run]
 ```
 
 Applies find-replace and insert operations across multiple files atomically via JSON rules. Use `--dry-run` to preview.
+
+#### batch-imports — resolve missing imports
+
+```bash
+kotlin-lsp batch-imports <file> [--apply] [--json] [--output <path>]
+```
+
+Scans for uppercase identifiers, resolves each against the index, and reports
+unique (auto-importable), ambiguous (multiple FQN matches), and unknown
+identifiers. Defaults to dry-run; use `--apply` to write.
+
+```bash
+kotlin-lsp batch-imports src/Feature.kt              # preview only
+kotlin-lsp batch-imports src/Feature.kt --apply       # write imports
+```
+
+#### insert-import — add a single import
+
+```bash
+kotlin-lsp insert-import <file> <fqn> --content <text>
+```
+
+Inserts content at the computed import insertion line.
+
+#### insert-member, insert-function — class member insertion
+
+```bash
+kotlin-lsp insert-member <file> <owner> --content <text>
+kotlin-lsp insert-function <file> <owner> --content <text>
+```
+
+Finds the class body range from the index and inserts before the closing `}`.
+
+#### rename — symbol-aware rename
+
+```bash
+kotlin-lsp rename <file> <line> <col> <newName> [--apply] [--json]
+```
+
+Renames all references to the symbol at the cursor within the file.
+Dry-run by default. Uses `rename_in_scope()` for word-boundary matching.
+
+#### refs-at — filtered references by declaration context
+
+```bash
+kotlin-lsp refs-at <file> <line> <col> [--json]
+```
+
+Resolves the symbol identity at the cursor and filters reference candidates
+by declaration package context — reduces false positives.
+
+#### inspect — one-stop file snapshot for agents
+
+```bash
+kotlin-lsp inspect <file> [--json] [--expand N]
+```
+
+Returns package, imports, symbols, and syntax error count in one command.
+
+#### doctor --json — structured diagnostics
+
+```bash
+kotlin-lsp doctor [--verbose] [--json]
+```
+
+With `--json`, returns structured checks with `name`, `status`, and `message`.
 
 ## Performance flags
 
