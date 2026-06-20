@@ -544,8 +544,23 @@ pub(crate) async fn run(args: CliArgs) {
             after,
             content,
             in_place,
+            kind,
+            owner,
+            dry_run,
+            apply,
         } => {
-            super::insert::run_insert(&file, line, before, after, &content, in_place);
+            if let Some(ref k) = kind {
+                let json = args.fmt == OutputFmt::Json;
+                let index = crate::cli::run::build_index(
+                    &resolve_root_for_file(args.root.as_deref(), &file),
+                    false,
+                ).await;
+                super::insert::run_semantic_insert(
+                    &file, k, owner.as_deref(), &content, &index, dry_run, apply, json,
+                );
+            } else {
+                super::insert::run_insert(&file, line, before, after, &content, in_place);
+            }
         }
         Subcommand::Inject { file } => {
             let root = resolve_root_for_file(None, &file);

@@ -174,6 +174,12 @@ pub(crate) enum Subcommand {
         after: bool,
         content: String,
         in_place: bool,
+        /// Semantic insertion mode: "import", "member", "function", "override".
+        kind: Option<String>,
+        /// Owner class/interface name.
+        owner: Option<String>,
+        dry_run: bool,
+        apply: bool,
     },
 
     /// List or read agent skills bundled with the CLI.
@@ -595,6 +601,18 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             )?),
         }),
         "insert" => build_insert_subcommand(positionals, before, after, content, in_place),
+        "insert-import" => build_semantic_insert(
+            positionals.clone(), "import", content, dry_run, apply_action,
+        ),
+        "insert-member" => build_semantic_insert(
+            positionals.clone(), "member", content, dry_run, apply_action,
+        ),
+        "insert-function" => build_semantic_insert(
+            positionals.clone(), "function", content, dry_run, apply_action,
+        ),
+        "insert-override" => build_semantic_insert(
+            positionals.clone(), "override", content, dry_run, apply_action,
+        ),
         "batch" => Ok(Subcommand::Batch {
             file: PathBuf::from(first_positional(
                 positionals,
@@ -724,6 +742,10 @@ fn build_insert_subcommand(
         after,
         content,
         in_place,
+        kind: None,
+        owner: None,
+        dry_run: false,
+        apply: false,
     })
 }
 
@@ -940,4 +962,29 @@ EXAMPLES:
     kotlin-lsp tree src/Foo.kt",
         env!("CARGO_PKG_VERSION")
     );
+}
+
+fn build_semantic_insert(
+    positionals: Vec<String>,
+    kind: &str,
+    content: Option<String>,
+    dry_run: bool,
+    apply: bool,
+) -> Result<Subcommand, String> {
+    let mut iter = positionals.into_iter();
+    let file = PathBuf::from(iter.next().ok_or("insert-* requires a FILE argument")?);
+    let owner = iter.next();
+    let content = content.ok_or("insert-* requires --content <text>")?;
+    Ok(Subcommand::Insert {
+        file,
+        line: 0,
+        before: false,
+        after: false,
+        content,
+        in_place: false,
+        kind: Some(kind.to_string()),
+        owner: owner.map(|s| s.to_string()),
+        dry_run,
+        apply,
+    })
 }

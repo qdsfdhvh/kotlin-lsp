@@ -266,6 +266,7 @@ fn insert_parses_direction_content_and_in_place() {
             after,
             content,
             in_place,
+            ..
         } => {
             assert_eq!(file, std::path::PathBuf::from("Foo.kt"));
             assert_eq!(line, 10);
