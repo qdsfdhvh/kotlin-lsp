@@ -900,6 +900,12 @@ pub(crate) async fn run(args: CliArgs) {
             }
             super::organize_imports::run_organize_imports(&files, json);
         }
+        Subcommand::Inspect { file, expand } => {
+            let index = crate::cli::run::build_index(
+                &resolve_root_for_file(args.root.as_deref(), &file), false,
+            ).await;
+            run_inspect(&file, &index, json, expand).await;
+        }
         Subcommand::RefsAt { file, line, col } => {
             run_refs_at(&file, line, col, json).await;
         }
@@ -1504,6 +1510,38 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
         }
     }
 }
+
+async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, expand: usize) {
+    let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
+    let data = index.files.get(uri.as_str());
+    let package: String = data.as_ref().and_then(|d| d.package.clone()).unwrap_or_default();
+    let import_names: Vec<String> = data.as_ref().map(|d| {
+        d.imports.iter().map(|i| i.full_path.clone()).collect()
+    }).unwrap_or_default();
+    let symbol_names: Vec<String> = data.as_ref().map(|d| {
+        d.symbols.iter().map(|s| s.name.clone()).collect()
+    }).unwrap_or_default();
+    let syntax_error_count = data.as_ref().map(|d| d.syntax_errors.len()).unwrap_or(0);
+
+    if json {
+        let output = serde_json::json!({
+            "file": file.to_string_lossy(),
+            "package": package,
+            "imports": import_names,
+            "symbols": symbol_names,
+            "syntax_errors": syntax_error_count,
+        });
+        println!("{}", serde_json::to_string_pretty(&output).expect("json"));
+    } else {
+        println!("=== {} ===", file.display());
+        println!("Package: {package}");
+        println!("Imports: {}", import_names.join(", "));
+        println!("Symbols: {}", symbol_names.join(", "));
+        println!("Syntax errors: {syntax_error_count}");
+    }
+}
+
+
 
 /// Use rg to find functions that call `name`.
 fn find_callers_via_rg(
