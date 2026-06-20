@@ -113,3 +113,35 @@ fn cli_code_action_import_alias() {
         actions.len()
     );
 }
+
+// ─── CLI rename tests ────────────────────────────────────────────────────
+
+#[test]
+fn cli_rename_in_scope_replaces_occurrences() {
+    let src = "package com.example\n\nclass Foo {\n    val x = \"hello\"\n    fun greet() { println(x) }\n    fun other() { println(this.x) }\n}\n";
+    let lines: Vec<String> = src.lines().map(|s| s.to_string()).collect();
+    let edits = crate::backend::rename::rename_in_scope(
+        &lines, "x", "renamed", (0, lines.len()), false,
+    );
+    assert!(!edits.is_empty(), "should find references to 'x'");
+    // Apply edits
+    let result = crate::cli::edit::apply_text_edits_to_lines(&lines, &edits);
+    let result_str = result.join("\n");
+    assert!(result_str.contains("renamed"), "'x' should be renamed to 'renamed'");
+    assert!(!result_str.contains("println(x)"), "println(x) should become println(renamed)");
+}
+
+#[test]
+fn cli_rename_in_scope_skips_package() {
+    let src = "package com.example\nfun example() = 1\n";
+    let lines: Vec<String> = src.lines().map(|s| s.to_string()).collect();
+    // 'example' in package line should not be renamed
+    let edits = crate::backend::rename::rename_in_scope(
+        &lines, "example", "renamed", (0, lines.len()), false,
+    );
+    // Should only rename the 'example' in 'fun example()', not in 'package com.example'
+    let result = crate::cli::edit::apply_text_edits_to_lines(&lines, &edits);
+    let result_str = result.join("\n");
+    assert!(result_str.contains("package com.example"), "package line should be unchanged");
+    assert!(result_str.contains("fun renamed"), "function should be renamed");
+}

@@ -204,7 +204,7 @@ pub(super) fn enclosing_scope(lines: &[String], cursor_line: usize) -> (usize, u
 /// When `skip_dotted` is `true`, occurrences immediately preceded by `.` are
 /// skipped. This avoids renaming same-named method calls when the user is
 /// renaming a local variable (e.g. `val syncWith` vs `.syncWith()`).
-pub(super) fn rename_in_scope(
+pub(crate) fn rename_in_scope(
     lines: &[String],
     word: &str,
     new_name: &str,
