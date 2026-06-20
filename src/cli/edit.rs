@@ -195,6 +195,7 @@ fn apply_text_edits_to_lines(
 // ── Preview ──────────────────────────────────────────────────────────────
 
 /// Return (old_lines, new_lines) per file without writing.
+#[allow(dead_code)]
 pub(crate) fn preview_file_edits(
     edits: &[FileEdit],
 ) -> Result<HashMap<PathBuf, (Vec<String>, Vec<String>)>, String> {
@@ -306,6 +307,7 @@ pub(crate) fn apply_file_edits(
 
 // ── Format preview ───────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub(crate) fn format_preview(
     preview: &HashMap<PathBuf, (Vec<String>, Vec<String>)>,
 ) -> String {
