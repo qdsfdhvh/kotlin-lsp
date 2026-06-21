@@ -1511,7 +1511,7 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
     }
 }
 
-async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, expand: usize) {
+async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, _expand: usize) {
     let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
     let data = index.files.get(uri.as_str());
     let package: String = data.as_ref().and_then(|d| d.package.clone()).unwrap_or_default();
