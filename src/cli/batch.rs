@@ -223,15 +223,7 @@ pub(crate) fn run_batch_imports(
             // Skip common built-in / special types.
             if matches!(
                 w,
-                "I"
-                    | "Unit"
-                    | "String"
-                    | "Int"
-                    | "Long"
-                    | "Float"
-                    | "Double"
-                    | "Boolean"
-                    | "Any"
+                "I" | "Unit" | "String" | "Int" | "Long" | "Float" | "Double" | "Boolean" | "Any"
             ) {
                 continue;
             }
@@ -376,7 +368,10 @@ pub(crate) fn run_batch_imports(
             unknowns.len()
         );
         if !unique_imports.is_empty() {
-            println!("To apply: kotlin-lsp batch-imports {} --apply", file.display());
+            println!(
+                "To apply: kotlin-lsp batch-imports {} --apply",
+                file.display()
+            );
         }
     }
 }
