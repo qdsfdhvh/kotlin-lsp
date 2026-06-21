@@ -156,6 +156,12 @@ pub(crate) enum Subcommand {
         file: PathBuf,
     },
     /// Resolve references at a specific cursor position, filtered by declaration context.
+    /// One-stop file snapshot for agents: symbols, imports, diagnostics, edit anchors.
+    Inspect {
+        file: PathBuf,
+        /// When set, include deeper signature chains.
+        expand: usize,
+    },
     RefsAt {
         /// File containing the symbol.
         file: PathBuf,
@@ -510,6 +516,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         type_subtypes,
         type_supertypes,
         exclude_imports,
+        expand,
         owner_filter,
         ..
     } = parsed;
@@ -678,10 +685,17 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "organize-imports" => Ok(Subcommand::OrganizeImports {
             files: positionals.into_iter().map(PathBuf::from).collect(),
         }),
+        "inspect" => {
+            let file = PathBuf::from(first_positional(
+                positionals,
+                "inspect requires a FILE argument",
+            )?);
+            Ok(Subcommand::Inspect { file, expand })
+        }
         "refs-at" => {
             let (file, line, col) = parse_file_line_col(positionals, "refs-at")?;
             Ok(Subcommand::RefsAt { file, line, col })
-        },
+        }
         "context" => {
             let (file, line, col) = parse_file_line_col(positionals, "context")?;
             Ok(Subcommand::Context {
