@@ -641,19 +641,17 @@ pub(crate) async fn run(args: CliArgs) {
                                 file.display()
                             );
                             for f in &summary.files {
-                                match f {
-                                    crate::cli::edit::FileEditResult::Ok {
-                                        path,
-                                        edits_applied,
-                                        ..
-                                    } => {
-                                        println!(
-                                            "  {}: {} occurrences",
-                                            path.display(),
-                                            edits_applied
-                                        );
-                                    }
-                                    _ => {}
+                                if let crate::cli::edit::FileEditResult::Ok {
+                                    path,
+                                    edits_applied,
+                                    ..
+                                } = f
+                                {
+                                    println!(
+                                        "  {}: {} occurrences",
+                                        path.display(),
+                                        edits_applied
+                                    );
                                 }
                             }
                         }
