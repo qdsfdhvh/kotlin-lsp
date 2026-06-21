@@ -647,11 +647,7 @@ pub(crate) async fn run(args: CliArgs) {
                                     ..
                                 } = f
                                 {
-                                    println!(
-                                        "  {}: {} occurrences",
-                                        path.display(),
-                                        edits_applied
-                                    );
+                                    println!("  {}: {} occurrences", path.display(), edits_applied);
                                 }
                             }
                         }
