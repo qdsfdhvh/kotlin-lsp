@@ -110,8 +110,9 @@ pub(crate) enum Subcommand {
     Doctor {
         /// Show verbose diagnostics.
         verbose: bool,
+        /// Output structured JSON.
+        json: bool,
     },
-    /// Organize imports: sort, dedup, and remove unused imports.
     OrganizeImports {
         files: Vec<PathBuf>,
     },
@@ -727,6 +728,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }
         "doctor" => Ok(Subcommand::Doctor {
             verbose: parsed.verbose,
+            json: parsed.fmt == OutputFmt::Json,
         }),
         _ => unreachable!(),
     }

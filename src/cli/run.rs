@@ -463,8 +463,8 @@ pub(crate) async fn run(args: CliArgs) {
             let root = resolve_root(args.root.as_deref());
             super::sources::run_sources(&root, json, explain)
         }
-        Subcommand::Doctor { verbose } => {
-            super::doctor::run_doctor(args.root.as_deref(), verbose);
+        Subcommand::Doctor { verbose, json } => {
+            super::doctor::run_doctor(args.root.as_deref(), verbose, json);
         }
         Subcommand::Cache { sub } => {
             if sub == "stats" {

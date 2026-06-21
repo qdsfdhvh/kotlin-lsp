@@ -9,6 +9,15 @@
 
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+struct CheckResult {
+    name: &'static str,
+    status: &'static str, // "ok" | "warn" | "error"
+    message: String,
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 fn home() -> Option<PathBuf> {
@@ -94,14 +103,58 @@ fn has_git_ancestor(path: &Path) -> bool {
 
 // ─── Doctor runner ──────────────────────────────────────────────────────────
 
-pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool) {
+pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
     let root = root
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-    println!("kotlin-lsp doctor");
-    println!("  workspace root: {}", root.display());
-    println!();
+    if json {
+        let mut results: Vec<CheckResult> = Vec::new();
+        results.push(CheckResult {
+            name: "workspace-root",
+            status: if root.exists() { "ok" } else { "error" },
+            message: format!("{}", root.display()),
+        });
+        if root.exists() {
+            let kt = count_files(&root, ".kt");
+            let java = count_files(&root, ".java");
+            let swift = count_files(&root, ".swift");
+            let total = kt + java + swift;
+            results.push(CheckResult {
+                name: "source-files",
+                status: if total > 0 { "ok" } else { "warn" },
+                message: format!(
+                    "{} total ({} .kt, {} .java, {} .swift)",
+                    total, kt, java, swift
+                ),
+            });
+        }
+        let has_cache = home()
+            .zip(cache_dir())
+            .map(|(h, c)| format!("home={}, cache={}", h.display(), c.display()))
+            .unwrap_or_else(|| "not found".to_string());
+        results.push(CheckResult {
+            name: "cache",
+            status: "ok",
+            message: has_cache,
+        });
+        results.push(CheckResult {
+            name: "rg",
+            status: if which("rg").is_some() { "ok" } else { "warn" },
+            message: String::new(),
+        });
+        results.push(CheckResult {
+            name: "fd",
+            status: if which("fd").is_some() { "ok" } else { "warn" },
+            message: String::new(),
+        });
+        let output = serde_json::json!({
+            "workspace_root": root.to_string_lossy(),
+            "checks": results,
+        });
+        println!("{}", serde_json::to_string_pretty(&output).expect("json"));
+        return;
+    }
 
     let mut all_ok = true;
 
