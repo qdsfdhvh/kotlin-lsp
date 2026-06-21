@@ -25,6 +25,7 @@ mod batch;
 mod check;
 mod complete;
 mod doctor;
+mod edit;
 mod extract_sources;
 mod hover;
 mod inject;

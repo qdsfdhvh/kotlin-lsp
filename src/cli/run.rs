@@ -592,12 +592,86 @@ pub(crate) async fn run(args: CliArgs) {
                 &diagnostics,
             );
 
-            if apply && actions.len() != 1 {
-                eprintln!(
-                    "error: --apply requires exactly one action (found {})",
-                    actions.len()
-                );
-                std::process::exit(1);
+            if apply {
+                if actions.is_empty() {
+                    eprintln!("error: --apply requires at least one action, but none found");
+                    std::process::exit(1);
+                }
+                if actions.len() > 1 {
+                    eprintln!(
+                        "error: --apply requires exactly one action (found {}); use --json to list actions and pick an id",
+                        actions.len()
+                    );
+                    std::process::exit(1);
+                }
+
+                let action = &actions[0];
+                match action {
+                    tower_lsp::lsp_types::CodeActionOrCommand::CodeAction(ca) => {
+                        if let Some(edit) = &ca.edit {
+                            match crate::cli::edit::flatten_workspace_edit(edit) {
+                                Ok(file_edits) => {
+                                    let summary = crate::cli::edit::apply_file_edits(
+                                        &file_edits,
+                                        Some(&root),
+                                        false,
+                                    );
+                                    if json {
+                                        println!(
+                                            "{}",
+                                            serde_json::to_string(&summary).expect("json")
+                                        );
+                                    } else {
+                                        println!("Applied: {}", ca.title);
+                                        for f in &summary.files {
+                                            match f {
+                                                crate::cli::edit::FileEditResult::Ok {
+                                                    path,
+                                                    edits_applied,
+                                                    ..
+                                                } => {
+                                                    println!(
+                                                        "  {}: {} edits applied",
+                                                        path.display(),
+                                                        edits_applied
+                                                    );
+                                                }
+                                                crate::cli::edit::FileEditResult::Error {
+                                                    path,
+                                                    message,
+                                                } => {
+                                                    eprintln!(
+                                                        "  {}: error: {}",
+                                                        path.display(),
+                                                        message
+                                                    );
+                                                }
+                                                crate::cli::edit::FileEditResult::Noop { path } => {
+                                                    println!("  {}: no changes", path.display());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("error: failed to process edit: {e}");
+                                    std::process::exit(1);
+                                }
+                            }
+                        } else {
+                            eprintln!("error: action '{}' has no edit", ca.title);
+                            std::process::exit(1);
+                        }
+                    }
+                    tower_lsp::lsp_types::CodeActionOrCommand::Command(cmd) => {
+                        eprintln!(
+                            "error: action '{}' is a command, not an edit; apply not supported",
+                            cmd.title
+                        );
+                        std::process::exit(1);
+                    }
+                }
+                return;
             }
 
             if json {
