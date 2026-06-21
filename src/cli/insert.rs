@@ -101,9 +101,9 @@ use std::sync::Arc;
 
 use tower_lsp::lsp_types::{Position, Range, TextEdit, Url};
 
-use crate::cli::edit::{apply_file_edits, FileEdit, FileEditResult};
+use crate::cli::edit::{apply_file_edits, FileEdit};
 use crate::indexer::Indexer;
-use crate::{Language, LinesExt};
+use crate::LinesExt;
 
 /// Semantic insert dispatcher.
 ///
