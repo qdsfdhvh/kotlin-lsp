@@ -682,7 +682,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "refs-at" => {
             let (file, line, col) = parse_file_line_col(positionals, "refs-at")?;
             Ok(Subcommand::RefsAt { file, line, col })
-        },
+        }
         "context" => {
             let (file, line, col) = parse_file_line_col(positionals, "context")?;
             Ok(Subcommand::Context {

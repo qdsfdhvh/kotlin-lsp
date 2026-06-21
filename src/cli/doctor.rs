@@ -123,12 +123,16 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
             results.push(CheckResult {
                 name: "source-files",
                 status: if total > 0 { "ok" } else { "warn" },
-                message: format!("{} total ({} .kt, {} .java, {} .swift)", total, kt, java, swift),
+                message: format!(
+                    "{} total ({} .kt, {} .java, {} .swift)",
+                    total, kt, java, swift
+                ),
             });
         }
-        let has_cache = home().zip(cache_dir()).map(|(h, c)| {
-            format!("home={}, cache={}", h.display(), c.display())
-        }).unwrap_or_else(|| "not found".to_string());
+        let has_cache = home()
+            .zip(cache_dir())
+            .map(|(h, c)| format!("home={}, cache={}", h.display(), c.display()))
+            .unwrap_or_else(|| "not found".to_string());
         results.push(CheckResult {
             name: "cache",
             status: "ok",
