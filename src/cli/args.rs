@@ -687,14 +687,15 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }),
         "inspect" => {
             let file = PathBuf::from(first_positional(
-                positionals, "inspect requires a FILE argument",
+                positionals,
+                "inspect requires a FILE argument",
             )?);
             Ok(Subcommand::Inspect { file, expand })
-        },
+        }
         "refs-at" => {
             let (file, line, col) = parse_file_line_col(positionals, "refs-at")?;
             Ok(Subcommand::RefsAt { file, line, col })
-        },
+        }
         "context" => {
             let (file, line, col) = parse_file_line_col(positionals, "context")?;
             Ok(Subcommand::Context {

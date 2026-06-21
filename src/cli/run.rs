@@ -902,8 +902,10 @@ pub(crate) async fn run(args: CliArgs) {
         }
         Subcommand::Inspect { file, expand } => {
             let index = crate::cli::run::build_index(
-                &resolve_root_for_file(args.root.as_deref(), &file), false,
-            ).await;
+                &resolve_root_for_file(args.root.as_deref(), &file),
+                false,
+            )
+            .await;
             run_inspect(&file, &index, json, expand).await;
         }
         Subcommand::RefsAt { file, line, col } => {
@@ -1443,10 +1445,14 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
 
     let word: String = {
         let lines = index.mem_lines_for(uri.as_str());
-        lines.as_ref().and_then(|l| {
-            let li = pos.line as usize;
-            l.get(li).map(|ln| crate::StrExt::word_at_utf16_col(ln.as_str(), pos.character as usize))
-        }).unwrap_or_default()
+        lines
+            .as_ref()
+            .and_then(|l| {
+                let li = pos.line as usize;
+                l.get(li)
+                    .map(|ln| crate::StrExt::word_at_utf16_col(ln.as_str(), pos.character as usize))
+            })
+            .unwrap_or_default()
     };
 
     if word.is_empty() {
@@ -1458,7 +1464,10 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
     let locs = index.resolve_symbol(&word, None, &uri);
     if locs.is_empty() {
         if json {
-            println!("{}", serde_json::json!({"name": word, "definitions": [], "refs": [], "filtered": 0}));
+            println!(
+                "{}",
+                serde_json::json!({"name": word, "definitions": [], "refs": [], "filtered": 0})
+            );
         } else {
             println!("Symbol '{word}': no definitions found");
         }
@@ -1467,24 +1476,42 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
 
     // Use the first definition's URI to determine the package/owner context.
     let def_uri = &locs[0].uri;
-    let def_pkg = index.files.get(def_uri.as_str()).and_then(|f| f.package.clone()).unwrap_or_default();
+    let def_pkg = index
+        .files
+        .get(def_uri.as_str())
+        .and_then(|f| f.package.clone())
+        .unwrap_or_default();
 
     // Get all name-based reference candidates, then filter by context.
     let all_locs = index.definition_locations(&word);
-    let filtered: Vec<_> = all_locs.iter().filter(|loc| {
-        // Keep the definition itself.
-        if loc.uri == *def_uri { return true; }
-        // Filter: same package?
-        let loc_pkg = index.files.get(loc.uri.as_str()).and_then(|f| f.package.clone()).unwrap_or_default();
-        loc_pkg == def_pkg
-    }).collect();
+    let filtered: Vec<_> = all_locs
+        .iter()
+        .filter(|loc| {
+            // Keep the definition itself.
+            if loc.uri == *def_uri {
+                return true;
+            }
+            // Filter: same package?
+            let loc_pkg = index
+                .files
+                .get(loc.uri.as_str())
+                .and_then(|f| f.package.clone())
+                .unwrap_or_default();
+            loc_pkg == def_pkg
+        })
+        .collect();
 
     if json {
-        let refs_json: Vec<_> = filtered.iter().map(|l| serde_json::json!({
-            "uri": l.uri.to_string(),
-            "line": l.range.start.line + 1,
-            "col": l.range.start.character + 1,
-        })).collect();
+        let refs_json: Vec<_> = filtered
+            .iter()
+            .map(|l| {
+                serde_json::json!({
+                    "uri": l.uri.to_string(),
+                    "line": l.range.start.line + 1,
+                    "col": l.range.start.character + 1,
+                })
+            })
+            .collect();
         let output = serde_json::json!({
             "name": word,
             "definitions": locs.iter().map(|l| serde_json::json!({
@@ -1501,12 +1528,26 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
         println!("Definitions ({}):", locs.len());
         for l in &locs {
             let p = l.uri.to_file_path().unwrap_or_default();
-            println!("  {}:{}:{}", p.display(), l.range.start.line + 1, l.range.start.character + 1);
+            println!(
+                "  {}:{}:{}",
+                p.display(),
+                l.range.start.line + 1,
+                l.range.start.character + 1
+            );
         }
-        println!("References ({} filtered from {} candidates):", filtered.len(), all_locs.len());
+        println!(
+            "References ({} filtered from {} candidates):",
+            filtered.len(),
+            all_locs.len()
+        );
         for l in &filtered {
             let p = l.uri.to_file_path().unwrap_or_default();
-            println!("  {}:{}:{}", p.display(), l.range.start.line + 1, l.range.start.character + 1);
+            println!(
+                "  {}:{}:{}",
+                p.display(),
+                l.range.start.line + 1,
+                l.range.start.character + 1
+            );
         }
     }
 }
@@ -1514,13 +1555,18 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
 async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, _expand: usize) {
     let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
     let data = index.files.get(uri.as_str());
-    let package: String = data.as_ref().and_then(|d| d.package.clone()).unwrap_or_default();
-    let import_names: Vec<String> = data.as_ref().map(|d| {
-        d.imports.iter().map(|i| i.full_path.clone()).collect()
-    }).unwrap_or_default();
-    let symbol_names: Vec<String> = data.as_ref().map(|d| {
-        d.symbols.iter().map(|s| s.name.clone()).collect()
-    }).unwrap_or_default();
+    let package: String = data
+        .as_ref()
+        .and_then(|d| d.package.clone())
+        .unwrap_or_default();
+    let import_names: Vec<String> = data
+        .as_ref()
+        .map(|d| d.imports.iter().map(|i| i.full_path.clone()).collect())
+        .unwrap_or_default();
+    let symbol_names: Vec<String> = data
+        .as_ref()
+        .map(|d| d.symbols.iter().map(|s| s.name.clone()).collect())
+        .unwrap_or_default();
     let syntax_error_count = data.as_ref().map(|d| d.syntax_errors.len()).unwrap_or(0);
 
     if json {
@@ -1540,8 +1586,6 @@ async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, _expand: usi
         println!("Syntax errors: {syntax_error_count}");
     }
 }
-
-
 
 /// Use rg to find functions that call `name`.
 fn find_callers_via_rg(
