@@ -319,7 +319,8 @@ pub(crate) fn run_batch_imports(
     }
 
     // Sort descending so earlier insertions don't shift later positions.
-    text_edits.sort_by(|a, b| b.range.start.line.cmp(&a.range.start.line));
+    text_edits.sort_by_key(|a| a.range.start.line);
+    text_edits.reverse();
     let file_edit = FileEdit {
         path: file.to_path_buf(),
         edits: text_edits,
