@@ -155,6 +155,15 @@ pub(crate) enum Subcommand {
     Inject {
         file: PathBuf,
     },
+    /// Resolve references at a specific cursor position, filtered by declaration context.
+    RefsAt {
+        /// File containing the symbol.
+        file: PathBuf,
+        /// 1-based line of the symbol.
+        line: u32,
+        /// 1-based UTF-16 column of the symbol.
+        col: u32,
+    },
     /// Rename a symbol with preview/apply.
     Rename {
         /// File containing the symbol to rename.
@@ -669,6 +678,10 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "organize-imports" => Ok(Subcommand::OrganizeImports {
             files: positionals.into_iter().map(PathBuf::from).collect(),
         }),
+        "refs-at" => {
+            let (file, line, col) = parse_file_line_col(positionals, "refs-at")?;
+            Ok(Subcommand::RefsAt { file, line, col })
+        },
         "context" => {
             let (file, line, col) = parse_file_line_col(positionals, "context")?;
             Ok(Subcommand::Context {

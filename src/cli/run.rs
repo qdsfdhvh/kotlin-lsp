@@ -900,6 +900,9 @@ pub(crate) async fn run(args: CliArgs) {
             }
             super::organize_imports::run_organize_imports(&files, json);
         }
+        Subcommand::RefsAt { file, line, col } => {
+            run_refs_at(&file, line, col, json).await;
+        }
         Subcommand::Context {
             file,
             line,
@@ -1422,6 +1425,82 @@ async fn run_call_hierarchy(
         if outgoing {
             println!("### Outgoing calls");
             println!("  (not yet implemented)\n");
+        }
+    }
+}
+
+async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
+    let root = resolve_root_for_file(None, file);
+    let index = build_index(&root, false).await;
+    let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
+    let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
+
+    let word: String = {
+        let lines = index.mem_lines_for(uri.as_str());
+        lines.as_ref().and_then(|l| {
+            let li = pos.line as usize;
+            l.get(li).map(|ln| crate::StrExt::word_at_utf16_col(ln.as_str(), pos.character as usize))
+        }).unwrap_or_default()
+    };
+
+    if word.is_empty() {
+        eprintln!("No symbol at cursor");
+        std::process::exit(1);
+    }
+
+    // Resolve the symbol identity.
+    let locs = index.resolve_symbol(&word, None, &uri);
+    if locs.is_empty() {
+        if json {
+            println!("{}", serde_json::json!({"name": word, "definitions": [], "refs": [], "filtered": 0}));
+        } else {
+            println!("Symbol '{word}': no definitions found");
+        }
+        return;
+    }
+
+    // Use the first definition's URI to determine the package/owner context.
+    let def_uri = &locs[0].uri;
+    let def_pkg = index.files.get(def_uri.as_str()).and_then(|f| f.package.clone()).unwrap_or_default();
+
+    // Get all name-based reference candidates, then filter by context.
+    let all_locs = index.definition_locations(&word);
+    let filtered: Vec<_> = all_locs.iter().filter(|loc| {
+        // Keep the definition itself.
+        if loc.uri == *def_uri { return true; }
+        // Filter: same package?
+        let loc_pkg = index.files.get(loc.uri.as_str()).and_then(|f| f.package.clone()).unwrap_or_default();
+        loc_pkg == def_pkg
+    }).collect();
+
+    if json {
+        let refs_json: Vec<_> = filtered.iter().map(|l| serde_json::json!({
+            "uri": l.uri.to_string(),
+            "line": l.range.start.line + 1,
+            "col": l.range.start.character + 1,
+        })).collect();
+        let output = serde_json::json!({
+            "name": word,
+            "definitions": locs.iter().map(|l| serde_json::json!({
+                "uri": l.uri.to_string(), "line": l.range.start.line + 1, "col": l.range.start.character + 1,
+            })).collect::<Vec<_>>(),
+            "refs": refs_json,
+            "total_candidates": all_locs.len(),
+            "filtered": filtered.len(),
+        });
+        println!("{}", serde_json::to_string_pretty(&output).expect("json"));
+    } else {
+        println!("Symbol: {word}");
+        println!("Package: {def_pkg}");
+        println!("Definitions ({}):", locs.len());
+        for l in &locs {
+            let p = l.uri.to_file_path().unwrap_or_default();
+            println!("  {}:{}:{}", p.display(), l.range.start.line + 1, l.range.start.character + 1);
+        }
+        println!("References ({} filtered from {} candidates):", filtered.len(), all_locs.len());
+        for l in &filtered {
+            let p = l.uri.to_file_path().unwrap_or_default();
+            println!("  {}:{}:{}", p.display(), l.range.start.line + 1, l.range.start.character + 1);
         }
     }
 }
