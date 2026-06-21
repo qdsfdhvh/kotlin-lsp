@@ -155,6 +155,19 @@ pub(crate) enum Subcommand {
     Inject {
         file: PathBuf,
     },
+    /// Rename a symbol with preview/apply.
+    Rename {
+        /// File containing the symbol to rename.
+        file: PathBuf,
+        /// 1-based line of the symbol.
+        line: u32,
+        /// 1-based UTF-16 column of the symbol.
+        col: u32,
+        /// New name for the symbol.
+        new_name: String,
+        /// When true, apply the rename instead of previewing.
+        apply: bool,
+    },
     #[allow(dead_code)]
     Batch {
         file: PathBuf,
@@ -180,12 +193,6 @@ pub(crate) enum Subcommand {
         owner: Option<String>,
         dry_run: bool,
         apply: bool,
-    },
-
-    /// List or read agent skills bundled with the CLI.
-    Skills {
-        /// Sub-args: `list` or `read <name>`.
-        args: Vec<String>,
     },
 
     /// List or read agent skills bundled with the CLI.
@@ -561,6 +568,20 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "cache" => Ok(Subcommand::Cache {
             sub: positionals.first().cloned().unwrap_or_default(),
         }),
+        "rename" => {
+            let (file, line, col) = parse_file_line_col(positionals.clone(), "rename")?;
+            let new_name = positionals
+                .get(3)
+                .ok_or("rename requires: <file> <line> <col> <newName>")?
+                .to_string();
+            Ok(Subcommand::Rename {
+                file,
+                line,
+                col,
+                new_name,
+                apply: apply_action,
+            })
+        }
         "code-action" | "code_action" => {
             let (file, line, col) = parse_file_line_col(positionals, "code-action")?;
             Ok(Subcommand::CodeAction {
