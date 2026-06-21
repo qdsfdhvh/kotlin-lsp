@@ -515,11 +515,17 @@ pub(crate) async fn run(args: CliArgs) {
             dry_run,
             imports,
             output,
+            apply,
         } => {
             if imports {
                 let json = args.fmt == OutputFmt::Json;
                 let out = output.as_deref();
-                super::batch::run_batch_imports(&file, dry_run, json, out);
+                let index = crate::cli::run::build_index(
+                    &resolve_root_for_file(args.root.as_deref(), &file),
+                    false,
+                )
+                .await;
+                super::batch::run_batch_imports(&file, &index, dry_run, apply, json, out);
             } else {
                 super::batch::run_batch(&file, dry_run);
             }

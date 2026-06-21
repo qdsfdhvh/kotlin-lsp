@@ -110,15 +110,10 @@ pub(crate) fn flatten_workspace_edit(edit: &WorkspaceEdit) -> Result<Vec<FileEdi
 
 // ── Apply text edits to lines ────────────────────────────────────────────
 
-fn apply_text_edits_to_lines(lines: &[String], edits: &[TextEdit]) -> Vec<String> {
+pub(crate) fn apply_text_edits_to_lines(lines: &[String], edits: &[TextEdit]) -> Vec<String> {
     let mut sorted: Vec<&TextEdit> = edits.iter().collect();
-    sorted.sort_by(|a, b| {
-        b.range
-            .start
-            .line
-            .cmp(&a.range.start.line)
-            .then_with(|| b.range.start.character.cmp(&a.range.start.character))
-    });
+    sorted.sort_by_key(|a| (a.range.start.line, a.range.start.character));
+    sorted.reverse();
 
     let mut result: Vec<String> = lines.to_vec();
 

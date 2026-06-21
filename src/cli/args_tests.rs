@@ -205,6 +205,7 @@ fn batch_imports_subcommand_is_reachable() {
             dry_run,
             imports,
             output,
+            ..
         } => {
             assert_eq!(file, std::path::PathBuf::from("Foo.kt"));
             assert!(dry_run);
@@ -300,6 +301,7 @@ fn batch_parses_rule_file_and_dry_run() {
             dry_run,
             imports,
             output,
+            ..
         } => {
             assert_eq!(file, std::path::PathBuf::from("rules.json"));
             assert!(dry_run);
