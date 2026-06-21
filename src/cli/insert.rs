@@ -112,6 +112,7 @@ use crate::{Language, LinesExt};
 /// - `"member"` — finds the class body range for `owner` and inserts as member
 /// - `"function"` — same as member but explicitly named function
 /// - `"override"` — TBD
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_semantic_insert(
     file: &Path,
     kind: &str,
