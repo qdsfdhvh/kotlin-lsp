@@ -1247,6 +1247,7 @@ fn exit_if_empty(results: &[CliResult], json: bool, message: &str) {
 
 // ── context ───────────────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub(crate) fn extract_type_names(sig: &str) -> Vec<String> {
     let mut types = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -1268,16 +1269,16 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize
     let root = resolve_root_for_file(None, file);
     let index = build_index(&root, false).await;
     let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
+    let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
 
     let word: String = {
         let lines = index.mem_lines_for(uri.as_str());
         lines
             .as_ref()
             .and_then(|l| {
-                let li = line.saturating_sub(1) as usize;
-                l.get(li).map(|ln| {
-                    crate::StrExt::word_at_utf16_col(ln.as_str(), col.saturating_sub(1) as usize)
-                })
+                let li = pos.line as usize;
+                l.get(li)
+                    .map(|ln| crate::StrExt::word_at_utf16_col(ln.as_str(), pos.character as usize))
             })
             .unwrap_or_default()
     };
@@ -1287,7 +1288,12 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize
         std::process::exit(1);
     }
 
+    let call_info = crate::indexer::cst_call_info(pos, &index, &uri);
+
     if json {
+        let call_site = call_info.as_ref().map(|ci| serde_json::json!({
+            "function_name": ci.fn_name, "qualifier": ci.qualifier, "active_parameter": ci.active_param,
+        }));
         let locs = index.resolve_symbol(&word, None, &uri);
         let sig = crate::indexer::resolution::resolve_symbol_info(
             index.as_ref(),
@@ -1299,103 +1305,50 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize
         )
         .map(|s| {
             serde_json::json!({
-                "signature": s.signature,
-                "doc": s.doc,
-                "deprecated": s.deprecated,
+                "signature": s.signature, "doc": s.doc, "deprecated": s.deprecated,
                 "visibility": format!("{:?}", s.visibility),
             })
         })
         .unwrap_or_default();
-        let output = serde_json::json!({
+        let mut output = serde_json::json!({
             "name": word,
             "definitions": locs.iter().map(|l| serde_json::json!({
-                "uri": l.uri.to_string(),
-                "line": l.range.start.line + 1,
-                "col": l.range.start.character + 1,
+                "uri": l.uri.to_string(), "line": l.range.start.line + 1, "col": l.range.start.character + 1,
             })).collect::<Vec<_>>(),
-            "signature_markdown": sig,
-            "references": locs.len(),
+            "signature_markdown": sig, "references": locs.len(),
         });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&output).expect("serialize JSON")
-        );
-    } else {
-        println!("## Symbol: `{word}`");
-        let locs = index.resolve_symbol(&word, None, &uri);
-        if locs.is_empty() {
-            println!("  (not found)");
-        } else {
-            for loc in &locs {
-                println!(
-                    "  Def: {}:{}:{}",
-                    loc.uri,
-                    loc.range.start.line + 1,
-                    loc.range.start.character + 1
-                );
-            }
+        if let Some(cs) = call_site {
+            output["call_site"] = cs;
         }
-        if let Some(info) = crate::indexer::resolution::resolve_symbol_info(
-            index.as_ref(),
-            &word,
-            None,
-            &uri,
-            crate::indexer::resolution::SubstitutionContext::None,
-            &crate::indexer::resolution::ResolveOptions::hover(),
-        ) {
-            println!("  Sig: {}", info.signature);
-            if !info.doc.is_empty() {
-                let first: String = info
-                    .doc
-                    .lines()
-                    .take_while(|l| !l.trim().is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                println!("  Doc: {first}");
-            }
-        }
-
         if expand > 0 {
-            let mut seen_types: std::collections::HashSet<String> =
-                std::collections::HashSet::new();
-            let mut queue: Vec<(String, usize)> = Vec::new();
-            if let Some(info) = crate::indexer::resolution::resolve_symbol_info(
-                index.as_ref(),
-                &word,
-                None,
-                &uri,
-                crate::indexer::resolution::SubstitutionContext::None,
-                &crate::indexer::resolution::ResolveOptions::hover(),
-            ) {
-                let types = extract_type_names(&info.signature);
-                for t in types.iter().take(10) {
-                    queue.push((t.clone(), 0));
-                    seen_types.insert(t.clone());
-                }
-            }
-            while let Some((type_name, depth)) = queue.pop() {
-                if depth >= expand.min(4) {
-                    continue;
-                }
-                if let Some(ti) = crate::indexer::resolution::resolve_symbol_info(
-                    index.as_ref(),
-                    &type_name,
-                    None,
-                    &uri,
-                    crate::indexer::resolution::SubstitutionContext::None,
-                    &crate::indexer::resolution::ResolveOptions::hover(),
-                ) {
-                    println!("  {}  {}: {}", "  ".repeat(depth), type_name, ti.signature);
-                    let child_types = extract_type_names(&ti.signature);
-                    for ct in child_types {
-                        if seen_types.insert(ct.clone()) {
-                            queue.push((ct, depth + 1));
-                        }
-                    }
-                }
+            if let Some(lines) = index.mem_lines_for(uri.as_str()) {
+                let s = pos.line.saturating_sub(expand.min(1000) as u32) as usize;
+                let e = (pos.line as usize + expand + 1).min(lines.len());
+                let ctx: Vec<String> = lines[s..e].to_vec();
+                output["surrounding_source"] =
+                    serde_json::json!({"start_line": s + 1, "lines": ctx});
             }
         }
-        println!();
+        println!("{}", serde_json::to_string_pretty(&output).expect("json"));
+    } else {
+        if let Some(ci) = &call_info {
+            println!(
+                "Call site: {}({}) at arg {}",
+                ci.fn_name,
+                ci.qualifier.as_deref().unwrap_or(""),
+                ci.active_param
+            );
+        }
+        println!("Symbol: {word}");
+        for l in &index.resolve_symbol(&word, None, &uri) {
+            let p = l.uri.to_file_path().unwrap_or_default();
+            println!(
+                "  {}:{}:{}",
+                p.display(),
+                l.range.start.line + 1,
+                l.range.start.character + 1
+            );
+        }
     }
 }
 
