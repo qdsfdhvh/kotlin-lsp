@@ -1,6 +1,30 @@
 # Changelog
 
 
+## 0.22.0 (2026-06-21)
+
+- **CLI code-action parity** (Phase 1) — `code-action` now lists real LSP actions
+  instead of an empty placeholder. Supports `--json`, `--apply`.
+- **Safe edit preview/apply engine** (Phase 2) — shared `WorkspaceEdit` → file edit
+  engine with dry-run, validation, structured output. Used by code-action --apply.
+- **Missing-import workflow** (Phase 3) — `batch-imports` resolves FQNs via index,
+  classifies as unique/ambiguous/unknown. Supports `--apply`.
+- **Semantic insert primitives** (Phase 4) — `insert-import`, `insert-member`,
+  `insert-function` commands. Index-aware insertion positions.
+- **Rename/refactor dry-run** (Phase 5) — `rename <file> <line> <col> <newName>`
+  with symbol-aware word replacement, dry-run preview, and --apply.
+- **Use-site context** (Phase 6) — `context` now resolves call sites via
+  `cst_call_info`, returning function_name, qualifier, active_parameter.
+- **Reference precision** (Phase 7) — `refs-at <file> <line> <col>` filters
+  name-based candidates by declaration package context.
+- **Agent snapshot command** (Phase 8) — `inspect <file>` returns package, imports,
+  symbols, error count in one command.
+- **Machine-readable doctor** (Phase 9) — `doctor --json` returns structured checks
+  with name, status (ok/warn/error), and message.
+- **Skill docs audit** (Phase 10) — `skills/kotlin-lsp/SKILL.md` updated with all
+  new commands.
+- **Performance findings** (Phase 11) — measured one-shot CLI latency (~1.4s warm
+  cache); library cache deserialization identified as bottleneck.
 ## 0.21.0
 
 - **Configurable Kotlin formatter** — `--format-tool ktlint|ktfmt` CLI flag.
