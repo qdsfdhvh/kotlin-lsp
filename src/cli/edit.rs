@@ -7,9 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tower_lsp::lsp_types::{
-    AnnotatedTextEdit, OneOf, TextEdit, Url, WorkspaceEdit,
-};
+use tower_lsp::lsp_types::{AnnotatedTextEdit, OneOf, TextEdit, Url, WorkspaceEdit};
 
 /// A resolved file-level edit — the result of flattening a `WorkspaceEdit`.
 #[derive(Debug, Clone, Serialize)]
@@ -48,9 +46,7 @@ fn uri_to_path(uri: &Url) -> Result<PathBuf, String> {
         .map_err(|_| format!("URI is not a valid file path: {uri}"))
 }
 
-fn oneof_to_textedit(
-    oneof: &OneOf<TextEdit, AnnotatedTextEdit>,
-) -> TextEdit {
+fn oneof_to_textedit(oneof: &OneOf<TextEdit, AnnotatedTextEdit>) -> TextEdit {
     match oneof {
         OneOf::Left(te) => te.clone(),
         OneOf::Right(ae) => TextEdit {
@@ -71,9 +67,7 @@ pub(crate) fn path_is_under_root(path: &Path, root: &Path) -> bool {
 // ── Flatten ──────────────────────────────────────────────────────────────
 
 /// Flatten a `WorkspaceEdit` into per-file `FileEdit` entries.
-pub(crate) fn flatten_workspace_edit(
-    edit: &WorkspaceEdit,
-) -> Result<Vec<FileEdit>, String> {
+pub(crate) fn flatten_workspace_edit(edit: &WorkspaceEdit) -> Result<Vec<FileEdit>, String> {
     let mut file_edits: Vec<FileEdit> = Vec::new();
 
     if let Some(changes) = &edit.changes {
@@ -116,10 +110,7 @@ pub(crate) fn flatten_workspace_edit(
 
 // ── Apply text edits to lines ────────────────────────────────────────────
 
-pub(crate) fn apply_text_edits_to_lines(
-    lines: &[String],
-    edits: &[TextEdit],
-) -> Vec<String> {
+pub(crate) fn apply_text_edits_to_lines(lines: &[String], edits: &[TextEdit]) -> Vec<String> {
     let mut sorted: Vec<&TextEdit> = edits.iter().collect();
     sorted.sort_by(|a, b| {
         b.range
@@ -200,8 +191,8 @@ pub(crate) fn preview_file_edits(
 ) -> Result<HashMap<PathBuf, (Vec<String>, Vec<String>)>, String> {
     let mut result = HashMap::new();
     for fe in edits {
-        let content = std::fs::read_to_string(&fe.path)
-            .map_err(|e| format!("{}: {e}", fe.path.display()))?;
+        let content =
+            std::fs::read_to_string(&fe.path).map_err(|e| format!("{}: {e}", fe.path.display()))?;
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         let new_lines = apply_text_edits_to_lines(&lines, &fe.edits);
         result.insert(fe.path.clone(), (lines, new_lines));
@@ -230,7 +221,10 @@ pub(crate) fn apply_file_edits(
         }
     }
 
-    if results.iter().any(|r| matches!(r, FileEditResult::Error { .. })) {
+    if results
+        .iter()
+        .any(|r| matches!(r, FileEditResult::Error { .. }))
+    {
         return EditSummary {
             files_modified: 0,
             files: results,
@@ -306,9 +300,7 @@ pub(crate) fn apply_file_edits(
 
 // ── Format preview ───────────────────────────────────────────────────────
 
-pub(crate) fn format_preview(
-    preview: &HashMap<PathBuf, (Vec<String>, Vec<String>)>,
-) -> String {
+pub(crate) fn format_preview(preview: &HashMap<PathBuf, (Vec<String>, Vec<String>)>) -> String {
     let mut out = String::new();
     for (path, (old_lines, new_lines)) in preview {
         out.push_str(&format!("--- {}\n", path.display()));
@@ -348,7 +340,10 @@ mod tests {
     fn single_line_replacement() {
         let lines = vec!["hello world".to_string()];
         let edits = vec![te(0, 0, 0, 5, "goodbye")];
-        assert_eq!(apply_text_edits_to_lines(&lines, &edits), vec!["goodbye world"]);
+        assert_eq!(
+            apply_text_edits_to_lines(&lines, &edits),
+            vec!["goodbye world"]
+        );
     }
 
     #[test]
@@ -361,7 +356,10 @@ mod tests {
 
     #[test]
     fn reverse_order_edits() {
-        let lines: Vec<String> = vec!["aaa", "bbb", "ccc"].into_iter().map(String::from).collect();
+        let lines: Vec<String> = vec!["aaa", "bbb", "ccc"]
+            .into_iter()
+            .map(String::from)
+            .collect();
         let edits = vec![te(0, 0, 0, 3, "AAA"), te(2, 0, 2, 3, "CCC")];
         let result = apply_text_edits_to_lines(&lines, &edits);
         assert_eq!(result, vec!["AAA", "bbb", "CCC"]);

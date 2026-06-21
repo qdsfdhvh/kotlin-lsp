@@ -525,14 +525,7 @@ pub(crate) async fn run(args: CliArgs) {
                     false,
                 )
                 .await;
-                super::batch::run_batch_imports(
-                    &file,
-                    &index,
-                    dry_run,
-                    apply,
-                    json,
-                    out,
-                );
+                super::batch::run_batch_imports(&file, &index, dry_run, apply, json, out);
             } else {
                 super::batch::run_batch(&file, dry_run);
             }
@@ -554,9 +547,17 @@ pub(crate) async fn run(args: CliArgs) {
                 let index = crate::cli::run::build_index(
                     &resolve_root_for_file(args.root.as_deref(), &file),
                     false,
-                ).await;
+                )
+                .await;
                 super::insert::run_semantic_insert(
-                    &file, k, owner.as_deref(), &content, &index, dry_run, apply, json,
+                    &file,
+                    k,
+                    owner.as_deref(),
+                    &content,
+                    &index,
+                    dry_run,
+                    apply,
+                    json,
                 );
             } else {
                 super::insert::run_insert(&file, line, before, after, &content, in_place);
@@ -573,23 +574,31 @@ pub(crate) async fn run(args: CliArgs) {
             let index = crate::cli::run::build_index(
                 &resolve_root_for_file(args.root.as_deref(), &file),
                 false,
-            ).await;
+            )
+            .await;
             let root = resolve_root_for_file(args.root.as_deref(), &file);
             let uri = tower_lsp::lsp_types::Url::from_file_path(&file).expect("valid path");
-            let pos = tower_lsp::lsp_types::Position::new(
-                line.saturating_sub(1), col.saturating_sub(1)
-            );
+            let pos =
+                tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
             let word = index.word_at(&uri, pos);
             match word {
                 Some(w) if !w.is_empty() => {
                     let content = std::fs::read_to_string(&file).unwrap_or_default();
                     let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
                     let edits = crate::backend::rename::rename_in_scope(
-                        &lines, &w, &new_name, (0, lines.len()), false,
+                        &lines,
+                        &w,
+                        &new_name,
+                        (0, lines.len()),
+                        false,
                     );
                     if edits.is_empty() {
-                        eprintln!("rename: no references found for '{w}' at {}:{}:{}",
-                            file.display(), line, col);
+                        eprintln!(
+                            "rename: no references found for '{w}' at {}:{}:{}",
+                            file.display(),
+                            line,
+                            col
+                        );
                         std::process::exit(1);
                     }
                     let file_edit = crate::cli::edit::FileEdit {
@@ -597,16 +606,19 @@ pub(crate) async fn run(args: CliArgs) {
                         edits,
                     };
                     if apply {
-                        let summary = crate::cli::edit::apply_file_edits(
-                            &[file_edit], Some(&root), false,
-                        );
+                        let summary =
+                            crate::cli::edit::apply_file_edits(&[file_edit], Some(&root), false);
                         if json {
                             println!("{}", serde_json::to_string(&summary).expect("json"));
                         } else {
                             println!("Renamed '{}' -> '{}' in {}", w, new_name, file.display());
                             for f in &summary.files {
                                 match f {
-                                    crate::cli::edit::FileEditResult::Ok { path, edits_applied, .. } => {
+                                    crate::cli::edit::FileEditResult::Ok {
+                                        path,
+                                        edits_applied,
+                                        ..
+                                    } => {
                                         println!("  {}: {} edits", path.display(), edits_applied);
                                     }
                                     crate::cli::edit::FileEditResult::Error { path, message } => {
@@ -617,17 +629,29 @@ pub(crate) async fn run(args: CliArgs) {
                             }
                         }
                     } else {
-                        let summary = crate::cli::edit::apply_file_edits(
-                            &[file_edit], Some(&root), true,
-                        );
+                        let summary =
+                            crate::cli::edit::apply_file_edits(&[file_edit], Some(&root), true);
                         if json {
                             println!("{}", serde_json::to_string(&summary).expect("json"));
                         } else {
-                            println!("Preview: rename '{}' -> '{}' in {}", w, new_name, file.display());
+                            println!(
+                                "Preview: rename '{}' -> '{}' in {}",
+                                w,
+                                new_name,
+                                file.display()
+                            );
                             for f in &summary.files {
                                 match f {
-                                    crate::cli::edit::FileEditResult::Ok { path, edits_applied, .. } => {
-                                        println!("  {}: {} occurrences", path.display(), edits_applied);
+                                    crate::cli::edit::FileEditResult::Ok {
+                                        path,
+                                        edits_applied,
+                                        ..
+                                    } => {
+                                        println!(
+                                            "  {}: {} occurrences",
+                                            path.display(),
+                                            edits_applied
+                                        );
                                     }
                                     _ => {}
                                 }
@@ -636,7 +660,12 @@ pub(crate) async fn run(args: CliArgs) {
                     }
                 }
                 _ => {
-                    eprintln!("rename: no symbol found at {}:{}:{}", file.display(), line, col);
+                    eprintln!(
+                        "rename: no symbol found at {}:{}:{}",
+                        file.display(),
+                        line,
+                        col
+                    );
                     std::process::exit(1);
                 }
             }
@@ -724,16 +753,34 @@ pub(crate) async fn run(args: CliArgs) {
                                         false,
                                     );
                                     if json {
-                                        println!("{}", serde_json::to_string(&summary).expect("json"));
+                                        println!(
+                                            "{}",
+                                            serde_json::to_string(&summary).expect("json")
+                                        );
                                     } else {
                                         println!("Applied: {}", ca.title);
                                         for f in &summary.files {
                                             match f {
-                                                crate::cli::edit::FileEditResult::Ok { path, edits_applied, .. } => {
-                                                    println!("  {}: {} edits applied", path.display(), edits_applied);
+                                                crate::cli::edit::FileEditResult::Ok {
+                                                    path,
+                                                    edits_applied,
+                                                    ..
+                                                } => {
+                                                    println!(
+                                                        "  {}: {} edits applied",
+                                                        path.display(),
+                                                        edits_applied
+                                                    );
                                                 }
-                                                crate::cli::edit::FileEditResult::Error { path, message } => {
-                                                    eprintln!("  {}: error: {}", path.display(), message);
+                                                crate::cli::edit::FileEditResult::Error {
+                                                    path,
+                                                    message,
+                                                } => {
+                                                    eprintln!(
+                                                        "  {}: error: {}",
+                                                        path.display(),
+                                                        message
+                                                    );
                                                 }
                                                 crate::cli::edit::FileEditResult::Noop { path } => {
                                                     println!("  {}: no changes", path.display());
@@ -753,7 +800,10 @@ pub(crate) async fn run(args: CliArgs) {
                         }
                     }
                     tower_lsp::lsp_types::CodeActionOrCommand::Command(cmd) => {
-                        eprintln!("error: action '{}' is a command, not an edit; apply not supported", cmd.title);
+                        eprintln!(
+                            "error: action '{}' is a command, not an edit; apply not supported",
+                            cmd.title
+                        );
                         std::process::exit(1);
                     }
                 }

@@ -570,9 +570,10 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }),
         "rename" => {
             let (file, line, col) = parse_file_line_col(positionals.clone(), "rename")?;
-            let new_name = positionals.get(3).ok_or(
-                "rename requires: <file> <line> <col> <newName>"
-            )?.to_string();
+            let new_name = positionals
+                .get(3)
+                .ok_or("rename requires: <file> <line> <col> <newName>")?
+                .to_string();
             Ok(Subcommand::Rename {
                 file,
                 line,
@@ -628,16 +629,32 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }),
         "insert" => build_insert_subcommand(positionals, before, after, content, in_place),
         "insert-import" => build_semantic_insert(
-            positionals.clone(), "import", content, dry_run, apply_action,
+            positionals.clone(),
+            "import",
+            content,
+            dry_run,
+            apply_action,
         ),
         "insert-member" => build_semantic_insert(
-            positionals.clone(), "member", content, dry_run, apply_action,
+            positionals.clone(),
+            "member",
+            content,
+            dry_run,
+            apply_action,
         ),
         "insert-function" => build_semantic_insert(
-            positionals.clone(), "function", content, dry_run, apply_action,
+            positionals.clone(),
+            "function",
+            content,
+            dry_run,
+            apply_action,
         ),
         "insert-override" => build_semantic_insert(
-            positionals.clone(), "override", content, dry_run, apply_action,
+            positionals.clone(),
+            "override",
+            content,
+            dry_run,
+            apply_action,
         ),
         "batch" => Ok(Subcommand::Batch {
             file: PathBuf::from(first_positional(

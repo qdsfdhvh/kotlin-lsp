@@ -198,10 +198,7 @@ pub(crate) fn run_semantic_insert(
 
     let mut result: Vec<String> = lines.clone();
     for (offset, ins_line) in insert_lines.iter().enumerate() {
-        result.insert(
-            (insert_line as usize) + offset,
-            ins_line.clone(),
-        );
+        result.insert((insert_line as usize) + offset, ins_line.clone());
     }
 
     let new_content = result.join("\n");
