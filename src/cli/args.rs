@@ -602,16 +602,32 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }),
         "insert" => build_insert_subcommand(positionals, before, after, content, in_place),
         "insert-import" => build_semantic_insert(
-            positionals.clone(), "import", content, dry_run, apply_action,
+            positionals.clone(),
+            "import",
+            content,
+            dry_run,
+            apply_action,
         ),
         "insert-member" => build_semantic_insert(
-            positionals.clone(), "member", content, dry_run, apply_action,
+            positionals.clone(),
+            "member",
+            content,
+            dry_run,
+            apply_action,
         ),
         "insert-function" => build_semantic_insert(
-            positionals.clone(), "function", content, dry_run, apply_action,
+            positionals.clone(),
+            "function",
+            content,
+            dry_run,
+            apply_action,
         ),
         "insert-override" => build_semantic_insert(
-            positionals.clone(), "override", content, dry_run, apply_action,
+            positionals.clone(),
+            "override",
+            content,
+            dry_run,
+            apply_action,
         ),
         "batch" => Ok(Subcommand::Batch {
             file: PathBuf::from(first_positional(
