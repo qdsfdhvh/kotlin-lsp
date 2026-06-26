@@ -1398,6 +1398,63 @@ data class Person(val name: String, val age: Int)
 // ── false positive syntax error regression tests (issue #78) ───────────
 
 /// Regression: @file: annotations before package declaration should not cause
+
+#[test]
+fn fp_composable_function_type() {
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+fun example(callback: @Composable () -> Unit) {
+    callback()
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for @Composable () -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_suspend_composable_function_type() {
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+suspend fun example(callback: suspend @Composable () -> Unit) {
+    callback()
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for suspend @Composable () -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_return_type_composable_function_type() {
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+fun example(): @Composable () -> Unit {
+    return {}
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for return type @Composable () -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
 /// parser errors (`unexpected package ...`).
 #[test]
 fn file_annotation_before_package() {

@@ -549,6 +549,30 @@ fn is_file_annotation_comma_error(node: &Node, bytes: &[u8]) -> bool {
     false
 }
 
+/// Returns true if this error is caused by tree-sitter-kotlin not understanding
+/// annotations on function types, e.g. `@Composable () -> Unit` or
+/// `suspend @Composable () -> Unit`.
+///
+/// When parsing a parameter type like `callback: @Composable () -> Unit`,
+/// tree-sitter-kotlin consumes `@Composable` as an annotation and `()` as its
+/// argument list, then leaves `-> Unit` as a dangling ERROR.
+fn is_annotation_function_type_error(node: &Node, bytes: &[u8]) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    let text = node.utf8_text(bytes).unwrap_or("");
+    // The dangling `->` is the telltale sign.
+    let trimmed = text.trim_start();
+    if trimmed.starts_with("->") {
+        return true;
+    }
+    // Broader check: error contains `->` and an annotation-like prefix
+    // (handles cases where more context is captured in the error).
+    trimmed.contains("->")
+        && (trimmed.contains("@")
+            || trimmed.starts_with("suspend"))
+}
+
 /// Returns the interface name if this `function_declaration` is actually a misparse
 /// of `[modifiers] fun interface Foo { ... }`.
 ///
@@ -769,6 +793,11 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
             }
             // Skip lone `,` inside @file:[...] bracket syntax (tree-sitter-kotlin bug).
             if is_file_annotation_comma_error(&node, bytes) {
+                continue;
+            }
+            // Skip `@Composable () -> Unit` / `suspend @Composable () -> Unit` etc.
+            // Tree-sitter-kotlin does not understand annotations on function types.
+            if is_annotation_function_type_error(&node, bytes) {
                 continue;
             }
             let range = ts_to_lsp(node.range());
