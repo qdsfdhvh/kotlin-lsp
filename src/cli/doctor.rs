@@ -148,6 +148,19 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
             status: if which("fd").is_some() { "ok" } else { "warn" },
             message: String::new(),
         });
+        results.push(CheckResult {
+            name: "ktlint",
+            status: if which("ktlint").is_some() {
+                "ok"
+            } else {
+                "error"
+            },
+            message: if which("ktlint").is_some() {
+                String::new()
+            } else {
+                "Install: brew install ktlint".to_string()
+            },
+        });
         let output = serde_json::json!({
             "workspace_root": root.to_string_lossy(),
             "checks": results,

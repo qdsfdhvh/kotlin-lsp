@@ -210,12 +210,27 @@ pub(crate) enum Subcommand {
         dry_run: bool,
         apply: bool,
     },
+    /// Format checking (ktlint) — Spotless check/apply equivalent.
+    Format {
+        sub: FormatSub,
+        files: Vec<PathBuf>,
+        dry_run: bool,
+    },
 
     /// List or read agent skills bundled with the CLI.
     Skills {
         /// Sub-args: `list` or `read <name>`.
         args: Vec<String>,
     },
+}
+
+/// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub(crate) enum FormatSub {
+    /// Check for formatting violations without modifying files (like spotlessCheck).
+    Check,
+    /// Apply formatting changes in-place (like spotlessApply).
+    Apply,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -722,6 +737,33 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "type-hierarchy" => {
             build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes)
         }
+        "format" => {
+            if positionals.is_empty() {
+                return Err("format requires a subcommand: 'check' or 'apply'".to_string());
+            }
+            let sub = positionals[0].as_str();
+            let sub = match sub {
+                "check" => FormatSub::Check,
+                "apply" => FormatSub::Apply,
+                other => {
+                    return Err(format!(
+                        "unknown format subcommand '{other}'; expected 'check' or 'apply'"
+                    ));
+                }
+            };
+            let files: Vec<PathBuf> = positionals[1..].iter().map(PathBuf::from).collect();
+            if files.is_empty() {
+                return Err(
+                    "format requires at least one FILE or DIRECTORY argument after 'check'/'apply'"
+                        .to_string(),
+                );
+            }
+            Ok(Subcommand::Format {
+                sub,
+                files,
+                dry_run: parsed.dry_run,
+            })
+        }
         "skills" => {
             let args = positionals; // positional args after 'skills'
             Ok(Subcommand::Skills { args })
@@ -908,6 +950,7 @@ fn is_subcommand(value: &str) -> bool {
             | "type-hierarchy"
             | "benchmark"
             | "skills"
+            | "format"
     )
 }
 
@@ -956,6 +999,8 @@ SUBCOMMANDS:
     benchmark                          Run indexing benchmark
     tokens <file>                      Dump semantic tokens (debug)
     tree <file>                        Dump tree-sitter parse tree (debug)
+    format check <file/dir>...          Check formatting violations (like spotlessCheck)
+    format apply <file/dir>...         Apply formatting in-place (like spotlessApply)
 
 OPTIONS:
     --fast              Use rg/fd only; never load index (default when no cache)

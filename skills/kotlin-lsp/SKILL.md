@@ -28,9 +28,13 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Need cross-module ref filtering (--module / --source-set / --owner) → kotlin-lsp refs
    ├─ Need one-stop symbol info (def + sig + doc) → kotlin-lsp context <file> <line> <col>
    ├─ Need syntax check on edited files → kotlin-lsp check <file>
+   ├─ Need formatting check (like spotlessCheck) → kotlin-lsp format check <file/dir>...
+   ├─ Need formatting apply (like spotlessApply) → kotlin-lsp format apply <file/dir>...
    ├─ Need call hierarchy → kotlin-lsp call-hierarchy <file> <line> <col>
    ├─ Need class hierarchy → kotlin-lsp type-hierarchy <Name>
    ├─ Imports are messy → kotlin-lsp organize-imports <file>
+   ├─ Formatting check → kotlin-lsp format check <file/dir>...
+   ├─ Formatting apply → kotlin-lsp format apply <file/dir>...
    ├─ Need batch type injection for a file → kotlin-lsp inject <file>
    ├─ Need signature/type at a declaration → kotlin-lsp hover <file> <line> <col>
    └─ Need signature at a call site → kotlin-lsp find <name> (jump to decl), then hover the decl
@@ -176,6 +180,42 @@ kotlin-lsp inject <file>
 
 Reads a file, extracts all referenced type names, and returns their signatures in one batch. One call replaces N context calls.
 
+#### format check — check formatting violations (like spotlessCheck)
+
+```
+kotlin-lsp format check <file/dir>... [--json]
+```
+
+Runs `ktlint` in lint-only mode on the given files and directories.
+Reports violations with unified diff context. Exits non-zero if any
+violations are found. Use `--json` for machine-readable output.
+
+Requires `ktlint` to be installed on PATH.
+
+Examples:
+```
+kotlin-lsp format check src/main.kt              # check one file
+kotlin-lsp format check src/                      # check all .kt/.kts in src/
+kotlin-lsp format check src/ --json               # machine-readable
+```
+
+#### format apply — apply formatting in-place (like spotlessApply)
+
+```
+kotlin-lsp format apply <file/dir>... [--dry-run]
+```
+
+Runs `ktlint --format` on the given files and directories in-place.
+Reports which files were modified and any errors. Exits non-zero if
+unfixable violations or errors occur.
+
+Requires `ktlint` to be installed on PATH.
+
+Examples:
+```
+kotlin-lsp format apply src/main.kt               # format one file
+kotlin-lsp format apply src/                       # format all .kt/.kts in src/
+```
 ### Code manipulation
 
 #### code-action — inspect or apply quick fixes
