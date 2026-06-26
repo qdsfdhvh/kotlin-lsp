@@ -1455,6 +1455,256 @@ fun example(): @Composable () -> Unit {
         data.syntax_errors
     );
 }
+
+#[test]
+fn fp_composable_property_type() {
+    // @Composable () -> Unit as a property type (val/var).
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+val onClick: @Composable () -> Unit = {}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for val: @Composable () -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_extension_function_type() {
+    // @Composable Int.() -> Unit — extension function type with annotation.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+fun example(composable: @Composable Int.() -> Unit) {
+    composable(1)
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for @Composable Int.() -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_with_parameter() {
+    // @Composable (Int) -> Unit — function type with parameters.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+fun example(content: @Composable (Int) -> Unit) {
+    content(42)
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for @Composable (Int) -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_nullable_function_type() {
+    // @Composable (() -> Unit)? — nullable annotated function type.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+fun example(content: @Composable (() -> Unit)?) {
+    content?.invoke()
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for @Composable (() -> Unit)?, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_multiple_annotations() {
+    // @Composable @NonComposable () -> Unit — multiple annotations on function type.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+fun example(content: @Composable @androidx.compose.runtime.NonComposable () -> Unit) {
+    content()
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for double-annotated () -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_typealias() {
+    // typealias using @Composable () -> Unit.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+typealias ComposableLambda = @Composable () -> Unit
+
+fun example(fn: ComposableLambda) {
+    fn()
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for typealias @Composable () -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_lambda_receiver() {
+    // @Composable () -> Unit used as a lambda receiver.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+inline fun example(content: @Composable () -> Unit) {
+    content()
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for inline @Composable () -> Unit, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_generic_supertype() {
+    // @Composable () -> Unit as a generic supertype argument.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+
+class MyComposable : () -> Unit {
+    override fun invoke() {}
+}
+
+fun example(factory: (@Composable () -> Unit) -> String) {
+    factory({})
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for (@Composable () -> Unit) in generics, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_real_compose_column() {
+    // Real-world Compose pattern — @Composable parameters in a composable function.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+
+@Composable
+fun MyColumn(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    androidx.compose.foundation.layout.Column(modifier = modifier) {
+        content()
+    }
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for real-world @Composable Column, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_lazy_column_items() {
+    // LazyColumn items with @Composable content — another real-world pattern.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+
+@Composable
+fun MyList(items: List<String>) {
+    androidx.compose.foundation.lazy.LazyColumn {
+        items(
+            items = items,
+            itemContent = { item ->
+                Text(text = item)
+            }
+        )
+    }
+}
+
+@Composable
+fun Text(text: String) {
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for real-world LazyColumn, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_composable_mutable_state() {
+    // mutableStateOf with @Composable lambda — another common pattern.
+    let src = r#"
+package com.example
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+
+@Composable
+fun Counter() {
+    val count = mutableStateOf(0)
+    androidx.compose.material3.Text(
+        text = "Count: ${count.value}",
+        modifier = androidx.compose.ui.Modifier.clickable { count.value++ }
+    )
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for mutableStateOf with @Composable, got: {:?}",
+        data.syntax_errors
+    );
+}
 /// parser errors (`unexpected package ...`).
 #[test]
 fn file_annotation_before_package() {
