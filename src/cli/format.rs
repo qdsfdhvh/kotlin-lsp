@@ -576,7 +576,8 @@ pub(crate) fn run_format_apply(files: &[PathBuf], json: bool, dry_run: bool) {
         }
 
         let summary = format!(
-            "\n{files_formatted} file(s) formatted, {files_noop} already clean, {files_errored} error(s).",
+            "\n{files_formatted} file(s) formatted, {files_noop} already clean, \
+             {files_errored} error(s).",
         );
         if files_errored > 0 {
             eprintln!("{summary}");

@@ -568,9 +568,7 @@ fn is_annotation_function_type_error(node: &Node, bytes: &[u8]) -> bool {
     }
     // Broader check: error contains `->` and an annotation-like prefix
     // (handles cases where more context is captured in the error).
-    trimmed.contains("->")
-        && (trimmed.contains("@")
-            || trimmed.starts_with("suspend"))
+    trimmed.contains("->") && (trimmed.contains("@") || trimmed.starts_with("suspend"))
 }
 
 /// Returns the interface name if this `function_declaration` is actually a misparse

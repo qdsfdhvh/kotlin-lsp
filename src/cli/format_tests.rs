@@ -93,7 +93,8 @@ fn format_check_well_formed() {
         eprintln!("skipping: ktlint not installed");
         return;
     }
-    let (_dir, file) = setup_kt_file("package com.example\n\nfun main() {\n    println(\"hello\")\n}\n");
+    let (_dir, file) =
+        setup_kt_file("package com.example\n\nfun main() {\n    println(\"hello\")\n}\n");
     let files = vec![file];
     // Should pass — well-formed Kotlin
     format::test_helpers::run_format_check_for_test(&files, false);
