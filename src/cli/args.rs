@@ -225,7 +225,7 @@ pub(crate) enum Subcommand {
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
-#[derive(Debug, Clone, clap::ValueEnum)]
+#[derive(Debug, Clone)]
 pub(crate) enum FormatSub {
     /// Check for formatting violations without modifying files (like spotlessCheck).
     Check,

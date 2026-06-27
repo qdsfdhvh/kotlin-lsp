@@ -57,12 +57,12 @@ fn install_hint() -> &'static str {
 
 /// A single ktlint violation, as reported on stderr/stdout.
 #[derive(Debug, Clone, Serialize)]
-struct Violation {
-    file: String,
-    line: u32,
-    col: u32,
-    rule_id: String,
-    message: String,
+pub(crate) struct Violation {
+    pub(crate) file: String,
+    pub(crate) line: u32,
+    pub(crate) col: u32,
+    pub(crate) rule_id: String,
+    pub(crate) message: String,
 }
 
 /// Per-file check result.
