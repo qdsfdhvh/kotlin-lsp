@@ -599,7 +599,11 @@ pub(crate) mod test_helpers {
         parse_ktlint_output(output)
     }
 
-    pub(crate) fn generate_diff_for_test(original: &str, formatted: &str, label: &str) -> Option<String> {
+    pub(crate) fn generate_diff_for_test(
+        original: &str,
+        formatted: &str,
+        label: &str,
+    ) -> Option<String> {
         generate_diff(original, formatted, label)
     }
 
