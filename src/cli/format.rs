@@ -46,8 +46,6 @@ fn which(name: &str) -> Option<PathBuf> {
 fn install_hint() -> &'static str {
     if cfg!(target_os = "macos") {
         "Install: brew install ktlint"
-    } else if cfg!(target_os = "linux") {
-        "Install: https://ktlint.github.io/ktlint/latest/install/cli/"
     } else {
         "Install: https://ktlint.github.io/ktlint/latest/install/cli/"
     }
@@ -729,10 +727,7 @@ pub(crate) mod test_helpers {
 
             match run_ktlint_format_inplace(&path_str) {
                 Ok(_) => {
-                    let new_content = match std::fs::read_to_string(file) {
-                        Ok(c) => c,
-                        Err(_) => String::new(),
-                    };
+                    let new_content = std::fs::read_to_string(file).unwrap_or_default();
 
                     if original == new_content {
                         results.push(ApplyFileResult::Noop {
