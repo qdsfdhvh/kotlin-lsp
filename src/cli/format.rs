@@ -595,16 +595,16 @@ pub(crate) fn run_format_apply(files: &[PathBuf], json: bool, dry_run: bool) {
 pub(crate) mod test_helpers {
     use super::*;
 
-    pub fn parse_ktlint_output_for_test(output: &str) -> Vec<Violation> {
+    pub(crate) fn parse_ktlint_output_for_test(output: &str) -> Vec<Violation> {
         parse_ktlint_output(output)
     }
 
-    pub fn generate_diff_for_test(original: &str, formatted: &str, label: &str) -> Option<String> {
+    pub(crate) fn generate_diff_for_test(original: &str, formatted: &str, label: &str) -> Option<String> {
         generate_diff(original, formatted, label)
     }
 
     /// Run format check in test context — does not call `std::process::exit`.
-    pub fn run_format_check_for_test(files: &[PathBuf], json: bool) {
+    pub(crate) fn run_format_check_for_test(files: &[PathBuf], json: bool) {
         let mut results: Vec<CheckFileResult> = Vec::with_capacity(files.len());
         let mut total_kotlin_files = 0usize;
         let mut total_violations = 0usize;
@@ -671,7 +671,7 @@ pub(crate) mod test_helpers {
     }
 
     /// Run format apply in test context — without process exit.
-    pub fn run_format_apply_for_test(files: &[PathBuf], json: bool, dry_run: bool) {
+    pub(crate) fn run_format_apply_for_test(files: &[PathBuf], json: bool, dry_run: bool) {
         let mut results: Vec<ApplyFileResult> = Vec::with_capacity(files.len());
         let mut total_kotlin_files = 0usize;
         let mut files_formatted = 0usize;
