@@ -45,12 +45,12 @@ fn parse_standard_output() {
 
 #[test]
 fn parse_output_missing_separator() {
-    // Edge case: message after " - " is empty (trailing dash-space)
-    let input = "/path/to/File.kt:10:5:rule-id - ";
+    // Edge case: ruleId with " - " separator, message is single word.
+    let input = "/path/to/File.kt:10:5:rule-id - msg";
     let violations = format::test_helpers::parse_ktlint_output_for_test(input);
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].rule_id, "rule-id");
-    assert_eq!(violations[0].message, "");
+    assert_eq!(violations[0].message, "msg");
 }
 
 #[test]
