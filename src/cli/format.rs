@@ -516,10 +516,7 @@ pub(crate) fn run_format_apply(files: &[PathBuf], json: bool, dry_run: bool) {
 
         match run_ktlint_format_inplace(&path_str) {
             Ok(_) => {
-                let new_content = match std::fs::read_to_string(file) {
-                    Ok(c) => c,
-                    Err(_) => String::new(),
-                };
+                let new_content = std::fs::read_to_string(file).unwrap_or_default();
 
                 if original == new_content {
                     results.push(ApplyFileResult::Noop {
