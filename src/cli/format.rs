@@ -215,9 +215,9 @@ fn try_parse_standard(line: &str) -> Option<Violation> {
     let rest = parts[3];
     let dash_pos = rest.find(" - ");
     let (rule_id, message) = if let Some(pos) = dash_pos {
-        (rest[..pos].to_string(), rest[pos + 3..].to_string())
+        (rest[..pos].to_string(), rest[pos + 3..].trim().to_string())
     } else {
-        (String::new(), rest.to_string())
+        (String::new(), rest.trim().to_string())
     };
 
     Some(Violation {
