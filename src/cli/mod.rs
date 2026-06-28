@@ -27,6 +27,7 @@ mod complete;
 mod doctor;
 mod edit;
 mod extract_sources;
+mod format;
 mod hover;
 mod inject;
 mod insert;
@@ -42,5 +43,7 @@ mod tokens;
 #[cfg(test)]
 mod integration_tests;
 
+#[cfg(test)]
+mod format_tests;
 pub(crate) use args::CliArgs;
 pub(crate) use run::run;

@@ -892,6 +892,26 @@ pub(crate) async fn run(args: CliArgs) {
         }
 
         Subcommand::Skills { args } => super::skills::run_skills(args),
+        Subcommand::Format {
+            sub,
+            files,
+            dry_run,
+        } => {
+            let expanded = super::check::expand_file_list(&files);
+            if expanded.is_empty() {
+                eprintln!("error: no .kt or .kts files found in given paths");
+                std::process::exit(1);
+            }
+            let ljson = args.fmt == OutputFmt::Json;
+            match sub {
+                super::args::FormatSub::Check => {
+                    super::format::run_format_check(&expanded, ljson);
+                }
+                super::args::FormatSub::Apply => {
+                    super::format::run_format_apply(&expanded, ljson, dry_run);
+                }
+            }
+        }
 
         Subcommand::OrganizeImports { files } => {
             if files.is_empty() {
