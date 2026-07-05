@@ -158,11 +158,7 @@ fn find_class_body_enum() {
     let path = temp_file("class_body_enum.kt", src);
     let lines = lines_of_file(&path);
     let result = find_class_body_insert_point(&lines, "Color");
-    assert!(
-        result.is_ok(),
-        "should find Color enum: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "should find Color enum: {:?}", result.err());
     let (line, indent) = result.unwrap();
     assert_eq!(line, 2);
     assert_eq!(indent, "    ");
