@@ -1102,12 +1102,6 @@ fn build_semantic_insert(
     apply: bool,
     name_arg: Option<String>,
 ) -> Result<Subcommand, String> {
-    positionals: Vec<String>,
-    kind: &str,
-    content: Option<String>,
-    dry_run: bool,
-    apply: bool,
-) -> Result<Subcommand, String> {
     let mut iter = positionals.into_iter();
     let file = PathBuf::from(iter.next().ok_or("insert-* requires a FILE argument")?);
     let owner = iter.next();
