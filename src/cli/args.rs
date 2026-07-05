@@ -211,7 +211,7 @@ pub(crate) enum Subcommand {
         apply: bool,
         /// Target method name for override insertion.
         name_arg: Option<String>,
-b18|    },
+    }
     /// Format checking (ktlint) — Spotless check/apply equivalent.
     Format {
         sub: FormatSub,
@@ -335,10 +335,9 @@ struct ParsedCliFlags {
     source_set_filter: Vec<String>,
     kind_filter: Option<String>,
     owner_filter: Option<String>,
+    expand: usize,
     exclude_imports: bool,
     name_arg: Option<String>,
-b18|}
-    exclude_imports: bool,
 }
 
 fn parse_first_argument(args: &mut lexopt::Parser) -> Result<Option<std::ffi::OsString>, String> {
@@ -401,7 +400,6 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         package_filter: None,
         dir_filter: None,
         source_set_filter: Vec::new(),
-        exclude_imports: false,
         type_subtypes: false,
         type_supertypes: false,
         expand: 0,
@@ -875,7 +873,6 @@ fn build_insert_subcommand(
         dry_run: false,
         apply: false,
         name_arg: None,
-b18|    })
     })
 }
 
@@ -1146,5 +1143,4 @@ fn build_semantic_insert(
         apply,
         name_arg,
     })
-b18|}
 }
