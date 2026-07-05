@@ -211,7 +211,7 @@ pub(crate) enum Subcommand {
         apply: bool,
         /// Target method name for override insertion.
         name_arg: Option<String>,
-    }
+    },
     /// Format checking (ktlint) — Spotless check/apply equivalent.
     Format {
         sub: FormatSub,
