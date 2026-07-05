@@ -561,15 +561,6 @@ pub(crate) async fn run(args: CliArgs) {
                     json,
                     name_arg.as_deref(),
                 );
-                    &file,
-                    k,
-                    owner.as_deref(),
-                    &content,
-                    &index,
-                    dry_run,
-                    apply,
-                    json,
-                );
             } else {
                 super::insert::run_insert(&file, line, before, after, &content, in_place);
             }
