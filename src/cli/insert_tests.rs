@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use crate::cli::insert::find_class_body_insert_point;
 use crate::LinesExt;
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 fn temp_file(name: &str, content: &str) -> PathBuf {
@@ -67,7 +68,11 @@ fn find_class_body_simple() {
     let path = temp_file("class_body_simple.kt", src);
     let lines = lines_of_file(&path);
     let result = find_class_body_insert_point(&lines, "MyClass");
-    assert!(result.is_ok(), "should find class MyClass: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "should find class MyClass: {:?}",
+        result.err()
+    );
     let (line, indent) = result.unwrap();
     // Closing } is at line 2, so insert at line 1 (before }).
     assert_eq!(line, 1);
@@ -81,7 +86,11 @@ fn find_class_body_empty() {
     let path = temp_file("class_body_empty.kt", src);
     let lines = lines_of_file(&path);
     let result = find_class_body_insert_point(&lines, "Empty");
-    assert!(result.is_ok(), "should find Empty class: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "should find Empty class: {:?}",
+        result.err()
+    );
     let (line, indent) = result.unwrap();
     // Closing } is at line 1, so insert at line 0 (before }).
     assert_eq!(line, 0);
@@ -114,7 +123,11 @@ fn find_class_body_nested() {
     let path = temp_file("class_body_nested.kt", src);
     let lines = lines_of_file(&path);
     let result = find_class_body_insert_point(&lines, "Inner");
-    assert!(result.is_ok(), "should find Inner class: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "should find Inner class: {:?}",
+        result.err()
+    );
     let (line, indent) = result.unwrap();
     // Inner's } is at line 3, insert at line 2.
     assert_eq!(line, 2);
@@ -145,7 +158,11 @@ fn find_class_body_enum() {
     let path = temp_file("class_body_enum.kt", src);
     let lines = lines_of_file(&path);
     let result = find_class_body_insert_point(&lines, "Color");
-    assert!(result.is_ok(), "should find Color enum: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "should find Color enum: {:?}",
+        result.err()
+    );
     let (line, indent) = result.unwrap();
     assert_eq!(line, 2);
     assert_eq!(indent, "    ");
@@ -189,7 +206,10 @@ fn already_imported_detects_exact_match() {
         .map(|s| s.to_string())
         .collect();
     let imports = lines.parse_imports();
-    assert!(crate::resolver::already_imported("android.os.Bundle", &imports));
+    assert!(crate::resolver::already_imported(
+        "android.os.Bundle",
+        &imports
+    ));
     let _ = fs::remove_file(&path);
 }
 
@@ -203,7 +223,10 @@ fn already_imported_detects_star_import() {
         .map(|s| s.to_string())
         .collect();
     let imports = lines.parse_imports();
-    assert!(crate::resolver::already_imported("android.os.Bundle", &imports));
+    assert!(crate::resolver::already_imported(
+        "android.os.Bundle",
+        &imports
+    ));
     let _ = fs::remove_file(&path);
 }
 
@@ -217,6 +240,9 @@ fn not_imported_different_package() {
         .map(|s| s.to_string())
         .collect();
     let imports = lines.parse_imports();
-    assert!(!crate::resolver::already_imported("android.os.Bundle", &imports));
+    assert!(!crate::resolver::already_imported(
+        "android.os.Bundle",
+        &imports
+    ));
     let _ = fs::remove_file(&path);
 }

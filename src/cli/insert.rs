@@ -126,11 +126,8 @@ pub(crate) fn find_class_body_insert_point(
 ) -> Result<(u32, String), String> {
     let source = lines.join("\n");
 
-    let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&tree_sitter::Language::from(
-            tree_sitter_kotlin::LANGUAGE,
-        ))
+        .set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
         .expect("kotlin parser init");
 
     let tree = parser.parse(&source, None).ok_or("parse failed")?;
@@ -260,7 +257,10 @@ pub(crate) fn run_semantic_insert(
             // Strip trailing semicolon and newlines.
             let imported_fqn = imported_fqn.trim().trim_end_matches(';');
             if crate::resolver::already_imported(imported_fqn, &imports) {
-                eprintln!("info: {imported_fqn} is already imported in {}", file.display());
+                eprintln!(
+                    "info: {imported_fqn} is already imported in {}",
+                    file.display()
+                );
                 if json {
                     let summary = serde_json::json!({
                         "status": "already_imported",
@@ -280,14 +280,13 @@ pub(crate) fn run_semantic_insert(
                 std::process::exit(1);
             });
 
-            let (insert_at, indent_val) =
-                match find_class_body_insert_point(&lines, owner) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!("error: {e}");
-                        std::process::exit(1);
-                    }
-                };
+            let (insert_at, indent_val) = match find_class_body_insert_point(&lines, owner) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            };
 
             (insert_at, indent_val, content.to_string())
         }
@@ -297,14 +296,13 @@ pub(crate) fn run_semantic_insert(
                 std::process::exit(1);
             });
 
-            let (insert_at, indent_val) =
-                match find_class_body_insert_point(&lines, owner) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!("error: {e}");
-                        std::process::exit(1);
-                    }
-                };
+            let (insert_at, indent_val) = match find_class_body_insert_point(&lines, owner) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            };
 
             let override_content = if let Some(method_name) = name_arg {
                 // Look up method signature from index to generate override boilerplate.
@@ -342,7 +340,10 @@ pub(crate) fn run_semantic_insert(
     let insert_line_idx = insert_line as usize;
 
     for (offset, ins_line) in insert_lines.iter().enumerate() {
-        result.insert((insert_line_idx).min(result.len()) + offset, ins_line.clone());
+        result.insert(
+            (insert_line_idx).min(result.len()) + offset,
+            ins_line.clone(),
+        );
     }
 
     let new_content = result.join("\n");
@@ -379,9 +380,7 @@ pub(crate) fn run_semantic_insert(
 fn generate_override(method_name: &str, _idx: &Arc<Indexer>, indent: &str) -> String {
     // For now, generate a reasonable boilerplate.
     // Future: look up the actual signature from supertypes/interfaces.
-    format!(
-        "override fun {method_name}() {{\n{indent}    TODO(\"not implemented\")\n{indent}}}"
-    )
+    format!("override fun {method_name}() {{\n{indent}    TODO(\"not implemented\")\n{indent}}}")
 }
 
 /// Test-only wrapper for generate_override.
