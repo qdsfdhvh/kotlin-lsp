@@ -541,6 +541,7 @@ pub(crate) async fn run(args: CliArgs) {
             owner,
             dry_run,
             apply,
+            name_arg,
         } => {
             if let Some(ref k) = kind {
                 let json = args.fmt == OutputFmt::Json;
@@ -550,6 +551,16 @@ pub(crate) async fn run(args: CliArgs) {
                 )
                 .await;
                 super::insert::run_semantic_insert(
+                    &file,
+                    k,
+                    owner.as_deref(),
+                    &content,
+                    &index,
+                    dry_run,
+                    apply,
+                    json,
+                    name_arg.as_deref(),
+                );
                     &file,
                     k,
                     owner.as_deref(),

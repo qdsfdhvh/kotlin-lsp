@@ -209,7 +209,9 @@ pub(crate) enum Subcommand {
         owner: Option<String>,
         dry_run: bool,
         apply: bool,
-    },
+        /// Target method name for override insertion.
+        name_arg: Option<String>,
+b18|    },
     /// Format checking (ktlint) — Spotless check/apply equivalent.
     Format {
         sub: FormatSub,
@@ -333,7 +335,9 @@ struct ParsedCliFlags {
     source_set_filter: Vec<String>,
     kind_filter: Option<String>,
     owner_filter: Option<String>,
-    expand: usize,
+    exclude_imports: bool,
+    name_arg: Option<String>,
+b18|}
     exclude_imports: bool,
 }
 
@@ -401,6 +405,8 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         type_subtypes: false,
         type_supertypes: false,
         expand: 0,
+        exclude_imports: false,
+        name_arg: None,
     };
 
     loop {
@@ -447,6 +453,10 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Long("expand")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
                 parsed.expand = value.to_string_lossy().parse().unwrap_or(0);
+            }
+            Some(lexopt::Arg::Long("name")) => {
+                let value = args.value().map_err(|e| e.to_string())?;
+                parsed.name_arg = Some(value.to_string_lossy().into_owned());
             }
             Some(lexopt::Arg::Long("limit")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
@@ -666,6 +676,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             content,
             dry_run,
             apply_action,
+            parsed.name_arg.clone(),
         ),
         "insert-member" => build_semantic_insert(
             positionals.clone(),
@@ -673,6 +684,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             content,
             dry_run,
             apply_action,
+            parsed.name_arg.clone(),
         ),
         "insert-function" => build_semantic_insert(
             positionals.clone(),
@@ -680,6 +692,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             content,
             dry_run,
             apply_action,
+            parsed.name_arg.clone(),
         ),
         "insert-override" => build_semantic_insert(
             positionals.clone(),
@@ -687,6 +700,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             content,
             dry_run,
             apply_action,
+            parsed.name_arg.clone(),
         ),
         "batch" => Ok(Subcommand::Batch {
             file: PathBuf::from(first_positional(
@@ -860,6 +874,8 @@ fn build_insert_subcommand(
         owner: None,
         dry_run: false,
         apply: false,
+        name_arg: None,
+b18|    })
     })
 }
 
@@ -1087,11 +1103,36 @@ fn build_semantic_insert(
     content: Option<String>,
     dry_run: bool,
     apply: bool,
+    name_arg: Option<String>,
+) -> Result<Subcommand, String> {
+    positionals: Vec<String>,
+    kind: &str,
+    content: Option<String>,
+    dry_run: bool,
+    apply: bool,
 ) -> Result<Subcommand, String> {
     let mut iter = positionals.into_iter();
     let file = PathBuf::from(iter.next().ok_or("insert-* requires a FILE argument")?);
     let owner = iter.next();
-    let content = content.ok_or("insert-* requires --content <text>")?;
+    // For insert-import, content defaults to fqn if not explicitly provided.
+    let content = match (&kind, &owner, content) {
+        ("import", Some(fqn), None) => format!("import {fqn}"),
+        ("import", Some(fqn), Some(custom)) => {
+            // Allow --content to override auto-generated import.
+            if custom.is_empty() {
+                format!("import {fqn}")
+            } else {
+                custom
+            }
+        }
+        ("import", None, None) => {
+            return Err("insert-import requires either FQN or --content <text>".to_owned());
+        }
+        (_, _, Some(c)) => c,
+        (_, _, None) => {
+            return Err(format!("insert-{kind} requires --content <text>"));
+        }
+    };
     Ok(Subcommand::Insert {
         file,
         line: 0,
@@ -1103,5 +1144,7 @@ fn build_semantic_insert(
         owner: owner.map(|s| s.to_string()),
         dry_run,
         apply,
+        name_arg,
     })
+b18|}
 }

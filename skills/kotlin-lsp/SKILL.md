@@ -268,11 +268,36 @@ kotlin-lsp batch-imports src/Feature.kt --apply       # write imports
 #### insert-import — add a single import
 
 ```bash
-kotlin-lsp insert-import <file> <fqn> --content <text>
+kotlin-lsp insert-import <file> <fqn>               # auto-generates `import <fqn>`
+kotlin-lsp insert-import <file> <fqn> --content <text>  # custom import line
 ```
 
-Inserts content at the computed import insertion line.
+Auto-generates `import <fqn>` from the second positional argument when `--content`
+is not provided.  Detects and skips duplicate imports.  Respects blank-line gaps
+after `package` declarations.
 
+#### insert-member, insert-function — class member insertion
+
+```bash
+kotlin-lsp insert-member <file> <owner> --content <text>
+kotlin-lsp insert-function <file> <owner> --content <text>
+```
+
+Finds the class body via tree-sitter and inserts before the closing `}` with
+proper indentation matching existing members.
+
+#### insert-override — generate override boilerplate
+
+```bash
+kotlin-lsp insert-override <file> <owner> --name <method>
+kotlin-lsp insert-override <file> <owner> --content <text>
+```
+
+When `--name` is provided, generates `override fun <method>() { TODO(...) }`
+at the correct position in the class body.  When `--content` is provided,
+inserts the raw content as-is (for custom overrides with full signatures).
+
+All insert commands support `--dry-run`, `--apply`, and `--json` output.
 #### insert-member, insert-function — class member insertion
 
 ```bash
