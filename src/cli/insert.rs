@@ -146,7 +146,11 @@ pub(crate) fn find_class_body_insert_point(
         let mut cursor = class_node.walk();
         let first_member = class_node
             .children(&mut cursor)
-            .find(|c| c.is_named() && c.kind() != "class_body");
+            .find(|c| {
+                c.is_named()
+                    && c.kind() != "class_body"
+                    && c.start_position().row > class_node.start_position().row
+            });
         if let Some(member) = first_member {
             let member_indent = compute_indent(lines, member.start_position().row as u32);
             if member_indent.len() >= 4 {
@@ -378,10 +382,10 @@ pub(crate) fn run_semantic_insert(
 }
 
 /// Generate an override keyword + method stub for a given method name.
-fn generate_override(method_name: &str, _idx: &Arc<Indexer>, indent: &str) -> String {
+fn generate_override(method_name: &str, _idx: &Arc<Indexer>, _indent: &str) -> String {
     // For now, generate a reasonable boilerplate.
     // Future: look up the actual signature from supertypes/interfaces.
-    format!("override fun {method_name}() {{\n{indent}    TODO(\"not implemented\")\n{indent}}}")
+    format!("override fun {method_name}() {{\n    TODO(\"not implemented\")\n}}")
 }
 
 /// Test-only wrapper for generate_override.

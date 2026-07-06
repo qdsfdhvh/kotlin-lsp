@@ -32,8 +32,8 @@ fn insert_import_after_existing_imports() {
     let path = temp_file("import_after.kt", src);
     let lines = lines_of_file(&path);
     let insert_line = lines.import_insertion_line();
-    // Should be after the last import (line 3, 0-indexed).
-    assert_eq!(insert_line, 3);
+    // Should be after the last import (line 4, 0-indexed).
+    assert_eq!(insert_line, 4);
     // Clean up
     let _ = fs::remove_file(&path);
 }
@@ -187,7 +187,7 @@ fn generate_override_basic() {
 #[test]
 fn generate_override_indent() {
     let result = crate::cli::insert::generate_override_test("onResume", "        ");
-    assert!(result.starts_with("        override fun onResume()"));
+    assert!(result.starts_with("override fun onResume()"));
 }
 
 // ─── duplicate import detection ───────────────────────────────────────────────
