@@ -385,6 +385,7 @@ fn generate_override(method_name: &str, _idx: &Arc<Indexer>, indent: &str) -> St
 }
 
 /// Test-only wrapper for generate_override.
+#[cfg(test)]
 #[doc(hidden)]
 pub(crate) fn generate_override_test(method_name: &str, indent: &str) -> String {
     generate_override(method_name, &Arc::new(Indexer::new()), indent)
