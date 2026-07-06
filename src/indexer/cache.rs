@@ -118,6 +118,7 @@ fn zstd_decompress(bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 pub(crate) fn try_load_cache(root: &Path) -> Option<IndexCache> {
     let path = workspace_cache_path(root);
     let raw_bytes = std::fs::read(&path).ok()?;
+    let raw_len = raw_bytes.len();
     // Try zstd decompression first; fall back to raw bincode for legacy caches.
     let bytes = zstd_decompress(&raw_bytes).unwrap_or(raw_bytes);
     let cache: IndexCache = match bincode::deserialize(&bytes) {
@@ -136,11 +137,11 @@ pub(crate) fn try_load_cache(root: &Path) -> Option<IndexCache> {
         return None;
     }
     log::info!(
-        "Loaded index cache ({} files) from {} ({} KiB raw → {} KiB compressed)",
+        "Loaded index cache ({} files) from {} ({} KiB raw → {} KiB after decompress)",
         cache.entries.len(),
         path.display(),
+        raw_len / 1024,
         bytes.len() / 1024,
-        raw_bytes.len() / 1024,
     );
     Some(cache)
 }
@@ -195,7 +196,7 @@ pub(crate) fn cache_entry_to_file_result(uri: &Url, entry: &FileCacheEntry) -> F
 /// Does **not** overwrite a larger complete cache with a smaller incomplete one,
 /// to prevent an editor server (which may load only part of the workspace) from
 /// truncating a cache built by `--index-only`.
-pub(super) fn save_cache(
+pub(crate) fn save_cache(
     root: &Path,
     files: &DashMap<String, Arc<FileData>>,
     content_hashes: &DashMap<String, u64>,
@@ -390,6 +391,7 @@ pub(super) fn try_load_library_cache(
 ) -> Option<HashMap<String, FileCacheEntry>> {
     let path = library_cache_path(source_paths);
     let raw_bytes = std::fs::read(&path).ok()?;
+    let raw_len = raw_bytes.len();
     // Try zstd decompression first; fall back to raw bincode for legacy caches.
     let bytes = zstd_decompress(&raw_bytes).unwrap_or(raw_bytes);
     let cache: IndexCache = bincode::deserialize(&bytes).ok()?;
@@ -397,11 +399,11 @@ pub(super) fn try_load_library_cache(
         return None;
     }
     log::info!(
-        "Loaded library cache ({} files) from {} ({} KiB raw → {} KiB compressed)",
+        "Loaded library cache ({} files) from {} ({} KiB raw → {} KiB after decompress)",
         cache.entries.len(),
         path.display(),
+        raw_len / 1024,
         bytes.len() / 1024,
-        raw_bytes.len() / 1024,
     );
     Some(cache.entries)
 }

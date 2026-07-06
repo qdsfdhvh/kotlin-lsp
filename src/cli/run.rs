@@ -966,21 +966,16 @@ pub(crate) async fn run(args: CliArgs) {
                 index.definitions.len(),
             );
 
-            // ── Cache save ──────────────────────────────────────────────────
-            eprintln!("Persisting cache...");
-            let save_start = std::time::Instant::now();
-            crate::indexer::save_cache(&root, true);
-            let save_elapsed = save_start.elapsed();
+            // ── Cache file size ──────────────────────────────────────────
             let cache_path = root.join("index.bin");
             let cache_size = std::fs::metadata(&cache_path).map(|m| m.len()).unwrap_or(0);
-            println!(
-                "Cache save: {}.{:03}s → {} ({} KiB)",
-                save_elapsed.as_secs(),
-                save_elapsed.subsec_millis(),
-                cache_path.display(),
-                cache_size / 1024,
-            );
-
+            if cache_size > 0 {
+                println!(
+                    "Cache file: {} ({} KiB)",
+                    cache_path.display(),
+                    cache_size / 1024
+                );
+            }
             // ── Cache load ──────────────────────────────────────────────────
             let load_start = std::time::Instant::now();
             if let Some(cache) = crate::indexer::try_load_cache(&root) {
