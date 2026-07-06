@@ -40,7 +40,7 @@ pub(crate) struct FileCacheEntry {
 
 /// Complete serialized index, written to `~/.cache/kotlin-lsp/<root-hash>/index.bin`.
 #[derive(Serialize, Deserialize)]
-pub(super) struct IndexCache {
+pub(crate) struct IndexCache {
     pub(super) version: u32,
     /// True when this cache was built from a complete (non-truncated) workspace scan.
     /// Only set to true when `total <= max` at index time.
@@ -275,11 +275,11 @@ pub(crate) fn save_cache(
                 .and_then(|()| std::fs::rename(&tmp_path, &cache_path))
                 .is_ok();
             if write_ok {
-                let ratio = if raw_len > 0 {
-                    100 - (compressed_len * 100 / raw_len)
-                } else {
-                    0
-                };
+                let ratio = compressed_len
+                    .checked_mul(100)
+                    .and_then(|v| v.checked_div(raw_len))
+                    .map(|v| 100u64.saturating_sub(v))
+                    .unwrap_or(0);
                 log::info!(
                     "Cache saved ({} files, {} KB → {} KB zstd, -{}%) → {}",
                     cache.entries.len(),
@@ -472,11 +472,11 @@ pub(super) fn save_library_cache(
                 .and_then(|()| std::fs::rename(&tmp_path, &cache_path))
                 .is_ok();
             if write_ok {
-                let ratio = if raw_len > 0 {
-                    100 - (compressed_len * 100 / raw_len)
-                } else {
-                    0
-                };
+                let ratio = compressed_len
+                    .checked_mul(100)
+                    .and_then(|v| v.checked_div(raw_len))
+                    .map(|v| 100u64.saturating_sub(v))
+                    .unwrap_or(0);
                 log::info!(
                     "Library cache saved ({} files, {} KB → {} KB zstd, -{}%) → {}",
                     cache.entries.len(),
