@@ -951,16 +951,49 @@ pub(crate) async fn run(args: CliArgs) {
             run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
         }
         Subcommand::Benchmark => {
-            eprintln!("Benchmarking...");
             let root = resolve_root(args.root.as_deref());
-            let start = std::time::Instant::now();
-            let _index = build_index(&root, false).await;
-            let elapsed = start.elapsed();
+
+            // ── Build fresh index ───────────────────────────────────────────
+            eprintln!("Building fresh index...");
+            let build_start = std::time::Instant::now();
+            let index = build_index(&root, false).await;
+            let build_elapsed = build_start.elapsed();
             println!(
-                "Indexing: {}.{:03}s",
-                elapsed.as_secs(),
-                elapsed.subsec_millis()
+                "Index build: {}.{:03}s ({} files, {} symbols)",
+                build_elapsed.as_secs(),
+                build_elapsed.subsec_millis(),
+                index.files.len(),
+                index.definitions.len(),
             );
+
+            // ── Cache save ──────────────────────────────────────────────────
+            eprintln!("Persisting cache...");
+            let save_start = std::time::Instant::now();
+            crate::indexer::save_cache(&root, true);
+            let save_elapsed = save_start.elapsed();
+            let cache_path = root.join("index.bin");
+            let cache_size = std::fs::metadata(&cache_path).map(|m| m.len()).unwrap_or(0);
+            println!(
+                "Cache save: {}.{:03}s → {} ({} KiB)",
+                save_elapsed.as_secs(),
+                save_elapsed.subsec_millis(),
+                cache_path.display(),
+                cache_size / 1024,
+            );
+
+            // ── Cache load ──────────────────────────────────────────────────
+            let load_start = std::time::Instant::now();
+            if let Some(cache) = crate::indexer::try_load_cache(&root) {
+                let load_elapsed = load_start.elapsed();
+                println!(
+                    "Cache load: {}.{:03}s ({} files)",
+                    load_elapsed.as_secs(),
+                    load_elapsed.subsec_millis(),
+                    cache.entries.len(),
+                );
+            } else {
+                println!("Cache load: FAILED");
+            }
         }
 
         Subcommand::TypeHierarchy {
