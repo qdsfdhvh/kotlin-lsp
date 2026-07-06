@@ -144,13 +144,11 @@ pub(crate) fn find_class_body_insert_point(
     // Determine indent from existing members, or fall back to class indent + 4.
     let indent = {
         let mut cursor = class_node.walk();
-        let first_member = class_node
-            .children(&mut cursor)
-            .find(|c| {
-                c.is_named()
-                    && c.kind() != "class_body"
-                    && c.start_position().row > class_node.start_position().row
-            });
+        let first_member = class_node.children(&mut cursor).find(|c| {
+            c.is_named()
+                && c.kind() != "class_body"
+                && c.start_position().row > class_node.start_position().row
+        });
         if let Some(member) = first_member {
             let member_indent = compute_indent(lines, member.start_position().row as u32);
             if member_indent.len() >= 4 {
