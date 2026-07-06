@@ -1106,7 +1106,7 @@ fn build_semantic_insert(
     let file = PathBuf::from(iter.next().ok_or("insert-* requires a FILE argument")?);
     let owner = iter.next();
     // For insert-import, content defaults to fqn if not explicitly provided.
-    let content = match (&kind, &owner, content) {
+    let content = match (kind, &owner, content) {
         ("import", Some(fqn), None) => format!("import {fqn}"),
         ("import", Some(fqn), Some(custom)) => {
             // Allow --content to override auto-generated import.

@@ -3,7 +3,7 @@
 //! Supports both basic line-based insertion and semantic insert modes
 //! (import, member, function, override).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -126,6 +126,7 @@ pub(crate) fn find_class_body_insert_point(
 ) -> Result<(u32, String), String> {
     let source = lines.join("\n");
 
+    let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
         .expect("kotlin parser init");
