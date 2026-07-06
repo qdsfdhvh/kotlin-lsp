@@ -56,7 +56,7 @@ pub(crate) use self::infer::{
 
 mod cache;
 pub(crate) mod jar_indexer;
-pub(crate) use self::cache::workspace_cache_path;
+pub(crate) use self::cache::{try_load_cache, workspace_cache_path};
 
 mod discover;
 

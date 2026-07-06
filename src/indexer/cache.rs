@@ -21,7 +21,7 @@ use crate::types::{FileData, FileIndexResult};
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /// Bump when the serialized format changes; invalidates any older cache files.
-pub(crate) const CACHE_VERSION: u32 = 10;
+pub(crate) const CACHE_VERSION: u32 = 11;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ pub(crate) struct FileCacheEntry {
 
 /// Complete serialized index, written to `~/.cache/kotlin-lsp/<root-hash>/index.bin`.
 #[derive(Serialize, Deserialize)]
-pub(super) struct IndexCache {
+pub(crate) struct IndexCache {
     pub(super) version: u32,
     /// True when this cache was built from a complete (non-truncated) workspace scan.
     /// Only set to true when `total <= max` at index time.
@@ -49,7 +49,7 @@ pub(super) struct IndexCache {
     #[serde(default)]
     pub(super) complete_scan: bool,
     /// Absolute path string → per-file cached data.
-    pub(super) entries: HashMap<String, FileCacheEntry>,
+    pub(crate) entries: HashMap<String, FileCacheEntry>,
 }
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
@@ -101,12 +101,26 @@ pub(super) fn write_status_file(content: &str) {
     let _ = std::fs::write(&path, content);
 }
 
+// ─── Compression helpers ─────────────────────────────────────────────────────
+
+/// Compress bytes with zstd at the default compression level.
+fn zstd_compress(bytes: &[u8]) -> Vec<u8> {
+    zstd::encode_all(bytes, 3).expect("zstd compress")
+}
+
+/// Decompress zstd-compressed bytes.
+fn zstd_decompress(bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+    zstd::decode_all(bytes)
+}
 // ─── Load ─────────────────────────────────────────────────────────────────────
 
 /// Load and validate the on-disk cache.  Returns `None` if absent / stale / corrupt.
-pub(super) fn try_load_cache(root: &Path) -> Option<IndexCache> {
+pub(crate) fn try_load_cache(root: &Path) -> Option<IndexCache> {
     let path = workspace_cache_path(root);
-    let bytes = std::fs::read(&path).ok()?;
+    let raw_bytes = std::fs::read(&path).ok()?;
+    let raw_len = raw_bytes.len();
+    // Try zstd decompression first; fall back to raw bincode for legacy caches.
+    let bytes = zstd_decompress(&raw_bytes).unwrap_or(raw_bytes);
     let cache: IndexCache = match bincode::deserialize(&bytes) {
         Ok(c) => c,
         Err(e) => {
@@ -123,9 +137,11 @@ pub(super) fn try_load_cache(root: &Path) -> Option<IndexCache> {
         return None;
     }
     log::info!(
-        "Loaded index cache ({} files) from {}",
+        "Loaded index cache ({} files) from {} ({} KiB raw → {} KiB after decompress)",
         cache.entries.len(),
-        path.display()
+        path.display(),
+        raw_len / 1024,
+        bytes.len() / 1024,
     );
     Some(cache)
 }
@@ -180,7 +196,7 @@ pub(crate) fn cache_entry_to_file_result(uri: &Url, entry: &FileCacheEntry) -> F
 /// Does **not** overwrite a larger complete cache with a smaller incomplete one,
 /// to prevent an editor server (which may load only part of the workspace) from
 /// truncating a cache built by `--index-only`.
-pub(super) fn save_cache(
+pub(crate) fn save_cache(
     root: &Path,
     files: &DashMap<String, Arc<FileData>>,
     content_hashes: &DashMap<String, u64>,
@@ -234,16 +250,19 @@ pub(super) fn save_cache(
         entries,
     };
     match bincode::serialize(&cache) {
-        Ok(bytes) => {
+        Ok(raw_bytes) => {
+            let bytes = zstd_compress(&raw_bytes);
+            let raw_len = raw_bytes.len() as u64;
+            let compressed_len = bytes.len() as u64;
             // Don't overwrite a complete cache with an incomplete one.
             if !complete_scan {
                 if let Ok(meta) = std::fs::metadata(&cache_path) {
-                    if meta.len() > bytes.len() as u64 {
+                    if meta.len() > compressed_len {
                         log::info!(
                             "Cache save skipped: existing cache ({} KB) is larger than \
                              incomplete new cache ({} KB)",
                             meta.len() / 1024,
-                            bytes.len() / 1024
+                            compressed_len / 1024
                         );
                         return;
                     }
@@ -256,10 +275,17 @@ pub(super) fn save_cache(
                 .and_then(|()| std::fs::rename(&tmp_path, &cache_path))
                 .is_ok();
             if write_ok {
+                let ratio = compressed_len
+                    .checked_mul(100)
+                    .and_then(|v| v.checked_div(raw_len))
+                    .map(|v| 100u64.saturating_sub(v))
+                    .unwrap_or(0);
                 log::info!(
-                    "Cache saved ({} files, {} KB) → {}",
+                    "Cache saved ({} files, {} KB → {} KB zstd, -{}%) → {}",
                     cache.entries.len(),
-                    bytes.len() / 1024,
+                    raw_len / 1024,
+                    compressed_len / 1024,
+                    ratio,
                     cache_path.display()
                 );
             } else {
@@ -360,21 +386,24 @@ pub(super) fn library_cache_is_fresh(
         })
 }
 
-/// Load the library cache for the given source paths.
-/// Returns `None` if absent, corrupt, or version-mismatched.
 pub(super) fn try_load_library_cache(
     source_paths: &[String],
 ) -> Option<HashMap<String, FileCacheEntry>> {
     let path = library_cache_path(source_paths);
-    let bytes = std::fs::read(&path).ok()?;
+    let raw_bytes = std::fs::read(&path).ok()?;
+    let raw_len = raw_bytes.len();
+    // Try zstd decompression first; fall back to raw bincode for legacy caches.
+    let bytes = zstd_decompress(&raw_bytes).unwrap_or(raw_bytes);
     let cache: IndexCache = bincode::deserialize(&bytes).ok()?;
     if cache.version != CACHE_VERSION {
         return None;
     }
     log::info!(
-        "Loaded library cache ({} files) from {}",
+        "Loaded library cache ({} files) from {} ({} KiB raw → {} KiB after decompress)",
         cache.entries.len(),
-        path.display()
+        path.display(),
+        raw_len / 1024,
+        bytes.len() / 1024,
     );
     Some(cache.entries)
 }
@@ -434,16 +463,26 @@ pub(super) fn save_library_cache(
         entries,
     };
     match bincode::serialize(&cache) {
-        Ok(bytes) => {
+        Ok(raw_bytes) => {
+            let bytes = zstd_compress(&raw_bytes);
+            let raw_len = raw_bytes.len() as u64;
+            let compressed_len = bytes.len() as u64;
             let tmp_path = cache_path.with_extension("bin.tmp");
             let write_ok = std::fs::write(&tmp_path, &bytes)
                 .and_then(|()| std::fs::rename(&tmp_path, &cache_path))
                 .is_ok();
             if write_ok {
+                let ratio = compressed_len
+                    .checked_mul(100)
+                    .and_then(|v| v.checked_div(raw_len))
+                    .map(|v| 100u64.saturating_sub(v))
+                    .unwrap_or(0);
                 log::info!(
-                    "Library cache saved ({} files, {} KB) → {}",
+                    "Library cache saved ({} files, {} KB → {} KB zstd, -{}%) → {}",
                     cache.entries.len(),
-                    bytes.len() / 1024,
+                    raw_len / 1024,
+                    compressed_len / 1024,
+                    ratio,
                     cache_path.display()
                 );
             } else {
