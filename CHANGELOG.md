@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 0.23.0 (2026-07-09)
+
+- **CLI format (Phase 12)** — `format check <files>` and `format apply <files>` subcommands
+  for ktlint integration, matching Spotless `spotlessCheck` / `spotlessApply` semantics.
+  Supports `--json`, directory recursion, and `--dry-run` preview.
+- **Semantic insert enhancements (Phase 4)** — `insert-import` now auto-generates
+  import statements from FQNs. Improved indent calculation for `insert-member`
+  and `insert-function` using tree-sitter. Added `insert-override` with `--name` support.
+- **Performance (Phase 11)** — zstd compression for index and library caches.
+  Reduces cache I/O and on-disk footprint for large Android/KMP projects.
 ## 0.22.0 (2026-06-21)
 
 - **CLI code-action parity** (Phase 1) — `code-action` now lists real LSP actions
