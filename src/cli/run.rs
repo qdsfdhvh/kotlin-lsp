@@ -51,7 +51,7 @@ fn find_git_root(start: &Path) -> Option<PathBuf> {
 
 /// Resolve workspace root for file-centric commands: tries explicit root first,
 /// then walks up from the file's directory, then falls back to CWD-based detection.
-fn resolve_root_for_file(explicit: Option<&Path>, file: &Path) -> PathBuf {
+pub(crate) fn resolve_root_for_file(explicit: Option<&Path>, file: &Path) -> PathBuf {
     if let Some(r) = explicit {
         return r.to_path_buf();
     }
@@ -146,7 +146,7 @@ fn cache_exists(root: &Path) -> bool {
 /// 1. `workspace.json` (JetBrains IDE format) `sourcePaths` field at the workspace root
 /// 2. `~/.kotlin-lsp/sources` — the default `extract-sources` output dir
 ///    (skipped when `no_stdlib` is true)
-async fn build_index(root: &Path, no_stdlib: bool) -> Arc<Indexer> {
+pub(crate) async fn build_index(root: &Path, no_stdlib: bool) -> Arc<Indexer> {
     build_index_inner(root, collect_cli_source_paths(root, no_stdlib)).await
 }
 
@@ -941,6 +941,48 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             run_context(&file, line, col, json, expand).await;
         }
+        Subcommand::Callers {
+            file,
+            line,
+            col,
+            depth,
+        } => {
+            crate::cli::call_graph::run_callers(&file, line, col, depth, json).await;
+        }
+        Subcommand::Callees {
+            file,
+            line,
+            col,
+            depth,
+        } => {
+            crate::cli::call_graph::run_callees(&file, line, col, depth, json).await;
+        }
+        Subcommand::Impact { file, line, col } => {
+            crate::cli::impact::run_impact(&file, line, col, json).await;
+        }
+        Subcommand::Modules => crate::cli::modules::run_modules(json),
+        Subcommand::ModuleDeps { module, direction } => {
+            crate::cli::modules::run_module_deps(&module, &direction, json);
+        }
+        Subcommand::ModuleFiles { module } => {
+            crate::cli::modules::run_module_files(&module, json);
+        }
+        Subcommand::Summarize { name, expand } => {
+            crate::cli::summarize::run_summarize(&name, expand, json).await;
+        }
+        Subcommand::FindTest { file, line, col } => {
+            crate::cli::find_test::run_find_test(&file, line, col, json).await;
+        }
+        Subcommand::ExpectActual { name } => {
+            crate::cli::expect_actual::run_expect_actual(&name, json).await;
+        }
+        Subcommand::AndroidActivities { root: _ } => {
+            let r = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
+            crate::cli::android::run_android_activities(&r, json);
+        }
+        Subcommand::AndroidComposables { file } => {
+            crate::cli::android::run_android_composables(&file, json);
+        }
         Subcommand::CallHierarchy {
             file,
             line,
@@ -949,6 +991,9 @@ pub(crate) async fn run(args: CliArgs) {
             outgoing,
         } => {
             run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
+        }
+        Subcommand::Workspace => {
+            crate::cli::workspace::run_workspace(json);
         }
         Subcommand::Benchmark => {
             let root = resolve_root(args.root.as_deref());
@@ -1068,29 +1113,48 @@ async fn run_refs(
     let results = apply_filters(results, root, filters);
     exit_if_empty(&results, json, &format!("No references found for '{name}'"));
 
-    // explain mode: classify each result by reference type
-    let results: Vec<CliResult> = if explain {
+    // Classify results when --ref-kind or --explain is active.
+    let do_classify = filters.ref_kind.is_some() || explain;
+    let results: Vec<CliResult> = if do_classify {
         results
             .into_iter()
             .map(|mut r| {
-                let line_text = std::fs::read_to_string(&r.file)
-                    .ok()
-                    .and_then(|s| s.lines().nth(r.line as usize - 1).map(|l| l.to_owned()))
-                    .unwrap_or_default();
-                let trimmed = line_text.trim_start();
-                let label = if trimmed.starts_with(&r.name) && trimmed.contains('(') {
-                    "declaration"
-                } else if trimmed.starts_with("override ") && trimmed.contains(&r.name) {
-                    "override"
-                } else if trimmed.starts_with("import ") {
-                    "import"
-                } else {
-                    "reference"
-                };
-                r.kind = label.to_owned();
+                if let Ok(uri) =
+                    tower_lsp::lsp_types::Url::from_file_path(std::path::Path::new(&r.file))
+                {
+                    let loc = tower_lsp::lsp_types::Location {
+                        uri,
+                        range: tower_lsp::lsp_types::Range {
+                            start: tower_lsp::lsp_types::Position::new(
+                                r.line.saturating_sub(1),
+                                r.col.saturating_sub(1),
+                            ),
+                            end: tower_lsp::lsp_types::Position::new(
+                                r.line.saturating_sub(1),
+                                r.col.saturating_sub(1) + r.name.len() as u32,
+                            ),
+                        },
+                    };
+                    let kind = super::ref_kind::classify_reference(&loc, &r.name);
+                    r.kind = kind.as_str().to_owned();
+                }
                 r
             })
             .collect()
+    } else {
+        results
+    };
+
+    // Filter by --ref-kind if specified.
+    let results: Vec<CliResult> = if let Some(ref filter) = filters.ref_kind {
+        let wanted = super::ref_kind::RefKind::from_arg(filter);
+        match wanted {
+            Some(target) => results
+                .into_iter()
+                .filter(|r| r.kind == target.as_str())
+                .collect(),
+            None => results,
+        }
     } else {
         results
     };

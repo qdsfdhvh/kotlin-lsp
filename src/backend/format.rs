@@ -67,7 +67,7 @@ pub(super) fn format_symbol_hover(info: &ResolvedSymbol, uri_path: &str) -> Stri
         format!(
             "{}\n\n---\n\n{}\n\n---\n\n{code_block}",
             sections[0],
-            &sections[1..].join("\n\n"),
+            sections[1..].join("\n\n"),
         )
     };
 

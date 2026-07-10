@@ -1,44 +1,33 @@
 //! Standalone CLI interface for kotlin-lsp.
-//!
-//! Subcommands:
-//!   find  <name>                 — locate declarations for NAME
-//!   refs  <name>                 — locate all usages of NAME
-//!   hover <file> <line> <col>    — show symbol signature at position
-//!   index                        — pre-build the workspace index cache
-//!
-//! Modes (default: auto):
-//!   auto   — load cache if available; fall back to rg/fd when no cache exists
-//!   --fast  — always use rg/fd, never load index
-//!   --smart — require a pre-built index; exit with error if absent
-//!
-//! Output:
-//!   plain text to stdout (default)
-//!   --json — emit a JSON array of result objects
-//!
-//! Root:
-//!   --root <dir> — workspace root (default: nearest .git parent, then cwd)
-//!
-//! All diagnostics and mode notices go to stderr only.
 
+mod android;
 mod args;
 mod batch;
+mod call_graph;
 mod check;
 mod complete;
 mod doctor;
 mod edit;
+mod expect_actual;
 mod extract_sources;
+mod find_test;
 mod format;
 mod hover;
+mod impact;
 mod inject;
 mod insert;
+mod modules;
 mod organize_imports;
 mod output;
 mod path_meta;
+mod ref_kind;
 mod run;
 mod skills;
 mod sources;
+mod summarize;
 pub(crate) mod templates;
 mod tokens;
+mod workspace;
 
 #[cfg(test)]
 mod integration_tests;

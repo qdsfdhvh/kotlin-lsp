@@ -822,7 +822,7 @@ dependencies = [
 
 [[package]]
 name = "kotlin-lsp"
-version = "0.21.0"
+version = "0.23.0"
 dependencies = [
  "bincode",
  "dashmap",
@@ -844,6 +844,7 @@ dependencies = [
  "tree-sitter-swift",
  "walkdir",
  "zip",
+ "zstd",
 ]
 
 [[package]]
