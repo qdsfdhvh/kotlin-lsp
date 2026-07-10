@@ -25,6 +25,8 @@ pub(crate) struct ResultFilters {
     /// Useful for common names like `Event`, `Result`, `State` that appear
     /// in thousands of import lines.
     pub exclude_imports: bool,
+    /// Reference classification filter: call, read, write, override, import, type-use.
+    pub ref_kind: Option<String>,
 }
 
 #[derive(Debug)]
@@ -152,6 +154,61 @@ pub(crate) enum Subcommand {
         subtypes: bool,
         supertypes: bool,
     },
+    /// Call graph: find who calls this function (tree output).
+    Callers {
+        file: PathBuf,
+        line: u32,
+        col: u32,
+        depth: u32,
+    },
+    /// Call graph: find functions called by this function (tree output).
+    Callees {
+        file: PathBuf,
+        line: u32,
+        col: u32,
+        depth: u32,
+    },
+    /// Impact analysis: risk score, refs, callers for a symbol.
+    Impact {
+        file: PathBuf,
+        line: u32,
+        col: u32,
+    },
+    /// List all detected Gradle modules.
+    Modules,
+    /// Show dependencies for a module.
+    ModuleDeps {
+        module: String,
+        direction: String,
+    },
+    /// List source files in a module.
+    ModuleFiles {
+        module: String,
+    },
+    /// Summarize a symbol: kind, signature, members, KDoc.
+    Summarize {
+        name: String,
+        expand: bool,
+    },
+    /// Find test files/methods for a symbol.
+    FindTest {
+        file: PathBuf,
+        line: u32,
+        col: u32,
+    },
+    /// Find KMP expect/actual declarations.
+    ExpectActual {
+        name: String,
+    },
+    /// List Android activities from manifest.
+    #[allow(dead_code)]
+    AndroidActivities {
+        root: Option<PathBuf>,
+    },
+    /// Find @Composable functions in a file.
+    AndroidComposables {
+        file: PathBuf,
+    },
     /// Batch type injection for a file — resolve all referenced type signatures.
     Inject {
         file: PathBuf,
@@ -224,6 +281,8 @@ pub(crate) enum Subcommand {
         /// Sub-args: `list` or `read <name>`.
         args: Vec<String>,
     },
+    /// Workspace overview: modules, packages, symbol counts.
+    Workspace,
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -337,6 +396,7 @@ struct ParsedCliFlags {
     owner_filter: Option<String>,
     expand: usize,
     exclude_imports: bool,
+    ref_kind: Option<String>,
     name_arg: Option<String>,
 }
 
@@ -404,6 +464,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         type_supertypes: false,
         expand: 0,
         exclude_imports: false,
+        ref_kind: None,
         name_arg: None,
     };
 
@@ -484,6 +545,10 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
                 let value = args.value().map_err(|e| e.to_string())?;
                 parsed.module_filter = Some(value.to_string_lossy().into_owned());
             }
+            Some(lexopt::Arg::Long("ref-kind")) => {
+                let value = args.value().map_err(|e| e.to_string())?;
+                parsed.ref_kind = Some(value.to_string_lossy().into_owned());
+            }
             Some(lexopt::Arg::Long("source-set")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
                 // Comma-separated → OR over source sets so callers can write
@@ -542,6 +607,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         exclude_imports,
         expand,
         owner_filter,
+        ref_kind,
         ..
     } = parsed;
     let filters = ResultFilters {
@@ -555,6 +621,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         source_sets: source_set_filter,
         owner: owner_filter,
         exclude_imports,
+        ref_kind,
     };
     match subcommand {
         "find" => Ok(Subcommand::Find {
@@ -593,6 +660,87 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 "tree requires a FILE argument",
             )?),
         }),
+        "callers" => {
+            let depth = positionals
+                .first()
+                .and_then(|s| s.parse::<u32>().ok())
+                .filter(|d| *d > 0)
+                .unwrap_or(1);
+            let (file, line, col) = parse_file_line_col(positionals, "callers")?;
+            Ok(Subcommand::Callers {
+                file,
+                line,
+                col,
+                depth,
+            })
+        }
+        "callees" => {
+            let depth = positionals
+                .first()
+                .and_then(|s| s.parse::<u32>().ok())
+                .filter(|d| *d > 0)
+                .unwrap_or(1);
+            let (file, line, col) = parse_file_line_col(positionals, "callees")?;
+            Ok(Subcommand::Callees {
+                file,
+                line,
+                col,
+                depth,
+            })
+        }
+        "impact" => {
+            let (file, line, col) = parse_file_line_col(positionals, "impact")?;
+            Ok(Subcommand::Impact { file, line, col })
+        }
+        "modules" => Ok(Subcommand::Modules),
+        "module-deps" => {
+            let module = positionals.first().cloned().unwrap_or_default();
+            if module.is_empty() || module == "help" {
+                return Err("module-deps requires a module name".to_string());
+            }
+            let direction = positionals
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| "both".to_string());
+            Ok(Subcommand::ModuleDeps { module, direction })
+        }
+        "module-files" => {
+            let module = positionals.first().cloned().unwrap_or_default();
+            if module.is_empty() || module == "help" {
+                return Err("module-files requires a module name".to_string());
+            }
+            Ok(Subcommand::ModuleFiles { module })
+        }
+        "summarize" => {
+            let name = positionals.first().cloned().unwrap_or_default();
+            if name.is_empty() || name == "help" {
+                return Err("summarize requires a symbol name".to_string());
+            }
+            let expand = positionals.contains(&"--expand".to_string())
+                || positionals.contains(&"-E".to_string());
+            Ok(Subcommand::Summarize { name, expand })
+        }
+        "find-test" => {
+            let (file, line, col) = parse_file_line_col(positionals, "find-test")?;
+            Ok(Subcommand::FindTest { file, line, col })
+        }
+        "expect-actual" => {
+            let name = positionals.first().cloned().unwrap_or_default();
+            if name.is_empty() || name == "help" {
+                return Err("expect-actual requires a symbol name".to_string());
+            }
+            Ok(Subcommand::ExpectActual { name })
+        }
+        "android-activities" => Ok(Subcommand::AndroidActivities { root: None }),
+        "android-composables" => {
+            let file = positionals
+                .first()
+                .cloned()
+                .map(PathBuf::from)
+                .ok_or("android-composables requires a FILE argument".to_string())?;
+            Ok(Subcommand::AndroidComposables { file })
+        }
+        "workspace" => Ok(Subcommand::Workspace),
         "sources" => Ok(Subcommand::Sources {
             explain: positionals.first().map(|s| s.as_str()) == Some("explain"),
         }),

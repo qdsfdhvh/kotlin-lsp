@@ -30,6 +30,8 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Need syntax check on edited files → kotlin-lsp check <file>
    ├─ Need formatting check (like spotlessCheck) → kotlin-lsp format check <file/dir>...
    ├─ Need formatting apply (like spotlessApply) → kotlin-lsp format apply <file/dir>...
+   ├─ Need caller tree (who calls this?) → kotlin-lsp callers <file> <line> <col>
+   ├─ Need callee tree (what does this call?) → kotlin-lsp callees <file> <line> <col>
    ├─ Need call hierarchy → kotlin-lsp call-hierarchy <file> <line> <col>
    ├─ Need class hierarchy → kotlin-lsp type-hierarchy <Name>
    ├─ Imports are messy → kotlin-lsp organize-imports <file>
@@ -136,6 +138,33 @@ kotlin-lsp context <file> <line> <col>
 
 Returns definition + signature + doc comment in a single call. Good for: "tell me everything about this symbol".
 
+#### callers — who calls this function
+
+```bash
+kotlin-lsp callers <file> <line> <col>         # direct callers only (depth 1)
+kotlin-lsp callers <file> <line> <col> 3       # transitive callers up to depth 3
+kotlin-lsp callers <file> <line> <col> --json  # JSON tree output
+```
+
+Returns a **tree** of callers, not a flat list. Each node shows the caller function
+name, kind, file, and position. Use `--depth N` for transitive traversal; default is 1.
+Cycles are detected and skipped. JSON output includes nested `children` arrays.
+
+#### callees — what this function calls
+
+```bash
+kotlin-lsp callees <file> <line> <col>         # direct callees only
+kotlin-lsp callees <file> <line> <col> 3       # transitive callees up to depth 3
+kotlin-lsp callees <file> <line> <col> --json  # JSON tree output
+```
+
+Parses the function body with tree-sitter to find call expressions, resolves
+each callee to its declaration location, and returns a tree of callees.
+
+**Important**: these commands differ from `call-hierarchy` — `callers`/`callees`
+return tree-structured output designed for AI agents, while `call-hierarchy`
+targets LSP protocol shapes (flat lists). For agent workflows, prefer
+`callers`/`callees`.
 #### call-hierarchy — caller lookup
 
 ```bash

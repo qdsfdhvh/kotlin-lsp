@@ -1417,10 +1417,8 @@ fn extract_return_for_label(detail: &str) -> Option<String> {
             _ => {}
         }
     }
-    let after = match close_pos {
-        Some(pos) => s[pos + 1..].trim(),
-        None => return None,
-    };
+    let pos = close_pos?;
+    let after = s[pos + 1..].trim();
     // Expect `: ReturnType`
     let type_part = after.strip_prefix(':')?.trim();
     if type_part.is_empty() {
