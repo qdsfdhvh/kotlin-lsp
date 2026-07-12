@@ -56,6 +56,7 @@ pub(crate) use self::infer::{
 
 mod cache;
 pub(crate) mod jar_indexer;
+mod symbol_index;
 pub(crate) use self::cache::{try_load_cache, workspace_cache_path};
 
 mod discover;
@@ -203,6 +204,8 @@ pub(crate) struct Indexer {
     /// These are treated as library sources: available for hover/definition/autocomplete
     /// but excluded from findReferences and rename.
     pub(crate) library_uris: DashSet<String>,
+    /// Path to the full library cache (for lazy loading after fast symbol-index init).
+    pub(crate) library_cache_path: RwLock<Option<PathBuf>>,
     /// Simple name → sorted vec of importable FQNs.
     /// e.g. "Composable" → ["androidx.compose.runtime.Composable"]
     /// Built from top-level symbols only (no synthetic file-stem keys).
@@ -280,6 +283,7 @@ impl Indexer {
             source_paths_raw: RwLock::new(Vec::new()),
             workspace_source_roots: RwLock::new(Vec::new()),
             library_uris: DashSet::new(),
+            library_cache_path: RwLock::new(None),
             importable_fqns: std::sync::RwLock::new(std::collections::HashMap::new()),
             live_trees: DashMap::new(),
         }

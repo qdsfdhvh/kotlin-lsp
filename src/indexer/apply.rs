@@ -438,7 +438,14 @@ impl Indexer {
         };
 
         // Fast path: library cache is fresh (source dirs haven't changed).
-        // Batch all contributions into local HashMaps first (no DashMap overhead),
+        // Compact symbol index is available on disk for future fast-start mode.
+        // Currently loaded by full library cache (safe); fast path needs lazy
+        // FileData loading to avoid breaking completion/hover on library files.
+        if crate::indexer::symbol_index::try_load_symbol_index(&cache_path).is_some() {
+            eprintln!("Symbol index exists (cold-start fast path coming soon)");
+        }
+
+        // Fast path: library cache is fresh (source dirs haven't changed).
         // then bulk-extend into DashMap in one pass. This avoids ~390K individual
         // lock acquisitions + dedup scans that plague the per-file approach.
         if cache_is_fresh {
@@ -597,11 +604,18 @@ impl Indexer {
         // Persist library index so subsequent calls skip re-parsing.
         // Skip if everything came from cache — nothing new to write.
         if lib_cache.is_none() || newly_parsed > 0 {
+            let lib_cache_path = crate::indexer::cache::library_cache_path(&raw_paths);
             crate::indexer::cache::save_library_cache(
                 &raw_paths,
                 &self.files,
                 &self.content_hashes,
                 &self.library_uris,
+            );
+            // Also persist the compact symbol index for fast cold start.
+            crate::indexer::symbol_index::save_symbol_index(
+                &self.definitions,
+                &self.library_uris,
+                &lib_cache_path,
             );
         } else {
             log::info!("Library cache unchanged ({cache_hits} hits), skipping save");

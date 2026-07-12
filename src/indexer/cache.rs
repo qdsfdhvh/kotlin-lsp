@@ -104,12 +104,12 @@ pub(super) fn write_status_file(content: &str) {
 // ─── Compression helpers ─────────────────────────────────────────────────────
 
 /// Compress bytes with zstd at the default compression level.
-fn zstd_compress(bytes: &[u8]) -> Vec<u8> {
+pub(super) fn zstd_compress(bytes: &[u8]) -> Vec<u8> {
     zstd::encode_all(bytes, 9).expect("zstd compress")
 }
 
 /// Decompress zstd-compressed bytes.
-fn zstd_decompress(bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+pub(super) fn zstd_decompress(bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     zstd::decode_all(bytes)
 }
 // ─── Load ─────────────────────────────────────────────────────────────────────
