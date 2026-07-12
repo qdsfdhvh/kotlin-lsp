@@ -127,3 +127,18 @@ When asked to "release" or "publish":
 2. Add section to top of `CHANGELOG.md`
 3. Commit, create PR, merge on green CI
 4. `git tag vX.Y.Z && git push origin vX.Y.Z`
+
+## Tag Safety (2026-07-12)
+
+**NEVER delete or force-push Git tags without explicit user confirmation.**
+Tags represent published releases. Deleting a tag breaks GitHub Releases,
+CI artifacts, and downstream consumers that reference the tag.
+
+- `git tag -d` → ask first
+- `git push --delete origin <tag>` → ask first
+- `git tag -f` → ask first
+- `git push origin <tag> -f` → ask first
+
+Before touching tags, verify:
+1. Is this a new tag or an existing release?
+2. Ask: "vX.Y.Z already exists as a published release. Are you sure you want to overwrite it?"
