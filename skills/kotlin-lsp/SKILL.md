@@ -31,6 +31,11 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Need formatting check (like spotlessCheck) → kotlin-lsp format check <file/dir>...
    ├─ Need formatting apply (like spotlessApply) → kotlin-lsp format apply <file/dir>...
    ├─ Need caller tree (who calls this?) → kotlin-lsp callers <file> <line> <col>
+   ├─ Need change impact before refactoring → kotlin-lsp impact <file> <line> <col>
+   ├─ Need symbol overview (members + KDoc) → kotlin-lsp summarize <Name>
+   ├─ Need to find tests for a symbol → kotlin-lsp find-test <file> <line> <col>
+   ├─ Need KMP expect/actual resolution → kotlin-lsp expect-actual <Name>
+   ├─ Need module structure → kotlin-lsp modules / module-deps / module-files
    ├─ Need callee tree (what does this call?) → kotlin-lsp callees <file> <line> <col>
    ├─ Need call hierarchy → kotlin-lsp call-hierarchy <file> <line> <col>
    ├─ Need class hierarchy → kotlin-lsp type-hierarchy <Name>
@@ -245,6 +250,66 @@ Examples:
 kotlin-lsp format apply src/main.kt               # format one file
 kotlin-lsp format apply src/                       # format all .kt/.kts in src/
 ```
+#### impact — change risk analysis
+
+```bash
+kotlin-lsp impact <file> <line> <col> [--json]
+```
+
+Returns risk score, references breakdown by kind, callers, and test coverage.
+Use before refactoring to gauge blast radius.
+
+#### summarize — symbol overview
+
+```bash
+kotlin-lsp summarize <Name> [--expand]
+```
+
+Returns kind, signature, members list, and KDoc (if present).
+One call replaces N hover + context calls. Use `--expand` for full member signatures.
+
+#### find-test — locate tests
+
+```bash
+kotlin-lsp find-test <file> <line> <col>
+```
+
+Finds test files/methods for the symbol at cursor. Matches by naming convention,
+imports, and source set layout.
+
+#### expect-actual — KMP expect/actual navigation
+
+```bash
+kotlin-lsp expect-actual <Name>
+```
+
+Resolves `expect` → all `actual` implementations across KMP source sets (and vice versa).
+
+#### modules / module-deps / module-files — Gradle module graph
+
+```bash
+kotlin-lsp modules                           # list all detected Gradle modules
+kotlin-lsp module-deps <module> [--incoming|--outgoing]
+kotlin-lsp module-files <module>             # list source files in a module
+```
+
+Uses `settings.gradle*` to discover modules. Direction defaults to `--outgoing`.
+
+#### android-activities / android-composables — Android resource checks
+
+```bash
+kotlin-lsp android-activities [--root <dir>] # list Activities from AndroidManifest
+kotlin-lsp android-composables <file>        # find @Composable functions
+```
+
+#### check --diagnose — call-argument validation
+
+```bash
+kotlin-lsp check <file>... --diagnose
+```
+
+Same as `check` but also validates argument counts and types at call sites.
+
 ### Code manipulation
 
 #### code-action — inspect or apply quick fixes
