@@ -1,6 +1,38 @@
 # Changelog
 
 
+## 0.24.0 (2026-07-12)
+
+### Agent Knowledge Server — Phases 13-21 (#109)
+
+- **Call Graph** — `callers` / `callees` with depth control and JSON tree output
+- **Reference Classification** — `--ref-kind call|read|write|override|import|type-use`
+- **Impact Analysis** — `impact` command: risk score, ref breakdown, callers
+- **Module Dependency Graph** — `modules`, `module-deps`, `module-files` with Gradle detection
+- **Symbol Summarization** — `summarize` command: kind, signature, members, KDoc
+- **Test Finder** — `find-test` command: locate tests by naming, imports, source sets
+- **KMP expect/actual Resolution** — `expect-actual` command
+- **Android Resource Graph** — `android-activities`, `android-composables`
+- **Workspace Graph** — `workspace` command: module→package→symbol overview
+
+### Upstream Ports
+
+- **`this`-inference fixes (Phase 22)** — correct hover for `this` in `apply{}`, `run{}`, `let{}`
+- **Companion-object member priority (Phase 24)** — `MyClass.foo` prefers Companion member
+- **Nullable receiver diagnostics (Phase 25)** — flag plain `.` access on nullable types
+- **`check --diagnose` (Phase 27)** — extend `check` with call-argument validation
+- **KDoc UTF-8 fix (Phase 28)** — fix KDoc corruption on non-ASCII characters
+
+### Dependencies
+
+- **Switch to crates.io** — all tree-sitter deps now from crates.io, `[patch.crates-io]` removed
+- `tree-sitter` → `0.26`, `tree-sitter-kotlin-sg` → `0.4`, `tree-sitter-java` → `0.23`, `tree-sitter-swift` → `0.7`
+
+### Bug Fixes
+
+- Fix `context` panic with relative file paths
+- Fix `PathBuf` import in `diagnose.rs`
+
 ## 0.23.0 (2026-07-09)
 
 - **CLI format (Phase 12)** — `format check <files>` and `format apply <files>` subcommands
