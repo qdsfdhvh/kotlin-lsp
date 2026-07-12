@@ -1,7 +1,7 @@
 # Changelog
 
 
-## 0.24.0 (2026-07-12)
+## 0.25.0 (2026-07-12)
 
 ### Agent Knowledge Server — Phases 13-21 (#109)
 
