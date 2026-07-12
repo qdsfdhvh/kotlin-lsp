@@ -144,3 +144,7 @@ fn find_files(name: &str, root: &std::path::Path) -> Vec<PathBuf> {
         Err(_) => vec![],
     }
 }
+
+#[cfg(test)]
+#[path = "expect_actual_tests.rs"]
+mod tests;

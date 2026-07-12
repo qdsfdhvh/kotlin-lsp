@@ -469,3 +469,7 @@ fn print_report(report: &ImpactReport) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "impact_tests.rs"]
+mod tests;
