@@ -146,7 +146,6 @@ fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
 /// Find the enclosing function/method/constructor declaration for a node,
 /// returning its name and position.
 
-/// Extract the function name and 1-based line/col from a declaration node.
 
 // ── Callee tree building ────────────────────────────────────────────────────
 
@@ -396,7 +395,6 @@ fn print_call_tree(node: &CallNode, indent: usize) {
 #[path = "call_graph_tests.rs"]
 mod tests;
 
-#[allow(dead_code)]
 #[allow(dead_code)]
 fn extract_function_name_and_pos(
     decl: &tree_sitter::Node,
