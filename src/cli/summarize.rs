@@ -399,3 +399,6 @@ fn print_summary(summary: &SymbolSummary, expand: bool) {
         }
     }
 }
+#[cfg(test)]
+#[path = "summarize_tests.rs"]
+mod tests;

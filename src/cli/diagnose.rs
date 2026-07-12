@@ -176,6 +176,10 @@ fn is_keyword(s: &str) -> bool {
     )
 }
 
+#[cfg(test)]
+#[path = "diagnose_tests.rs"]
+mod tests;
+
 fn children<'a>(node: &tree_sitter::Node<'a>) -> Vec<tree_sitter::Node<'a>> {
     let mut c = node.walk();
     node.children(&mut c).collect()
