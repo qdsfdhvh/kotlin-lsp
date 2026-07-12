@@ -437,13 +437,24 @@ impl Indexer {
             None => false,
         };
 
-        // Fast path: library cache is fresh (source dirs haven't changed).
-        // Compact symbol index is available on disk for future fast-start mode.
-        // Currently loaded by full library cache (safe); fast path needs lazy
-        // FileData loading to avoid breaking completion/hover on library files.
-        if crate::indexer::symbol_index::try_load_symbol_index(&cache_path).is_some() {
-            eprintln!("Symbol index exists (cold-start fast path coming soon)");
-        }
+        // ── Fast start: load definitions from compact symbol index.
+        //    When true, the cache_is_fresh block below will only restore
+        //    FileData (skipping the per-file definitions extraction).
+        let sym_loaded = if let Some(sym_idx) =
+            crate::indexer::symbol_index::try_load_symbol_index(&cache_path)
+        {
+            crate::indexer::symbol_index::populate_from_symbol_index(
+                &sym_idx,
+                &self.definitions,
+            );
+            for sym_uri in sym_idx.symbols.values().flat_map(|v| v.iter()) {
+                self.library_uris.insert(sym_uri.uri.clone());
+            }
+            log::info!("Fast-start definitions via symbol index ({} symbols)", sym_idx.symbols.len());
+            true
+        } else {
+            false
+        };
 
         // Fast path: library cache is fresh (source dirs haven't changed).
         // then bulk-extend into DashMap in one pass. This avoids ~390K individual
@@ -468,21 +479,23 @@ impl Indexer {
             ];
 
             for (path_str, entry) in &lib_cache {
-                let Ok(uri) = Url::from_file_path(path_str) else {
-                    continue;
-                };
+                let Ok(uri) = Url::from_file_path(path_str) else { continue };
                 let uri_str = uri.to_string();
-                batch.collect_entry(
-                    &uri,
-                    &uri_str,
-                    std::path::Path::new(path_str.as_str()),
-                    entry,
-                    &class_kinds,
-                    &workspace_root,
-                );
+                // When symbol index pre-loaded, just restore FileData.
+                if sym_loaded {
+                    self.files.insert(uri_str, Arc::new(entry.file_data.clone()));
+                } else {
+                    batch.collect_entry(
+                        &uri, &uri_str,
+                        std::path::Path::new(path_str.as_str()),
+                        entry, &class_kinds, &workspace_root,
+                    );
+                }
             }
 
-            batch.flush_into(&self);
+            if !sym_loaded {
+                batch.flush_into(&self);
+            }
 
             self.rebuild_bare_name_cache();
 
