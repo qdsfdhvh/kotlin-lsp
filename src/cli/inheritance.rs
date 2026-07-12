@@ -66,22 +66,22 @@ pub(crate) fn find_implementors(
     if let Some(locs) = index.subtypes.get(super_name) {
         let next_depth = if depth == 1 { 0 } else { depth - 1 };
         for loc in locs.iter() {
-            if let Ok(path) = loc.uri.to_file_path() {
-                // Use filename stem as a proxy for the class name
-                let class_name = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("?")
-                    .to_string();
-                children.push(InheritNode {
-                    name: class_name.clone(),
-                    kind: "class".to_string(),
-                    file: path.display().to_string(),
-                    line: loc.range.start.line + 1,
-                    col: loc.range.start.character + 1,
-                    children: find_implementors(&class_name, index, next_depth, visited),
-                });
-            }
+            let file_str = loc.uri.to_file_path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| loc.uri.path().to_string());
+            let class_name = std::path::Path::new(&file_str)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("?")
+                .to_string();
+            children.push(InheritNode {
+                name: class_name.clone(),
+                kind: "class".to_string(),
+                file: file_str,
+                line: loc.range.start.line + 1,
+                col: loc.range.start.character + 1,
+                children: find_implementors(&class_name, index, next_depth, visited),
+            });
         }
     }
     children
@@ -140,8 +140,7 @@ mod tests {
 
     /// Platform-independent URI for tests.
     fn temp_uri(name: &str) -> Url {
-        let path = std::path::PathBuf::from(format!("/{name}.kt"));
-        Url::from_file_path(&path).unwrap_or_else(|_| Url::parse(&format!("file:///{name}.kt")).unwrap())
+        Url::parse(&format!("file:///{name}.kt")).unwrap()
     }
 
     #[test]
