@@ -1,4 +1,4 @@
-use super::{detect_ss, first_id, has_mod, parse_kotlin};
+use super::{detect_ss, first_id, parse_kotlin};
 use std::path::Path;
 
 #[test]
@@ -24,7 +24,7 @@ fn first_id_no_panic() {
     let src = "class Foo";
     let tree = parse_kotlin(src).unwrap();
     let root = tree.root_node();
-    if let Some(decl) = root.child(0 as u32) {
+    if let Some(decl) = root.child(0) {
         let _id = first_id(&decl, src);
     }
 }

@@ -443,14 +443,14 @@ impl Indexer {
         let sym_loaded = if let Some(sym_idx) =
             crate::indexer::symbol_index::try_load_symbol_index(&cache_path)
         {
-            crate::indexer::symbol_index::populate_from_symbol_index(
-                &sym_idx,
-                &self.definitions,
-            );
+            crate::indexer::symbol_index::populate_from_symbol_index(&sym_idx, &self.definitions);
             for sym_uri in sym_idx.symbols.values().flat_map(|v| v.iter()) {
                 self.library_uris.insert(sym_uri.uri.clone());
             }
-            log::info!("Fast-start definitions via symbol index ({} symbols)", sym_idx.symbols.len());
+            log::info!(
+                "Fast-start definitions via symbol index ({} symbols)",
+                sym_idx.symbols.len()
+            );
             true
         } else {
             false
@@ -479,16 +479,22 @@ impl Indexer {
             ];
 
             for (path_str, entry) in &lib_cache {
-                let Ok(uri) = Url::from_file_path(path_str) else { continue };
+                let Ok(uri) = Url::from_file_path(path_str) else {
+                    continue;
+                };
                 let uri_str = uri.to_string();
                 // When symbol index pre-loaded, just restore FileData.
                 if sym_loaded {
-                    self.files.insert(uri_str, Arc::new(entry.file_data.clone()));
+                    self.files
+                        .insert(uri_str, Arc::new(entry.file_data.clone()));
                 } else {
                     batch.collect_entry(
-                        &uri, &uri_str,
+                        &uri,
+                        &uri_str,
                         std::path::Path::new(path_str.as_str()),
-                        entry, &class_kinds, &workspace_root,
+                        entry,
+                        &class_kinds,
+                        &workspace_root,
                     );
                 }
             }
