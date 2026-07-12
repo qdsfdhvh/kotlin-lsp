@@ -40,8 +40,6 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Need call hierarchy → kotlin-lsp call-hierarchy <file> <line> <col>
    ├─ Need class hierarchy → kotlin-lsp type-hierarchy <Name>
    ├─ Imports are messy → kotlin-lsp organize-imports <file>
-   ├─ Formatting check → kotlin-lsp format check <file/dir>...
-   ├─ Formatting apply → kotlin-lsp format apply <file/dir>...
    ├─ Need batch type injection for a file → kotlin-lsp inject <file>
    ├─ Need signature/type at a declaration → kotlin-lsp hover <file> <line> <col>
    └─ Need signature at a call site → kotlin-lsp find <name> (jump to decl), then hover the decl
@@ -390,9 +388,6 @@ kotlin-lsp insert-override <file> <owner> --content <text>
 When `--name` is provided, generates `override fun <method>() { TODO(...) }`
 at the correct position in the class body.  When `--content` is provided,
 inserts the raw content as-is (for custom overrides with full signatures).
-
-All insert commands support `--dry-run`, `--apply`, and `--json` output.
-#### insert-member, insert-function — class member insertion
 
 ```bash
 kotlin-lsp insert-member <file> <owner> --content <text>

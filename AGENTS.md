@@ -74,7 +74,7 @@ cargo clippy -- -D warnings
     - Create PR: `gh pr create --base main --head feat/xxx --title "..." --body "..."`
     - Wait for CI green, then merge: `gh pr merge --squash`
     - NEVER use `git push origin main` or `git push origin master`
-    - Exception: only for CHANGELOG.md / README.md / AGENTS.md doc fixes that don't touch code
+    - Exceptions: doc-only fixes (CHANGELOG/README/AGENTS/SKILL.md), version bumps, and releases
 
 ## CLI Reference
 
@@ -96,11 +96,28 @@ cargo clippy -- -D warnings
 | Cache stats | `kotlin-lsp cache stats` |
 | Benchmark | `kotlin-lsp benchmark` |
 | Filter by kind | `--kind class,fun,interface` |
+| Callers tree | `kotlin-lsp callers <FILE> <LINE> <COL> [DEPTH]` |
+| Callees tree | `kotlin-lsp callees <FILE> <LINE> <COL> [DEPTH]` |
+| Impact analysis | `kotlin-lsp impact <FILE> <LINE> <COL>` |
+| Symbol overview | `kotlin-lsp summarize <NAME>` |
+| Find tests | `kotlin-lsp find-test <FILE> <LINE> <COL>` |
+| KMP expect/actual | `kotlin-lsp expect-actual <NAME>` |
+| Module deps | `kotlin-lsp modules / module-deps / module-files` |
+| Android resources | `kotlin-lsp android-activities / android-composables` |
+| Format check | `kotlin-lsp format check <FILE>...` |
+| Format apply | `kotlin-lsp format apply <FILE>...` |
+| File inspect | `kotlin-lsp inspect <FILE>` |
 | JSON output | `--json` |
 
 ## Merge Rules
 
 **Never merge until CI is green on all 3 platforms.** Wait for `gh pr checks` to show all pass before merging.
+
+## Project Skills
+
+The project ships agent skills in `.agents/skills/`:
+- **`rust-perf/`** — Performance optimization (profiling, binary size, cold start)
+  tailored for kotlin-lsp's CLI-first profile.
 
 ## How to Release
 
@@ -110,6 +127,3 @@ When asked to "release" or "publish":
 2. Add section to top of `CHANGELOG.md`
 3. Commit, create PR, merge on green CI
 4. `git tag vX.Y.Z && git push origin vX.Y.Z`
-5. GitHub Actions builds release artifacts
-
-## CLI Reference
