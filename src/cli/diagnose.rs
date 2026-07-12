@@ -95,7 +95,7 @@ fn extract_call_info(node: &tree_sitter::Node, source: &str) -> (String, usize) 
 
 fn resolve_arg_count(idx: &Arc<Indexer>, callee: &str, _uri: &Url) -> Option<(usize, String)> {
     let locs = idx.definition_locations(callee);
-    if let Some(loc) = locs.iter().next() {
+    if let Some(loc) = locs.first() {
         let fp = loc.uri.to_file_path().ok()?;
         let src = std::fs::read_to_string(&fp).ok()?;
         let lines: Vec<&str> = src.lines().collect();
