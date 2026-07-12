@@ -408,6 +408,17 @@ pub(super) fn try_load_library_cache(
     Some(cache.entries)
 }
 
+/// Load library cache from a specific file path (for lazy loading by URI).
+pub(super) fn try_load_library_cache_from(path: &Path) -> Option<HashMap<String, FileCacheEntry>> {
+    let raw = std::fs::read(path).ok()?;
+    let bytes = zstd_decompress(&raw).unwrap_or(raw);
+    let cache: IndexCache = bincode::deserialize(&bytes).ok()?;
+    if cache.version != CACHE_VERSION {
+        return None;
+    }
+    Some(cache.entries)
+}
+
 /// Save the library cache for the given source paths.
 ///
 /// Only writes entries whose URI is in `library_uris`.

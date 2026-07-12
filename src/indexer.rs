@@ -682,6 +682,23 @@ impl Indexer {
     }
 }
 
+// ─── lazy library loading ────────────────────────────────────────────────────
+
+impl Indexer {
+    /// Lazily load FileData from the on-disk library cache.
+    pub(crate) fn lazy_load_library_file(&self, uri: &str) -> Option<Arc<FileData>> {
+        if let Some(data) = self.files.get(uri) {
+            return Some(Arc::clone(data.value()));
+        }
+        let cache_path = self.library_cache_path.read().expect("lock").clone()?;
+        let lib_cache = crate::indexer::cache::try_load_library_cache_from(&cache_path)?;
+        lib_cache.get(uri).map(|entry| {
+            let arc = Arc::new(entry.file_data.clone());
+            self.files.insert(uri.to_string(), Arc::clone(&arc));
+            arc
+        })
+    }
+}
 // ─── completion helpers (free functions) ─────────────────────────────────────
 
 /// Returns a slice of `line` up to the UTF-16 column `utf16_col`.

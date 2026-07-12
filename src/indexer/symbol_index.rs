@@ -12,7 +12,7 @@ pub(super) const SYMBOL_INDEX_VERSION: u32 = 11;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(super) struct CompactLoc {
-    uri: String,
+    pub(super) uri: String,
     start_line: u32,
     start_col: u32,
     end_line: u32,
