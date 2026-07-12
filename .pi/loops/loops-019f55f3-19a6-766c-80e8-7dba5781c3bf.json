@@ -1,4 +1,20 @@
 {
-  "nextId": 2,
-  "loops": []
+  "nextId": 5,
+  "loops": [
+    {
+      "id": "4",
+      "prompt": "Check PR #115 CI status with `gh pr checks 115`. If all 3 checks show \"pass\", merge the PR with `gh pr merge 115 --squash --delete-branch`. If any check shows \"fail\", stop and report the failure. If all still \"pending\", let the loop continue.",
+      "trigger": {
+        "type": "cron",
+        "schedule": "*/1 * * * *"
+      },
+      "status": "active",
+      "recurring": true,
+      "createdAt": 1783863995610,
+      "updatedAt": 1783864021200,
+      "expiresAt": 1784468795610,
+      "maxFires": 10,
+      "fireCount": 1
+    }
+  ]
 }

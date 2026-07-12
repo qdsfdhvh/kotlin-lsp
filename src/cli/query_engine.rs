@@ -38,7 +38,6 @@ impl IndexQueryEngine {
     pub(crate) fn new(index: Arc<Indexer>) -> Self {
         Self { index }
     }
-
 }
 
 impl QueryEngine for IndexQueryEngine {
