@@ -23,7 +23,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
-use tower_lsp::lsp_types::{Location, Range, TextEdit, Url};
+use tower_lsp::lsp_types::{Location, Range, SymbolKind, TextEdit, Url};
 
 use crate::indexer::Indexer;
 use crate::parser::parse_by_extension;
@@ -506,6 +506,16 @@ fn resolve_qualified(idx: &Indexer, name: &str, qualifier: &str, from_uri: &Url)
 
     if root.starts_with_uppercase() {
         // ── Uppercase chain: find the root's file and search it for `name` ──
+        // `Foo.member` with `Foo` a class name (not a variable) can only reach a
+        // companion-object member in Kotlin — never an instance member of `Foo`,
+        // even if one shares the name. Try the companion first.
+        if segments.len() == 1 {
+            if let Some(companion_locs) = resolve_companion_member(idx, name, root, from_uri) {
+                if !companion_locs.is_empty() {
+                    return companion_locs;
+                }
+            }
+        }
         // Pass the qualifier's own line as a hint so that when the same field name
         // appears in multiple classes in the same file (e.g. State and Effect both
         // have `toastModel`), we pick the declaration closest *after* the qualifier
@@ -1097,4 +1107,66 @@ impl crate::indexer::Indexer {
     pub(crate) fn fqns_for_name(&self, name: &str) -> Vec<String> {
         fqns_for_name(self, name)
     }
+}
+
+/// Find `name` inside the companion object nested in `class_name`.
+///
+/// `Foo.member` with `Foo` a class name (not a variable) can only ever reach a
+/// companion-object member in Kotlin — never an instance member of `Foo`, even
+/// when one happens to share the name.
+fn resolve_companion_member(
+    idx: &Indexer,
+    name: &str,
+    class_name: &str,
+    from_uri: &Url,
+) -> Option<Vec<Location>> {
+    let file_data = idx.files.get(from_uri.as_str())?;
+    // Find the class declaration's full range.
+    let class_range = file_data
+        .symbols
+        .iter()
+        .find(|symbol| {
+            symbol.name == class_name
+                && matches!(
+                    symbol.kind,
+                    SymbolKind::CLASS
+                        | SymbolKind::INTERFACE
+                        | SymbolKind::OBJECT
+                        | SymbolKind::ENUM
+                        | SymbolKind::STRUCT
+                )
+        })
+        .map(|symbol| symbol.range)?;
+    // Find the companion object inside this class.
+    let companion = file_data.symbols.iter().find(|symbol| {
+        symbol.kind == SymbolKind::OBJECT
+            && symbol
+                .detail
+                .split_whitespace()
+                .any(|token| token == "companion")
+            && range_inside(class_range, symbol.range)
+    })?;
+    // Find `name` inside the companion object.
+    let locs: Vec<Location> = file_data
+        .symbols
+        .iter()
+        .filter(|symbol| {
+            symbol.name == name
+                && symbol.range != companion.range
+                && range_inside(companion.range, symbol.range)
+        })
+        .map(|symbol| Location {
+            uri: from_uri.clone(),
+            range: symbol.selection_range,
+        })
+        .collect();
+    if locs.is_empty() {
+        None
+    } else {
+        Some(locs)
+    }
+}
+
+fn range_inside(outer: Range, inner: Range) -> bool {
+    outer.start <= inner.start && inner.end <= outer.end
 }
