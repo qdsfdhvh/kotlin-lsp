@@ -6,6 +6,7 @@ mod batch;
 mod call_graph;
 mod check;
 mod complete;
+mod diagnose;
 mod doctor;
 mod edit;
 mod expect_actual;
