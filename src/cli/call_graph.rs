@@ -143,10 +143,6 @@ fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
     String::new()
 }
 
-/// Find the enclosing function/method/constructor declaration for a node,
-/// returning its name and position.
-
-
 // ── Callee tree building ────────────────────────────────────────────────────
 
 fn find_callees_tree(
