@@ -107,6 +107,8 @@ pub(crate) struct FileContributions {
     pub qualified: HashMap<String, Location>,
     pub packages: HashMap<String, Vec<String>>,
     pub subtypes: HashMap<String, Vec<Location>>,
+    /// Call edges (callee → [(caller_file, caller_name)]).
+    pub call_edges: HashMap<String, Vec<(String, String)>>,
     pub file_data: (String, Arc<crate::types::FileData>),
     pub content_hash: (String, u64),
 }
@@ -147,6 +149,9 @@ pub(crate) struct Indexer {
     /// Reverse supertype index: supertype name → locations of implementing/extending classes.
     /// Populated during `index_content()` for fast `goToImplementation` lookups.
     pub(crate) subtypes: DashMap<String, Vec<Location>>,
+    /// Call graph edges: callee_name → [(caller_file, caller_name)].
+    /// Built during workspace indexing; used by callers/callees commands.
+    pub(crate) call_edges: DashMap<String, Vec<(String, String)>>,
     /// Cached sorted list of all project class/symbol names for bare-word completion.
     /// Rebuilt after each file index; avoids iterating `definitions` on every keystroke.
     pub(crate) bare_name_cache: std::sync::RwLock<Vec<String>>,
@@ -266,6 +271,7 @@ impl Indexer {
             completion_cache: DashMap::new(),
             live_lines: DashMap::new(),
             subtypes: DashMap::new(),
+            call_edges: DashMap::new(),
             bare_name_cache: std::sync::RwLock::new(Vec::new()),
             last_completion: std::sync::Mutex::new(None),
             root_generation: AtomicU64::new(0),
@@ -299,6 +305,7 @@ impl Indexer {
         self.qualified.clear();
         self.packages.clear();
         self.subtypes.clear();
+        self.call_edges.clear();
         self.content_hashes.clear();
         self.completion_cache.clear();
         self.library_uris.clear();

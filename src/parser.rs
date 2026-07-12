@@ -1796,6 +1796,99 @@ fn extract_constructor_params(detail: &str) -> Vec<String> {
     params
 }
 
+/// Walk a tree-sitter CST and extract (caller_name, callee_name) edges.
+/// For each call_expression node, finds the enclosing function declaration
+/// and the callee identifier.
+pub(crate) fn extract_call_edges(source: &str, lang: crate::Language) -> Vec<(String, String)> {
+    let ts_lang = match lang {
+        crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
+        crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
+        crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),
+    };
+    let mut parser = tree_sitter::Parser::new();
+    parser.set_language(&ts_lang).ok();
+    let Some(tree) = parser.parse(source, None) else {
+        return vec![];
+    };
+
+    let root = tree.root_node();
+    let mut edges = Vec::new();
+    let mut stack: Vec<tree_sitter::Node> = vec![root];
+
+    while let Some(node) = stack.pop() {
+        if node.kind() == "call_expression" {
+            // Find the callee name (first identifier or navigation_expression)
+            let callee = find_callee_name_from_node(&node, source);
+            if let Some(caller) = find_caller_fn_name_from_call(&node, source) {
+                if !callee.is_empty() && !caller.is_empty() {
+                    edges.push((caller, callee));
+                }
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+
+    edges
+}
+
+/// Extract callee name from a call_expression node.
+fn find_callee_name_from_node(node: &tree_sitter::Node, source: &str) -> String {
+    // The first named child of call_expression is typically the callee.
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.is_named() {
+            let kind = child.kind();
+            if kind == "simple_identifier" {
+                return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+            }
+            if kind == "navigation_expression" {
+                // Get the last identifier (method name)
+                return child
+                    .utf8_text(source.as_bytes())
+                    .unwrap_or("")
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or("")
+                    .split('(')
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+            }
+            return String::new();
+        }
+    }
+    String::new()
+}
+
+/// Walk up from a call_expression to find the enclosing function/method declaration.
+fn find_caller_fn_name_from_call(node: &tree_sitter::Node, source: &str) -> Option<String> {
+    let mut parent = node.parent();
+    while let Some(p) = parent {
+        match p.kind() {
+            "function_declaration" | "class_method" => {
+                // Find the simple_identifier child (function name)
+                let mut cursor = p.walk();
+                for child in p.children(&mut cursor) {
+                    if child.kind() == "simple_identifier" {
+                        return child
+                            .utf8_text(source.as_bytes())
+                            .ok()
+                            .map(|s| s.to_string());
+                    }
+                }
+                return None;
+            }
+            _ => {
+                parent = p.parent();
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 #[path = "parser_tests.rs"]
 mod tests;

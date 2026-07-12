@@ -265,6 +265,7 @@ pub(crate) fn symbols_to_filedata(
         rhs_types: Vec::new(),
         method_call_rhs: Vec::new(),
         syntax_errors: Vec::new(),
+        call_edges: Vec::new(),
     };
 
     (fd, definitions)

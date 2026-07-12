@@ -161,7 +161,10 @@ pub(crate) struct FileData {
     /// Each entry is `(declaration_line, var_name, inferred_type)`.
     /// Used as the primary type inference path for indexed files, avoiding fragile string
     /// scanning for patterns like `inject<T>()`, `by lazy { T() }`, and `T(args)`.
-    #[serde(default)]
+    /// Call edges extracted at parse time: (caller_name, callee_name) pairs.
+    /// Used for fast callers/callees graph traversal without re-parsing source.
+    #[serde(default = "Vec::new")]
+    pub call_edges: Vec<(String, String)>,
     pub rhs_types: Vec<(u32, String, String)>,
     /// Method-call RHS patterns for unannotated properties: `val x = receiver.method(args)`.
     /// Each entry is `(declaration_line, var_name, receiver_name, method_name)`.

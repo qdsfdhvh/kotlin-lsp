@@ -56,9 +56,23 @@ pub(crate) async fn run_summarize(name: &str, expand: bool, json: bool) {
             }
         })
         .unwrap_or_else(|| PathBuf::from("."));
-    let source = std::fs::read_to_string(&file_path).unwrap_or_default();
 
-    let summary = build_summary(name, &file_path, &source, loc, expand);
+    // Try fast path: read symbol metadata from indexed FileData.
+    // Only re-parse source for KDoc (and members in --expand).
+    let uri_str = loc.uri.to_string();
+    let indexed_sym = index.files.get(&uri_str).and_then(|f| {
+        f.symbols
+            .iter()
+            .find(|s| s.name == name && s.selection_range.start.line == loc.range.start.line)
+            .cloned()
+    });
+
+    let summary = if let Some(sym) = indexed_sym {
+        build_summary_from_index(name, &sym, &file_path, loc, &index)
+    } else {
+        let source = std::fs::read_to_string(&file_path).unwrap_or_default();
+        build_summary(name, &file_path, &source, loc, expand)
+    };
 
     if json {
         println!(
@@ -367,6 +381,92 @@ fn first_child_simple_id(node: &tree_sitter::Node, source: &str) -> String {
 fn children<'a>(node: &tree_sitter::Node<'a>) -> Vec<tree_sitter::Node<'a>> {
     let mut cursor = node.walk();
     node.children(&mut cursor).collect()
+}
+
+/// Build a SymbolSummary directly from indexed FileData without re-parsing source.
+/// KDoc is not available from the index; use `--expand` + source re-parse for that.
+fn build_summary_from_index(
+    name: &str,
+    sym: &crate::types::SymbolEntry,
+    file_path: &std::path::Path,
+    loc: &tower_lsp::lsp_types::Location,
+    index: &std::sync::Arc<crate::indexer::Indexer>,
+) -> SymbolSummary {
+    let visibility = format!("{:?}", sym.visibility).to_lowercase();
+    let mut modifiers = Vec::new();
+    if sym.deprecated {
+        modifiers.push("deprecated".to_string());
+    }
+    // Infer modifiers from detail/signature text
+    let detail_lower = sym.detail.to_lowercase();
+    for keyword in &[
+        "abstract",
+        "open",
+        "data",
+        "sealed",
+        "suspend",
+        "inline",
+        "override",
+        "tailrec",
+        "operator",
+        "infix",
+        "expect",
+        "actual",
+        "external",
+        "const",
+        "lateinit",
+        "inner",
+        "annotation",
+        "companion",
+    ] {
+        if detail_lower.contains(keyword) {
+            modifiers.push(keyword.to_string());
+        }
+    }
+
+    let signature = if sym.detail.is_empty() {
+        None
+    } else {
+        Some(sym.detail.clone())
+    };
+
+    let kind = format!("{:?}", sym.kind).to_lowercase();
+
+    // Members: look up all non-private symbols in the same file.
+    let members: Vec<MemberSummary> = index
+        .files
+        .get(&loc.uri.to_string())
+        .map(|f| {
+            f.symbols
+                .iter()
+                .filter(|s| s.name != name)
+                .filter(|s| s.visibility != crate::types::Visibility::Private)
+                .map(|s| MemberSummary {
+                    name: s.name.clone(),
+                    kind: format!("{:?}", s.kind).to_lowercase(),
+                    signature: if s.detail.is_empty() {
+                        None
+                    } else {
+                        Some(s.detail.clone())
+                    },
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    SymbolSummary {
+        name: name.to_string(),
+        kind,
+        visibility,
+        modifiers,
+        signature,
+        members,
+        doc: None, // KDoc not in index — only available via source re-parse
+        dependencies: vec![],
+        file: file_path.display().to_string(),
+        line: loc.range.start.line + 1,
+        col: loc.range.start.character + 1,
+    }
 }
 
 fn print_summary(summary: &SymbolSummary, expand: bool) {
