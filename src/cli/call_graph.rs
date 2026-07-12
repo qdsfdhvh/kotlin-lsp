@@ -5,7 +5,7 @@
 //! depth-limited call chains instead of flat lists of locations.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use tower_lsp::lsp_types::Url;
