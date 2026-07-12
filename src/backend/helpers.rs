@@ -152,6 +152,103 @@ pub(super) fn import_diagnostics(lines: &[String], is_kotlin_or_java: bool) -> V
     diags
 }
 
+/// Detect a plain `.` member access on a nullable receiver.
+/// Kotlin requires `?.` or `!!.` to access a member through a nullable type.
+pub(super) fn nullable_receiver_diagnostics(
+    idx: &crate::indexer::Indexer,
+    uri: &Url,
+    text: &str,
+) -> Vec<Diagnostic> {
+    let lang = crate::Language::from_path(uri.path());
+    if lang == crate::Language::Swift {
+        return vec![];
+    }
+
+    let mut parser = tree_sitter::Parser::new();
+    let ts_lang = match lang {
+        crate::Language::Kotlin => tree_sitter_kotlin::LANGUAGE.into(),
+        crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
+        _ => return vec![],
+    };
+    if parser.set_language(&ts_lang).is_err() {
+        return vec![];
+    }
+    let Some(tree) = parser.parse(text, None) else {
+        return vec![];
+    };
+
+    let mut diags = Vec::new();
+    let root = tree.root_node();
+    let mut stack = vec![root];
+
+    while let Some(node) = stack.pop() {
+        if node.kind() == "navigation_expression" {
+            // Only check plain `.` access (not `?.` or `!!.` or `::`).
+            let nav_text = &text[node.start_byte()..node.end_byte()];
+            if !nav_text.contains('.') || nav_text.contains("?.") || nav_text.contains("!!") {
+                // Already using safe-call or non-null assert — no diagnostic needed.
+            } else if let Some(receiver) = first_child_simple_id(&node, text) {
+                let receiver_type =
+                    crate::resolver::infer::infer_variable_type(idx, &receiver, uri);
+                if is_nullable(&receiver_type) {
+                    let member = nav_text.rsplit('.').next().unwrap_or("");
+                    if !member.is_empty() && !is_keyword_or_stdlib_scope(member) {
+                        let start = node.start_position();
+                        let end = node.end_position();
+                        diags.push(Diagnostic {
+                            range: Range {
+                                start: Position::new(start.row as u32, start.column as u32),
+                                end: Position::new(end.row as u32, end.column as u32),
+                            },
+                            severity: Some(DiagnosticSeverity::WARNING),
+                            source: Some("kotlin-lsp".into()),
+                            message: format!(
+                                "'{}.{}': receiver '{receiver}' is nullable ({}). Use '?.' or '!!.' instead", receiver, member, receiver_type.as_deref().unwrap_or("?"),
+                            ),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+    diags
+}
+
+fn first_child_simple_id(node: &tree_sitter::Node<'_>, text: &str) -> Option<String> {
+    let children: Vec<_> = node.children(&mut node.walk()).collect();
+    children
+        .into_iter()
+        .find(|c| c.kind() == "simple_identifier")
+        .and_then(|c| c.utf8_text(text.as_bytes()).ok())
+        .map(|s| s.to_string())
+}
+
+fn is_nullable(type_name: &Option<String>) -> bool {
+    type_name.as_ref().is_some_and(|t| t.ends_with('?'))
+}
+
+fn is_keyword_or_stdlib_scope(name: &str) -> bool {
+    matches!(
+        name,
+        "let"
+            | "also"
+            | "run"
+            | "apply"
+            | "with"
+            | "forEach"
+            | "map"
+            | "filter"
+            | "flatMap"
+            | "takeIf"
+            | "takeUnless"
+    )
+}
+
 #[cfg(test)]
 #[path = "helpers_tests.rs"]
 mod tests;

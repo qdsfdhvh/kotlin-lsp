@@ -465,6 +465,8 @@ impl LanguageServer for Backend {
                 tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
                 let permit = sem.acquire_owned().await;
                 let uri2 = uri.clone();
+                let idx_clone = idx.clone();
+                let text_clone = text.clone();
                 // Move the permit INTO spawn_blocking so it's held for the
                 // entire index_content call.  If this async task is aborted
                 // (debounce cancelled), spawn_blocking still runs to
@@ -484,6 +486,11 @@ impl LanguageServer for Backend {
                         diags.extend(deprecation_diagnostics(&data));
                         diags.extend(inspection_diagnostics(&data.lines));
                         diags.extend(spelling_diagnostics(&data.lines));
+                        diags.extend(helpers::nullable_receiver_diagnostics(
+                            &idx_clone,
+                            &uri2,
+                            &text_clone,
+                        ));
                     }
                     client.publish_diagnostics(uri2, diags, None).await;
                 }
