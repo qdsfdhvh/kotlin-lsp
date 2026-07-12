@@ -1,8 +1,8 @@
 //! Batch query CLI — `kotlin-lsp query` accepts a JSON array of query specs
 //! via stdin and returns results in order. Loads the index only once.
 
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
