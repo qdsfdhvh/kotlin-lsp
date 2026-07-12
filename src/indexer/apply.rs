@@ -104,12 +104,21 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
             .or_default()
             .push(class_loc.clone());
     }
+    // Build call edge index: callee_name → [(caller_file, caller_name)]
+    let mut call_edges: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for (caller, callee) in &result.data.call_edges {
+        call_edges
+            .entry(callee.clone())
+            .or_default()
+            .push((uri_str.clone(), caller.clone()));
+    }
 
     FileContributions {
         definitions,
         qualified,
         packages,
         subtypes,
+        call_edges,
         file_data: (uri_str.clone(), Arc::new(result.data.clone())),
         content_hash: (uri_str, result.content_hash),
     }
@@ -323,6 +332,11 @@ impl Indexer {
                 supertypes.push((super_name.clone(), class_loc.clone()));
             }
         }
+
+        // Extract call edges for fast callers/callees graph traversal.
+        let mut data = data;
+        let lang = crate::Language::from_path(uri.path());
+        data.call_edges = crate::parser::extract_call_edges(content, lang);
 
         FileIndexResult {
             uri: uri.clone(),
@@ -683,6 +697,15 @@ impl Indexer {
                     .any(|l| l.uri == loc.uri && l.range == loc.range)
                 {
                     entry.push(loc);
+                }
+            }
+        }
+
+        for (callee, entries) in contrib.call_edges {
+            let mut edge_entry = self.call_edges.entry(callee).or_default();
+            for entry in entries {
+                if !edge_entry.contains(&entry) {
+                    edge_entry.push(entry);
                 }
             }
         }

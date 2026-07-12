@@ -85,101 +85,39 @@ fn ts_lang(lang: crate::Language) -> tree_sitter::Language {
     }
 }
 
-// ── Caller tree building ────────────────────────────────────────────────────
+// ── Caller tree building (edge-index based) ─────────────────────────────────
 
+/// Find callers using the pre-built call edge index.
+/// The edge index maps callee_name → [(caller_file, caller_name)],
+/// built during workspace indexing. No ripgrep or tree-sitter re-parse needed.
 fn find_callers_tree(
     name: &str,
     index: &Arc<Indexer>,
-    project_root: &Path,
+    _project_root: &Path,
     depth: u32,
     visited: &mut HashSet<String>,
 ) -> Vec<CallNode> {
-    if depth == 0 || !visited.insert(name.to_string()) {
+    if depth == 0 || visited.contains(name) {
         return vec![];
     }
+    visited.insert(name.to_string());
 
-    let mut callers: Vec<CallNode> = Vec::new();
-
-    // Find all files containing references to this name via ripgrep.
-    let escaped = crate::rg::regex_escape(name);
-    let candidates = find_files_containing_name(&escaped, project_root);
-
-    for candidate_file in candidates {
-        if let Ok(content) = std::fs::read_to_string(&candidate_file) {
-            // Use tree-sitter to find actual call sites.
-            let call_nodes = find_call_sites_in_file(
-                name,
-                &candidate_file,
-                &content,
-                index,
-                project_root,
-                depth,
-                visited,
-            );
-            callers.extend(call_nodes);
+    let mut children = Vec::new();
+    if let Some(entries) = index.call_edges.get(name) {
+        let next_depth = if depth == 1 { 0 } else { depth - 1 };
+        for (caller_file, caller_name) in entries.iter() {
+            let child = CallNode {
+                name: caller_name.clone(),
+                kind: "function".to_string(),
+                file: caller_file.clone(),
+                line: 0,
+                col: 0,
+                children: find_callers_tree(caller_name, index, _project_root, next_depth, visited),
+            };
+            children.push(child);
         }
     }
-
-    callers
-}
-
-fn find_call_sites_in_file(
-    target_name: &str,
-    file_path: &Path,
-    source: &str,
-    index: &Arc<Indexer>,
-    project_root: &Path,
-    depth: u32,
-    visited: &mut HashSet<String>,
-) -> Vec<CallNode> {
-    let mut callers: Vec<CallNode> = Vec::new();
-
-    let lang = crate::Language::from_path(file_path.to_str().unwrap_or(""));
-    let mut parser = tree_sitter::Parser::new();
-    parser.set_language(&ts_lang(lang)).ok();
-    let Some(tree) = parser.parse(source, None) else {
-        return callers;
-    };
-
-    let root_node = tree.root_node();
-
-    // Walk all call_expression nodes.
-    let mut stack: Vec<tree_sitter::Node> = vec![root_node];
-    while let Some(node) = stack.pop() {
-        if node.kind() == "call_expression" {
-            let callee_name = extract_callee_name(&node, source);
-            if callee_name == target_name {
-                // Find the enclosing function/method declaration.
-                if let Some((caller_name, caller_line, caller_col)) =
-                    find_enclosing_function(&node, source)
-                {
-                    let key = format!("{}:{}:{}", file_path.display(), caller_name, caller_line);
-                    if !visited.contains(&key) {
-                        visited.insert(key.clone());
-                        let children = if depth > 1 {
-                            find_callers_tree(&caller_name, index, project_root, depth - 1, visited)
-                        } else {
-                            vec![]
-                        };
-                        callers.push(CallNode {
-                            name: caller_name,
-                            kind: "function".to_string(),
-                            file: file_path.display().to_string(),
-                            line: caller_line,
-                            col: caller_col,
-                            children,
-                        });
-                    }
-                }
-            }
-        }
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            stack.push(child);
-        }
-    }
-
-    callers
+    children
 }
 
 /// Extract the callee name from a `call_expression` node.
@@ -207,41 +145,8 @@ fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
 
 /// Find the enclosing function/method/constructor declaration for a node,
 /// returning its name and position.
-fn find_enclosing_function(node: &tree_sitter::Node, source: &str) -> Option<(String, u32, u32)> {
-    let mut cur = *node;
-    loop {
-        match cur.kind() {
-            "function_declaration" | "method_declaration" | "constructor_declaration" => {
-                return extract_function_name_and_pos(&cur, source);
-            }
-            "source_file" | "program" => return None,
-            _ => {
-                let p = cur.parent()?;
-                cur = p
-            }
-        }
-    }
-}
 
 /// Extract the function name and 1-based line/col from a declaration node.
-fn extract_function_name_and_pos(
-    decl: &tree_sitter::Node,
-    source: &str,
-) -> Option<(String, u32, u32)> {
-    let start = decl.start_position();
-    let line = start.row as u32 + 1;
-    let col = start.column as u32 + 1;
-
-    // Find the simple_identifier child that is the function name.
-    let mut cursor = decl.walk();
-    for child in decl.children(&mut cursor) {
-        if child.kind() == "simple_identifier" {
-            let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-            return Some((name, line, col));
-        }
-    }
-    None
-}
 
 // ── Callee tree building ────────────────────────────────────────────────────
 
@@ -422,27 +327,6 @@ fn normalize_line_1(line: u32) -> u32 {
 }
 
 /// Use ripgrep to find files containing a specific regex pattern.
-fn find_files_containing_name(escaped_pattern: &str, root: &Path) -> Vec<PathBuf> {
-    use std::process::Command;
-
-    let mut cmd = Command::new("rg");
-    cmd.args(["--files-with-matches"]);
-    for ext in crate::rg::SOURCE_EXTENSIONS {
-        cmd.args(["--glob", &format!("*.{ext}")]);
-    }
-    cmd.args(["-e", escaped_pattern]);
-    cmd.arg(root);
-
-    let out = match cmd.output() {
-        Ok(o) => o,
-        Err(_) => return vec![],
-    };
-
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(PathBuf::from)
-        .collect()
-}
 
 fn is_keyword(s: &str) -> bool {
     matches!(
@@ -511,3 +395,21 @@ fn print_call_tree(node: &CallNode, indent: usize) {
 #[cfg(test)]
 #[path = "call_graph_tests.rs"]
 mod tests;
+
+fn extract_function_name_and_pos(
+    decl: &tree_sitter::Node,
+    source: &str,
+) -> Option<(String, u32, u32)> {
+    let start = decl.start_position();
+    let line = start.row as u32 + 1;
+    let col = start.column as u32 + 1;
+
+    let mut cursor = decl.walk();
+    for child in decl.children(&mut cursor) {
+        if child.kind() == "simple_identifier" {
+            let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+            return Some((name, line, col));
+        }
+    }
+    None
+}

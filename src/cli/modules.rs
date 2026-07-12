@@ -8,12 +8,12 @@ use serde::Serialize;
 // ── Types ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
-struct ModuleInfo {
-    name: String,
-    path: String,
-    source_sets: Vec<String>,
-    file_count: usize,
-    dependencies: Vec<String>,
+pub(crate) struct ModuleInfo {
+    pub(crate) name: String,
+    pub(crate) path: String,
+    pub(crate) source_sets: Vec<String>,
+    pub(crate) file_count: usize,
+    pub(crate) dependencies: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -120,7 +120,7 @@ pub(crate) fn run_module_files(module: &str, json: bool) {
 
 // ── Module discovery ────────────────────────────────────────────────────────
 
-fn discover_modules() -> Vec<ModuleInfo> {
+pub(crate) fn discover_modules() -> Vec<ModuleInfo> {
     let root = find_project_root();
     discover_modules_in_root(&root)
 }

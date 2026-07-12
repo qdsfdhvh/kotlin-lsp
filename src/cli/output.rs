@@ -31,6 +31,10 @@ pub(crate) struct CliResult {
     pub source_set: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modifiers: Option<Vec<String>>,
 }
 
 impl CliResult {
@@ -49,6 +53,8 @@ impl CliResult {
             owner: None,
             source_set,
             signature: None,
+            visibility: None,
+            modifiers: None,
         })
     }
 

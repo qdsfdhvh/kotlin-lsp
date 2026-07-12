@@ -27,6 +27,12 @@ pub(crate) struct ResultFilters {
     pub exclude_imports: bool,
     /// Reference classification filter: call, read, write, override, import, type-use.
     pub ref_kind: Option<String>,
+    /// Symbol visibility filter: public, internal, protected, private.
+    pub visibility: Option<String>,
+    /// Comma-separated list of modifiers to filter by (e.g. `abstract,suspend,open`).
+    pub modifiers: Vec<String>,
+    /// Enable fuzzy (subsequence) matching for find/refs queries.
+    pub fuzzy: bool,
 }
 
 #[derive(Debug)]
@@ -109,6 +115,8 @@ pub(crate) enum Subcommand {
         /// Sub-command: `stats`, `verify`.
         sub: String,
     },
+    /// Batch query: read JSON query specs from stdin and return results.
+    Query,
     /// Run project diagnostics: source roots, cache health, library sources, etc.
     Doctor {
         /// Show verbose diagnostics.
@@ -154,6 +162,32 @@ pub(crate) enum Subcommand {
         name: String,
         subtypes: bool,
         supertypes: bool,
+    },
+    /// Find all implementations of an interface/abstract class.
+    Implementations {
+        name: String,
+        depth: u32,
+    },
+    /// Find all subclasses of a class.
+    Subclasses {
+        name: String,
+        depth: u32,
+    },
+    /// Find files that import a given symbol.
+    ImportsOf {
+        name: String,
+    },
+    /// Find symbols annotated with a given annotation.
+    Annotated {
+        annotation: String,
+    },
+    /// Show package-level dependencies.
+    PackageDeps {
+        package: String,
+    },
+    /// Full-text search over symbol signatures/KDoc.
+    Docs {
+        query: String,
     },
     /// Call graph: find who calls this function (tree output).
     Callers {
@@ -397,6 +431,9 @@ struct ParsedCliFlags {
     owner_filter: Option<String>,
     expand: usize,
     exclude_imports: bool,
+    fuzzy_filter: bool,
+    visibility_filter: Option<String>,
+    modifier_filter: Option<String>,
     ref_kind: Option<String>,
     diagnose: bool,
     name_arg: Option<String>,
@@ -466,6 +503,9 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         type_supertypes: false,
         expand: 0,
         exclude_imports: false,
+        fuzzy_filter: false,
+        visibility_filter: None,
+        modifier_filter: None,
         ref_kind: None,
         diagnose: false,
         name_arg: None,
@@ -611,6 +651,9 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         type_subtypes,
         type_supertypes,
         exclude_imports,
+        fuzzy_filter,
+        visibility_filter,
+        modifier_filter,
         expand,
         owner_filter,
         ref_kind,
@@ -627,7 +670,13 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         source_sets: source_set_filter,
         owner: owner_filter,
         exclude_imports,
+        fuzzy: fuzzy_filter,
         ref_kind,
+        visibility: visibility_filter,
+        modifiers: modifier_filter
+            .as_ref()
+            .map(|m| m.split(',').map(str::to_owned).collect())
+            .unwrap_or_default(),
     };
     match subcommand {
         "find" => Ok(Subcommand::Find {
@@ -901,6 +950,47 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 outgoing: true,
             })
         }
+        "implementations" => {
+            let name = positionals
+                .first()
+                .cloned()
+                .ok_or("implementations requires a NAME argument")?;
+            let depth = positionals.get(1).and_then(|d| d.parse().ok()).unwrap_or(1);
+            Ok(Subcommand::Implementations { name, depth })
+        }
+        "subclasses" => {
+            let name = positionals
+                .first()
+                .cloned()
+                .ok_or("subclasses requires a NAME argument")?;
+            let depth = positionals.get(1).and_then(|d| d.parse().ok()).unwrap_or(1);
+            Ok(Subcommand::Subclasses { name, depth })
+        }
+        "imports-of" => {
+            let name = positionals
+                .first()
+                .cloned()
+                .ok_or("imports-of requires a NAME argument")?;
+            Ok(Subcommand::ImportsOf { name })
+        }
+        "annotated" => {
+            let annotation = positionals
+                .first()
+                .cloned()
+                .ok_or("annotated requires an ANNOTATION argument")?;
+            Ok(Subcommand::Annotated { annotation })
+        }
+        "package-deps" => {
+            let package = positionals.first().cloned().unwrap_or_default();
+            Ok(Subcommand::PackageDeps { package })
+        }
+        "docs" => {
+            let query = positionals
+                .first()
+                .cloned()
+                .ok_or("docs requires a QUERY argument")?;
+            Ok(Subcommand::Docs { query })
+        }
         "type-hierarchy" => {
             build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes)
         }
@@ -935,6 +1025,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let args = positionals; // positional args after 'skills'
             Ok(Subcommand::Skills { args })
         }
+        "query" => Ok(Subcommand::Query),
         "doctor" => Ok(Subcommand::Doctor {
             verbose: parsed.verbose,
             json: parsed.fmt == OutputFmt::Json,

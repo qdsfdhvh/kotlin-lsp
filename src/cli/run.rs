@@ -357,6 +357,9 @@ pub(crate) async fn run(args: CliArgs) {
     let flat = args.flat;
 
     match args.subcommand {
+        Subcommand::Query => {
+            crate::cli::batch_query::run_query(json).await;
+        }
         Subcommand::Index => {
             let root = resolve_root(args.root.as_deref());
             run_index(&root, verbose).await
@@ -1048,6 +1051,24 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             run_type_hierarchy(&name, subtypes, supertypes, json).await;
         }
+        Subcommand::Implementations { name, depth } => {
+            crate::cli::inheritance::run_implementations(&name, depth, json).await;
+        }
+        Subcommand::Subclasses { name, depth } => {
+            crate::cli::inheritance::run_subclasses(&name, depth, json).await;
+        }
+        Subcommand::ImportsOf { name } => {
+            crate::cli::symbol_queries::run_imports_of(&name, json);
+        }
+        Subcommand::Annotated { annotation } => {
+            crate::cli::symbol_queries::run_annotated(&annotation, json);
+        }
+        Subcommand::PackageDeps { package } => {
+            crate::cli::symbol_queries::run_package_deps(&package, json);
+        }
+        Subcommand::Docs { query } => {
+            crate::cli::symbol_queries::run_docs(&query, json);
+        }
     }
 }
 
@@ -1074,12 +1095,26 @@ async fn run_find(
     name: &str,
     filters: &ResultFilters,
 ) {
-    let results = match effective_mode(mode, root, "find", verbose) {
+    let mut results = match effective_mode(mode, root, "find", verbose) {
         Mode::Fast => fast_find(name, root),
         _ => {
             let index = build_index(root, false).await;
             smart_find(&index, name, root, filters)
         }
+    };
+    // Apply fuzzy matching if requested
+    let results = if filters.fuzzy && !results.is_empty() {
+        let scored = crate::cli::fuzzy::fuzzy_find(
+            name,
+            &results.iter().map(|r| r.name.clone()).collect::<Vec<_>>(),
+            filters.limit.unwrap_or(20),
+        );
+        let scored_names: std::collections::HashSet<&str> =
+            scored.iter().map(|(n, _)| n.as_str()).collect();
+        results.retain(|r| scored_names.contains(r.name.as_str()));
+        results
+    } else {
+        results
     };
     let results = apply_filters(results, root, filters);
     exit_if_empty(
