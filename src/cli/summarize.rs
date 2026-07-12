@@ -44,7 +44,18 @@ pub(crate) async fn run_summarize(name: &str, expand: bool, json: bool) {
     let file_path = loc
         .uri
         .to_file_path()
-        .unwrap_or_else(|_| PathBuf::from("."));
+        .ok()
+        .or_else(|| {
+            // Fallback: try relative path against workspace root
+            let path_str = loc.uri.path().trim_start_matches('/');
+            let candidate = root.join(path_str);
+            if candidate.exists() {
+                Some(candidate)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| PathBuf::from("."));
     let source = std::fs::read_to_string(&file_path).unwrap_or_default();
 
     let summary = build_summary(name, &file_path, &source, loc, expand);

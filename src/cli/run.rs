@@ -1398,7 +1398,8 @@ pub(crate) fn extract_type_names(sig: &str) -> Vec<String> {
 async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize) {
     let root = resolve_root_for_file(None, file);
     let index = build_index(&root, false).await;
-    let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
+    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
 
     let word: String = {
