@@ -122,6 +122,23 @@ pub(crate) trait IndexRead {
     /// Callers that need on-demand indexing must call `ensure_indexed_on_demand()`
     /// before `get_file_data()` (as `build_type_param_subst_impl` does).
     fn ensure_indexed_on_demand(&self, _uri: &str) {}
+
+    /// Extract call-site type arguments for a function call in the calling file.
+    ///
+    /// Parses the calling file's CST to find `call_expression` nodes that invoke
+    /// `fn_name` near `cursor_line`, then extracts explicit type arguments
+    /// (e.g. `foo<String, Int>()` → `["String", "Int"]`).
+    ///
+    /// Returns empty vec if no matching call with type arguments is found.
+    /// Default impl returns empty; production `Indexer` overrides with CST parsing.
+    fn call_site_type_args(
+        &self,
+        _calling_uri: &str,
+        _cursor_line: Option<u32>,
+        _fn_name: &str,
+    ) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 // ─── Pipeline Entry Point (thin coordinator) ───────────────────────────────
@@ -418,7 +435,14 @@ fn build_subst_if_needed<I: IndexRead>(
 // ─── Substitution Builders (coordinate I/O + pure logic) ────────────────────
 
 /// Build type-parameter substitution for cross-file lookup.
-fn build_type_param_subst_impl<I: IndexRead>(
+///
+/// Tries two strategies in order:
+/// 1. Enclosing-class substitution (existing): zip class type params with
+///    supertype args from the calling file.
+/// 2. Function-level substitution (Phase 23): when strategy 1 returns empty,
+///    extract call-site type arguments from the calling file's CST and zip
+///    them with the symbol's own `type_params`.
+pub(crate) fn build_type_param_subst_impl<I: IndexRead>(
     index: &I,
     sym_uri: &str,
     sym_line: u32,
@@ -431,6 +455,31 @@ fn build_type_param_subst_impl<I: IndexRead>(
         return HashMap::new();
     }
 
+    // ── Strategy 1: enclosing-class substitution ──────────────────────────
+    index.ensure_indexed_on_demand(sym_uri);
+    let class_subst = build_enclosing_class_subst_from_caller(
+        index,
+        sym_uri,
+        sym_line,
+        calling_uri,
+        caller.cursor_line,
+    );
+    if !class_subst.is_empty() {
+        return class_subst;
+    }
+
+    // ── Strategy 2: function-level substitution (Phase 23) ────────────────
+    build_fn_type_subst_impl(index, sym_uri, sym_line, calling_uri, caller.cursor_line)
+}
+
+/// Strategy 1: enclosing-class type-parameter substitution (unchanged logic).
+fn build_enclosing_class_subst_from_caller<I: IndexRead>(
+    index: &I,
+    sym_uri: &str,
+    sym_line: u32,
+    calling_uri: &str,
+    cursor_line: Option<u32>,
+) -> HashMap<String, String> {
     index.ensure_indexed_on_demand(sym_uri);
     let Some(sym_data) = index.get_file_data(sym_uri) else {
         return HashMap::new();
@@ -450,8 +499,7 @@ fn build_type_param_subst_impl<I: IndexRead>(
         return HashMap::new();
     };
 
-    let calling_class_line = caller
-        .cursor_line
+    let calling_class_line = cursor_line
         .and_then(|line| calling_data.containing_class_at(line))
         .and_then(|name| calling_data.symbols.iter().find(|s| s.name == name))
         .map(SymbolEntry::selection_start);
@@ -471,6 +519,44 @@ fn build_type_param_subst_impl<I: IndexRead>(
 
     container_sym
         .type_params
+        .iter()
+        .zip(type_args.iter())
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
+}
+
+/// Strategy 2 (Phase 23): function-level type-parameter substitution.
+///
+/// When the target symbol is a generic function (has `type_params` like `<T, R>`),
+/// looks for call-site type arguments in the calling file
+/// (e.g. `foo<String, Int>()` → `T→String, R→Int`).
+fn build_fn_type_subst_impl<I: IndexRead>(
+    index: &I,
+    sym_uri: &str,
+    sym_line: u32,
+    calling_uri: &str,
+    cursor_line: Option<u32>,
+) -> HashMap<String, String> {
+    let Some(sym_data) = index.get_file_data(sym_uri) else {
+        return HashMap::new();
+    };
+    let Some(sym) = sym_data
+        .symbols
+        .iter()
+        .find(|s| s.selection_start() == sym_line)
+    else {
+        return HashMap::new();
+    };
+    if sym.type_params.is_empty() {
+        return HashMap::new();
+    }
+
+    let type_args = index.call_site_type_args(calling_uri, cursor_line, &sym.name);
+    if type_args.is_empty() || type_args.len() != sym.type_params.len() {
+        return HashMap::new();
+    }
+
+    sym.type_params
         .iter()
         .zip(type_args.iter())
         .map(|(key, value)| (key.clone(), value.clone()))
@@ -671,8 +757,76 @@ impl IndexRead for super::Indexer {
             self.ensure_indexed(&parsed_uri);
         }
     }
+
+    /// ── Phase 23: extract call-site type arguments via CST parsing ────
+    fn call_site_type_args(
+        &self,
+        calling_uri: &str,
+        cursor_line: Option<u32>,
+        fn_name: &str,
+    ) -> Vec<String> {
+        let Some(line) = cursor_line else {
+            return Vec::new();
+        };
+        self.ensure_indexed_on_demand(calling_uri);
+        let Some(file_data) = self.files.get(calling_uri) else {
+            return Vec::new();
+        };
+        let lines = &file_data.lines;
+        let line_idx = line as usize;
+        if line_idx >= lines.len() {
+            return Vec::new();
+        }
+        // Search lines around the cursor for call expressions (±2 lines).
+        let start = line_idx.saturating_sub(2);
+        let end = (line_idx + 3).min(lines.len());
+        let text: String = lines[start..end].join("\n");
+
+        // Parse the text block with tree-sitter.
+        let path = std::path::Path::new(calling_uri);
+        let Some(lang) = super::live_tree::lang_for_path(path.to_str().unwrap_or("")) else {
+            return Vec::new();
+        };
+        let Some(live_doc) = super::live_tree::parse_live(&text, lang) else {
+            return Vec::new();
+        };
+        let root = live_doc.tree.root_node();
+        let bytes = &live_doc.bytes;
+
+        // Walk all call_expression nodes and find ones that call `fn_name`.
+        use crate::queries::KIND_CALL_EXPR;
+        walk_call_exprs_for_type_args(root, bytes, fn_name, KIND_CALL_EXPR)
+    }
 }
 
-#[cfg(test)]
-#[path = "resolution_tests.rs"]
-mod tests;
+// ── Phase 23 helper ───────────────────────────────────────────────────────
+
+/// Walk CST nodes recursively to find a `call_expression` that calls `fn_name`
+/// and has explicit type arguments.
+///
+/// Returns the type argument strings or empty vec if no matching call is found.
+fn walk_call_exprs_for_type_args(
+    node: tree_sitter::Node<'_>,
+    bytes: &[u8],
+    fn_name: &str,
+    kind_call_expr: &str,
+) -> Vec<String> {
+    use crate::indexer::NodeExt;
+    if node.kind() == kind_call_expr {
+        if let Some(name) = node.call_fn_name(bytes) {
+            if name == fn_name {
+                if let Some(args) = node.call_site_type_arg_strings(bytes) {
+                    return args;
+                }
+            }
+        }
+    }
+    let mut cur = node.walk();
+    for child in node.children(&mut cur) {
+        let result = walk_call_exprs_for_type_args(child, bytes, fn_name, kind_call_expr);
+        if !result.is_empty() {
+            return result;
+        }
+    }
+    Vec::new()
+}

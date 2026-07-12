@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "kotlin-lsp"
-version = "0.24.0"
+version = "0.24.1"
 dependencies = [
  "bincode",
  "dashmap",

@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use tower_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, InsertTextFormat, SymbolKind,
-    Url,
+    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, InsertTextFormat, Position,
+    SymbolKind, Url,
 };
 
+use crate::indexer::resolution::IndexRead;
 use crate::indexer::Indexer;
 use crate::parser::parse_by_extension;
 use crate::stdlib::bare_completions;
@@ -159,7 +160,14 @@ pub(crate) fn complete_symbol_with_context(
             false,
         );
     }
-    complete_bare(idx, prefix, from_uri, snippets, annotation_only)
+    complete_bare(
+        idx,
+        prefix,
+        from_uri,
+        snippets,
+        annotation_only,
+        cursor_line,
+    )
 }
 
 /// Detect whether the character immediately before `prefix` in `line` is `@`.
@@ -1125,6 +1133,7 @@ pub(crate) fn complete_bare(
     from_uri: &Url,
     snippets: bool,
     annotation_only: bool,
+    cursor_line: Option<u32>,
 ) -> (Vec<CompletionItem>, bool) {
     let mut completion_walk =
         BareCompletionWalk::new(idx, prefix, from_uri, snippets, annotation_only);
@@ -1132,7 +1141,119 @@ pub(crate) fn complete_bare(
     completion_walk.collect_same_package();
     completion_walk.collect_cross_package();
     completion_walk.collect_stdlib();
-    completion_walk.finish()
+    let (mut items, hit_cap) = completion_walk.finish();
+
+    // ── Phase 26: implicit receiver (this) member completions ────────────
+    add_implicit_receiver_completions(idx, from_uri, cursor_line, prefix, &mut items);
+
+    (items, hit_cap)
+}
+
+// ── Phase 26: implicit receiver (this) member completions ─────────────────
+
+/// Add members of the implicit receiver (`this`) to bare completion lists.
+///
+/// When the cursor is inside a class body or scope-function lambda, the class's
+/// non-private members should be included in bare (no-dot) completion results.
+fn add_implicit_receiver_completions(
+    idx: &Indexer,
+    from_uri: &Url,
+    cursor_line: Option<u32>,
+    prefix: &str,
+    items: &mut Vec<CompletionItem>,
+) {
+    let Some(cursor_line) = cursor_line else {
+        return;
+    };
+    // Resolve the type of `this` at the cursor position.
+    let position = Position::new(cursor_line, 0);
+    let this_type = idx
+        .infer_lambda_param_type_at("this", from_uri, position)
+        .or_else(|| idx.enclosing_class_at(from_uri, cursor_line));
+    let Some(receiver_type) = this_type else {
+        return;
+    };
+    if receiver_type.is_empty() {
+        return;
+    }
+
+    // Find the class definition via the definitions index.
+    let locs = match idx.get_definitions(&receiver_type) {
+        Some(l) if !l.is_empty() => l,
+        _ => return,
+    };
+
+    for loc in &locs {
+        let Some(file_data) = idx.files.get(loc.uri.as_str()) else {
+            continue;
+        };
+        let class_line = loc.range.start.line;
+        // Find the class symbol to determine its body end line.
+        let class_end = file_data
+            .symbols
+            .iter()
+            .find(|s| {
+                s.name == receiver_type
+                    && matches!(
+                        s.kind,
+                        SymbolKind::CLASS
+                            | SymbolKind::INTERFACE
+                            | SymbolKind::STRUCT
+                            | SymbolKind::ENUM
+                            | SymbolKind::OBJECT
+                    )
+                    && s.range.start.line == class_line
+            })
+            .map(|s| s.range.end.line)
+            .unwrap_or(u32::MAX);
+
+        for sym in file_data.symbols.iter() {
+            let sl = sym.selection_start();
+            if sl < class_line || sl > class_end {
+                continue;
+            }
+            // Skip the class itself (we're adding its members).
+            if sym.name == receiver_type
+                && matches!(
+                    sym.kind,
+                    SymbolKind::CLASS
+                        | SymbolKind::INTERFACE
+                        | SymbolKind::STRUCT
+                        | SymbolKind::ENUM
+                        | SymbolKind::OBJECT
+                )
+            {
+                continue;
+            }
+            // Skip private members.
+            if matches!(sym.visibility, crate::types::Visibility::Private) {
+                continue;
+            }
+            // Filter by prefix (case-insensitive).
+            if !sym.name.to_lowercase().starts_with(&prefix.to_lowercase()) {
+                continue;
+            }
+            // Dedup — don't re-add symbols already in the completion list.
+            if items.iter().any(|i| i.label == sym.name) {
+                continue;
+            }
+
+            let mut item = CompletionItem {
+                label: sym.name.clone(),
+                detail: if sym.detail.is_empty() {
+                    None
+                } else {
+                    Some(sym.detail.clone())
+                },
+                sort_text: Some(format!("09:{}", sym.name)),
+                ..Default::default()
+            };
+            if let Some(completion_kind) = Some(symbol_kind_to_completion(sym.kind)) {
+                item.kind = Some(completion_kind);
+            }
+            items.push(item);
+        }
+    }
 }
 
 /// Collect all symbols from a file URI as completion items.
@@ -1524,7 +1645,7 @@ impl crate::indexer::Indexer {
         snippets: bool,
         annotation_only: bool,
     ) -> (Vec<CompletionItem>, bool) {
-        complete_bare(self, prefix, from_uri, snippets, annotation_only)
+        complete_bare(self, prefix, from_uri, snippets, annotation_only, None)
     }
     pub(super) fn complete_super_w(&self, from_uri: &Url, snippets: bool) -> Vec<CompletionItem> {
         complete_super(self, from_uri, snippets)

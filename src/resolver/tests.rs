@@ -1102,7 +1102,7 @@ fn complete_bare_local_before_same_pkg() {
     // same-package file has "pkgBar"
     idx.index_content(&other_uri, "package a\nfun pkgBar() {}");
 
-    let (items, _) = complete_bare(&idx, "", &local_uri, false, false);
+    let (items, _) = complete_bare(&idx, "", &local_uri, false, false, None);
 
     let local_pos = items.iter().position(|i| i.label == "localFoo");
     let pkg_pos = items.iter().position(|i| i.label == "pkgBar");
@@ -1674,7 +1674,7 @@ fn library_file_appears_in_cross_package_completion() {
     );
     idx.index_content(&cur_uri, "package com.example\n");
 
-    let (items, _) = complete_bare(&idx, "Comp", &cur_uri, false, false);
+    let (items, _) = complete_bare(&idx, "Comp", &cur_uri, false, false, None);
     assert!(
         items.iter().any(|i| i.label == "Composable"),
         "Composable from library file must appear for prefix 'Comp'"
@@ -1687,7 +1687,7 @@ fn library_file_appears_in_cross_package_completion() {
         "Composable completion must include an auto-import text edit"
     );
 
-    let (items2, _) = complete_bare(&idx, "Col", &cur_uri, false, false);
+    let (items2, _) = complete_bare(&idx, "Col", &cur_uri, false, false, None);
     assert!(
         items2.iter().any(|i| i.label == "Column"),
         "Column (fun) from library file must appear for prefix 'Col'"
