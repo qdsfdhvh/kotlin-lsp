@@ -321,8 +321,6 @@ fn normalize_line_1(line: u32) -> u32 {
     }
 }
 
-/// Use ripgrep to find files containing a specific regex pattern.
-
 fn is_keyword(s: &str) -> bool {
     matches!(
         s,

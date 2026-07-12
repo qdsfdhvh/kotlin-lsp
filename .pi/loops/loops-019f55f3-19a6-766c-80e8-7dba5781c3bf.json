@@ -1,20 +1,4 @@
 {
   "nextId": 10,
-  "loops": [
-    {
-      "id": "9",
-      "prompt": "Report PR #115 final result: merged or still failing.",
-      "trigger": {
-        "type": "event",
-        "source": "monitor:done",
-        "filter": "{\"monitorId\":\"8\"}"
-      },
-      "status": "active",
-      "recurring": false,
-      "createdAt": 1783866381479,
-      "updatedAt": 1783866381479,
-      "expiresAt": 1784471181479,
-      "fireCount": 0
-    }
-  ]
+  "loops": []
 }
