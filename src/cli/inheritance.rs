@@ -66,7 +66,9 @@ pub(crate) fn find_implementors(
     if let Some(locs) = index.subtypes.get(super_name) {
         let next_depth = if depth == 1 { 0 } else { depth - 1 };
         for loc in locs.iter() {
-            let file_str = loc.uri.to_file_path()
+            let file_str = loc
+                .uri
+                .to_file_path()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| loc.uri.path().to_string());
             let class_name = std::path::Path::new(&file_str)
@@ -125,8 +127,14 @@ mod tests {
             let loc = Location {
                 uri: uri.clone(),
                 range: Range {
-                    start: Position { line: 0, character: 0 },
-                    end: Position { line: 0, character: 0 },
+                    start: Position {
+                        line: 0,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: 0,
+                        character: 0,
+                    },
                 },
             };
             index
