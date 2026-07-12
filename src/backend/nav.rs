@@ -165,7 +165,7 @@ impl Backend {
         let mut queue: Vec<String> = locs
             .iter()
             .filter_map(|loc| {
-                let data = self.indexer.files.get(loc.uri.as_str())?;
+                let data = self.indexer.get_file(loc.uri.as_str())?;
                 data.symbols
                     .iter()
                     .find(|s| s.selection_range == loc.range)
@@ -185,7 +185,7 @@ impl Backend {
                         .any(|l| l.uri == loc.uri && l.range == loc.range)
                     {
                         locs.push(loc.clone());
-                        if let Some(data) = self.indexer.files.get(loc.uri.as_str()) {
+                        if let Some(data) = self.indexer.get_file(loc.uri.as_str()) {
                             if let Some(sym) =
                                 data.symbols.iter().find(|s| s.selection_range == loc.range)
                             {
@@ -213,7 +213,7 @@ impl Backend {
             .map(|v| v.clone())
             .unwrap_or_default();
         for loc in &locs {
-            if let Some(file) = self.indexer.files.get(loc.uri.as_str()) {
+            if let Some(file) = self.indexer.get_file(loc.uri.as_str()) {
                 let names: Vec<String> = file
                     .supers
                     .iter()

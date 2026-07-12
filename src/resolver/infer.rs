@@ -111,7 +111,7 @@ fn infer_variable_type_impl(idx: &Indexer, var_name: &str, uri: &Url, depth: u8)
                 return result;
             }
             (*ll).clone()
-        } else if let Some(data) = idx.files.get(uri.as_str()) {
+        } else if let Some(data) = idx.get_file(uri.as_str()) {
             if let result @ Some(_) = data.lines.infer_type(var_name) {
                 return result;
             }
@@ -168,7 +168,7 @@ fn infer_variable_type_raw_impl(
                 return result;
             }
             (*ll).clone()
-        } else if let Some(data) = idx.files.get(uri.as_str()) {
+        } else if let Some(data) = idx.get_file(uri.as_str()) {
             if let result @ Some(_) = data.lines.infer_type_raw(var_name) {
                 return result;
             }
@@ -303,7 +303,7 @@ pub(crate) fn infer_field_type_raw(
     if let Some(live) = idx.live_lines.get(file_uri) {
         return live.infer_type_raw(field_name);
     }
-    if let Some(data) = idx.files.get(file_uri) {
+    if let Some(data) = idx.get_file(file_uri) {
         return data.lines.infer_type_raw(field_name);
     }
     let path = tower_lsp::lsp_types::Url::parse(file_uri)
@@ -711,7 +711,7 @@ fn infer_method_return_type(
 pub(crate) fn find_fun_return_type_by_name(idx: &Indexer, fn_name: &str) -> Option<String> {
     let locations = idx.definitions.get(fn_name)?;
     for loc in locations.iter() {
-        if let Some(file_data) = idx.files.get(loc.uri.as_str()) {
+        if let Some(file_data) = idx.get_file(loc.uri.as_str()) {
             for sym in &file_data.symbols {
                 if sym.name != fn_name {
                     continue;
@@ -744,7 +744,7 @@ pub(crate) fn find_method_return_type(
     let type_base = type_name.split('.').next_back().unwrap_or(type_name);
     let locations = idx.definitions.get(type_base)?;
     for loc in locations.iter() {
-        if let Some(file_data) = idx.files.get(loc.uri.as_str()) {
+        if let Some(file_data) = idx.get_file(loc.uri.as_str()) {
             // Find the class entry for type_base so we can do range containment
             // filtering — avoids picking a same-named method from an unrelated class
             // in the same file.

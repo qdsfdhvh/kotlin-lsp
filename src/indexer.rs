@@ -698,6 +698,16 @@ impl Indexer {
             arc
         })
     }
+
+    /// Get FileData for a URI, with transparent lazy loading from library cache.
+    /// This is the primary access point — callers that used `self.files.get()`
+    /// should use this instead so library files are available after fast start.
+    pub(crate) fn get_file(&self, uri: &str) -> Option<Arc<FileData>> {
+        if let Some(data) = self.files.get(uri) {
+            return Some(Arc::clone(data.value()));
+        }
+        self.lazy_load_library_file(uri)
+    }
 }
 // ─── completion helpers (free functions) ─────────────────────────────────────
 

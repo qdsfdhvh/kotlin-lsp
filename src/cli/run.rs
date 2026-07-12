@@ -1674,7 +1674,7 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
 
 async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, _expand: usize) {
     let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
-    let data = index.files.get(uri.as_str());
+    let data = index.get_file(uri.as_str());
     let package: String = data
         .as_ref()
         .and_then(|d| d.package.clone())
@@ -1742,7 +1742,7 @@ async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, json: 
     let mut super_list: Vec<(String, tower_lsp::lsp_types::Location)> = Vec::new();
     if let Some(locs) = index.definitions.get(name) {
         for loc in locs.iter() {
-            if let Some(data) = index.files.get(loc.uri.as_str()) {
+            if let Some(data) = index.get_file(loc.uri.as_str()) {
                 for sym in &data.symbols {
                     if sym.selection_start() == loc.range.start.line {
                         for (_, sn, _) in &data.supers {

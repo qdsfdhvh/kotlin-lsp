@@ -212,7 +212,7 @@ impl ExtensionCompletionContext {
             .live_lines
             .get(from_uri.as_str())
             .map(|lines| lines.clone());
-        let Some(file) = idx.files.get(from_uri.as_str()) else {
+        let Some(file) = idx.get_file(from_uri.as_str()) else {
             let lines = live_lines.clone().unwrap_or_default();
             return Self {
                 from_uri: from_uri.as_str().to_owned(),
@@ -378,7 +378,7 @@ fn package_of_fqn(fqn: &str) -> &str {
 }
 
 fn complete_super(idx: &Indexer, from_uri: &Url, snippets: bool) -> Vec<CompletionItem> {
-    if idx.files.get(from_uri.as_str()).is_none() {
+    if idx.get_file(from_uri.as_str()).is_none() {
         return vec![];
     }
 
@@ -904,7 +904,7 @@ impl<'a> BareCompletionWalk<'a> {
     }
 
     fn collect_local_file(&mut self) {
-        let Some(file) = self.indexer.files.get(self.from_uri.as_str()) else {
+        let Some(file) = self.indexer.get_file(self.from_uri.as_str()) else {
             return;
         };
 
@@ -947,7 +947,7 @@ impl<'a> BareCompletionWalk<'a> {
             if package_uri == self.from_uri.as_str() {
                 continue;
             }
-            let Some(file) = self.indexer.files.get(package_uri.as_str()) else {
+            let Some(file) = self.indexer.get_file(package_uri.as_str()) else {
                 continue;
             };
             for symbol in &file.symbols {
@@ -1153,7 +1153,7 @@ fn build_completion_items(idx: &Indexer, file_uri: &str) -> Vec<CompletionItem> 
     let mut items = Vec::new();
 
     // From index if available.
-    if let Some(f) = idx.files.get(file_uri) {
+    if let Some(f) = idx.get_file(file_uri) {
         for sym in &f.symbols {
             let ck = symbol_kind_to_completion(sym.kind);
             let vt = vis_tag(sym.visibility);

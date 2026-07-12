@@ -75,7 +75,7 @@ fn find_fun_signature(fn_name: &str, idx: &Indexer, uri: &Url) -> Option<String>
     let locs = idx.resolve_symbol_no_rg(fn_name, uri);
     for loc in &locs {
         let file_uri_str = loc.uri.as_str();
-        if let Some(data) = idx.files.get(file_uri_str) {
+        if let Some(data) = idx.get_file(file_uri_str) {
             let start_line = loc.range.start.line as usize;
             if let Some(sig) = collect_params_from_line(&data.lines, start_line) {
                 return Some(sig);
@@ -145,7 +145,7 @@ pub(crate) fn collect_all_fun_params_texts(
     uri_str: &str,
     idx: &Indexer,
 ) -> Vec<String> {
-    let data = match idx.files.get(uri_str) {
+    let data = match idx.get_file(uri_str) {
         Some(d) => d,
         None => return vec![],
     };
@@ -434,7 +434,7 @@ pub(crate) fn find_fun_signature_with_receiver(
         };
         let locs = idx.resolve_symbol(&rt.outer, None, uri);
         for loc in &locs {
-            if let Some(data) = idx.files.get(loc.uri.as_str()) {
+            if let Some(data) = idx.get_file(loc.uri.as_str()) {
                 if let Some(sig) = collect_fun_params_text(name, loc.uri.as_str(), idx) {
                     return sig;
                 }

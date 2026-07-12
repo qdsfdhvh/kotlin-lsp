@@ -67,8 +67,8 @@ use infer::{infer_field_type, infer_variable_type};
 /// Returns `None` if the file is not indexed and not readable from disk.
 /// Returns an `Arc` so callers can read without copying the full `FileData`.
 pub(crate) fn ensure_file_data(idx: &Indexer, uri: &Url) -> Option<Arc<FileData>> {
-    if let Some(file_data) = idx.files.get(uri.as_str()) {
-        return Some(file_data.value().clone());
+    if let Some(file_data) = idx.get_file(uri.as_str()) {
+        return Some(Arc::clone(&file_data));
     }
 
     let path = uri.to_file_path().ok()?;
@@ -447,7 +447,7 @@ pub(crate) fn resolve_symbol_no_rg(idx: &Indexer, name: &str, from_uri: &Url) ->
     }
 
     // Star imports: index-only scan (no rg fallback for unindexed files).
-    let star_pkgs: Vec<String> = match idx.files.get(from_uri.as_str()) {
+    let star_pkgs: Vec<String> = match idx.get_file(from_uri.as_str()) {
         Some(f) => f
             .imports
             .iter()
@@ -625,7 +625,7 @@ fn resolve_local(idx: &Indexer, name: &str, uri: &Url) -> Vec<Location> {
 ///   iii. fd + on-demand parse — works at cold start; tries parent class file
 ///        first for nested symbols (AccountPickerContract.kt before Event.kt)
 fn resolve_via_imports(idx: &Indexer, name: &str, uri: &Url) -> Vec<Location> {
-    let imports: Vec<crate::types::ImportEntry> = match idx.files.get(uri.as_str()) {
+    let imports: Vec<crate::types::ImportEntry> = match idx.get_file(uri.as_str()) {
         Some(f) => f.imports.iter().filter(|i| !i.is_star).cloned().collect(),
         None => return vec![],
     };
@@ -862,7 +862,7 @@ fn parse_fd_hits(stdout: &[u8], symbol_name: &str, expected_pkg: Option<&str>) -
 /// and searches their symbols.
 fn resolve_same_package(idx: &Indexer, name: &str, uri: &Url) -> Vec<Location> {
     // Get package name, release the dashmap ref immediately.
-    let pkg: String = match idx.files.get(uri.as_str()).and_then(|f| f.package.clone()) {
+    let pkg: String = match idx.get_file(uri.as_str()).and_then(|f| f.package.clone()) {
         Some(p) => p,
         None => return vec![],
     };
@@ -877,7 +877,7 @@ fn resolve_same_package(idx: &Indexer, name: &str, uri: &Url) -> Vec<Location> {
         if peer_uri_str == self_str {
             continue;
         }
-        if let Some(f) = idx.files.get(&peer_uri_str) {
+        if let Some(f) = idx.get_file(&peer_uri_str) {
             for sym in f.symbols.iter().filter(|s| s.name == name) {
                 if let Ok(u) = Url::parse(&peer_uri_str) {
                     return vec![Location {
@@ -901,7 +901,7 @@ fn symbols_in_package(idx: &Indexer, name: &str, pkg: &str) -> Vec<Location> {
 fn find_symbol_in_package(idx: &Indexer, name: &str, pkg: &str) -> Option<Location> {
     let peer_uris: Vec<String> = idx.packages.get(pkg).map(|u| u.clone()).unwrap_or_default();
     for peer_uri_str in peer_uris {
-        if let Some(f) = idx.files.get(&peer_uri_str) {
+        if let Some(f) = idx.get_file(&peer_uri_str) {
             for sym in f.symbols.iter().filter(|s| s.name == name) {
                 if let Ok(u) = Url::parse(&peer_uri_str) {
                     return Some(Location {
@@ -924,7 +924,7 @@ fn find_symbol_in_package(idx: &Indexer, name: &str, pkg: &str) -> Option<Locati
 ///
 /// Stdlib packages are skipped entirely.
 fn resolve_star_imports(idx: &Indexer, name: &str, uri: &Url) -> Vec<Location> {
-    let star_pkgs: Vec<String> = match idx.files.get(uri.as_str()) {
+    let star_pkgs: Vec<String> = match idx.get_file(uri.as_str()) {
         Some(f) => f
             .imports
             .iter()
@@ -1120,7 +1120,7 @@ fn resolve_companion_member(
     class_name: &str,
     from_uri: &Url,
 ) -> Option<Vec<Location>> {
-    let file_data = idx.files.get(from_uri.as_str())?;
+    let file_data = idx.get_file(from_uri.as_str())?;
     // Find the class declaration's full range.
     let class_range = file_data
         .symbols

@@ -52,7 +52,7 @@ pub(crate) fn find_name_in_uri_after_line(
         return vec![];
     };
 
-    if let Some(f) = idx.files.get(file_uri) {
+    if let Some(f) = idx.get_file(file_uri) {
         // a) Symbol table: find the closest symbol at or after `after_line`.
         let best = f
             .symbols
@@ -119,7 +119,7 @@ pub(crate) fn find_local_declaration(idx: &Indexer, name: &str, uri: &Url) -> Ve
     // Prefer live_lines (unsaved buffer) so newly-typed params are found immediately.
     let lines: Arc<Vec<String>> = if let Some(ll) = idx.live_lines.get(uri.as_str()) {
         ll.clone()
-    } else if let Some(data) = idx.files.get(uri.as_str()) {
+    } else if let Some(data) = idx.get_file(uri.as_str()) {
         data.lines.clone()
     } else {
         return vec![];

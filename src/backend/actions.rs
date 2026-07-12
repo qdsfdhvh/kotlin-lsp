@@ -972,7 +972,7 @@ fn build_generate_overrides_action(
     cursor_line: u32,
 ) -> Option<CodeActionOrCommand> {
     // Find the enclosing class.
-    let file_data = idx.files.get(uri.as_str())?;
+    let file_data = idx.get_file(uri.as_str())?;
     let class_name = file_data.containing_class_at(cursor_line)?;
 
     // Find the class symbol.
@@ -1013,7 +1013,7 @@ fn build_generate_overrides_action(
             None => continue,
         };
         for loc in super_locs.iter() {
-            let super_file = match idx.files.get(loc.uri.as_str()) {
+            let super_file = match idx.get_file(loc.uri.as_str()) {
                 Some(f) => f,
                 None => continue,
             };
