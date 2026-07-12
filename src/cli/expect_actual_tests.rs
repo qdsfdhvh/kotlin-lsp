@@ -1,4 +1,4 @@
-use super::{detect_ss, first_id, has_mod, parse_kotlin};
+use super::{detect_ss, first_id, parse_kotlin};
 use std::path::Path;
 
 #[test]
