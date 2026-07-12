@@ -128,7 +128,9 @@ pub(crate) fn find_class_body_insert_point(
 
     let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
+        .set_language(&tree_sitter::Language::from(
+            tree_sitter_kotlin_sg::LANGUAGE,
+        ))
         .expect("kotlin parser init");
 
     let tree = parser.parse(&source, None).ok_or("parse failed")?;

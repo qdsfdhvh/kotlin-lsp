@@ -79,7 +79,7 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
 
 fn ts_lang(lang: crate::Language) -> tree_sitter::Language {
     match lang {
-        crate::Language::Kotlin => tree_sitter_kotlin::LANGUAGE.into(),
+        crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
         crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
         crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),
     }

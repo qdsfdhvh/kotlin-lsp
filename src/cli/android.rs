@@ -112,7 +112,7 @@ fn find_composables(file: &Path) -> Vec<ComposableInfo> {
         return c;
     };
     let mut p = tree_sitter::Parser::new();
-    p.set_language(&tree_sitter_kotlin::LANGUAGE.into()).ok();
+    p.set_language(&tree_sitter_kotlin_sg::LANGUAGE.into()).ok();
     let Some(t) = p.parse(&src, None) else {
         return c;
     };

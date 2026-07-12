@@ -95,7 +95,7 @@ pub(crate) async fn run_expect_actual(name: &str, json: bool) {
 
 fn parse_kotlin(s: &str) -> Option<tree_sitter::Tree> {
     let mut p = tree_sitter::Parser::new();
-    p.set_language(&tree_sitter_kotlin::LANGUAGE.into()).ok();
+    p.set_language(&tree_sitter_kotlin_sg::LANGUAGE.into()).ok();
     p.parse(s, None)
 }
 fn has_mod(n: &tree_sitter::Node, s: &str, m: &str) -> bool {

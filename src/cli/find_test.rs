@@ -149,7 +149,7 @@ fn find_test_methods_for_symbol(source: &str, name: &str) -> Vec<(String, u32)> 
     let _lang = crate::Language::from_path("test.kt");
     let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&tree_sitter_kotlin::LANGUAGE.into())
+        .set_language(&tree_sitter_kotlin_sg::LANGUAGE.into())
         .ok();
     let Some(tree) = parser.parse(source, None) else {
         return methods;

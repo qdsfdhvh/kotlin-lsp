@@ -43,7 +43,9 @@ mod call_hierarchy_tests {
     fn parse_kotlin(source: &str) -> Option<tree_sitter::Tree> {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
+            .set_language(&tree_sitter::Language::from(
+                tree_sitter_kotlin_sg::LANGUAGE,
+            ))
             .ok()?;
         parser.parse(source, None)
     }
@@ -242,7 +244,7 @@ mod selection_range_tests {
         let chain = build_selection_chain(
             src,
             pos,
-            tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE),
+            tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE),
         )
         .expect("should build chain");
 
@@ -264,7 +266,7 @@ mod selection_range_tests {
         let chain = build_selection_chain(
             src,
             pos,
-            tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE),
+            tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE),
         )
         .expect("should build chain");
         assert!(chain_depth(&chain) >= 4);
@@ -280,7 +282,7 @@ mod selection_range_tests {
         let chain = build_selection_chain(
             src,
             pos,
-            tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE),
+            tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE),
         )
         .expect("should build chain");
         // Should expand: fun → function_body → class_body → class → source_file
@@ -299,7 +301,7 @@ mod selection_range_tests {
                 line: 0,
                 character: 0,
             },
-            tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE),
+            tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE),
         );
         assert!(chain.is_none());
     }

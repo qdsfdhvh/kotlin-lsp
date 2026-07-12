@@ -11,7 +11,7 @@ use crate::Language;
 fn parse_kotlin(src: &str) -> crate::indexer::LiveDoc {
     parse_live(
         src,
-        tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE),
+        tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE),
     )
     .expect("parse failed")
 }

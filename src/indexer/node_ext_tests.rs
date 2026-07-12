@@ -7,7 +7,9 @@ use crate::queries::{
 fn parse_kotlin(src: &str) -> (tree_sitter::Tree, Vec<u8>) {
     let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
+        .set_language(&tree_sitter::Language::from(
+            tree_sitter_kotlin_sg::LANGUAGE,
+        ))
         .unwrap();
     let bytes = src.as_bytes().to_vec();
     let tree = parser.parse(src, None).unwrap();

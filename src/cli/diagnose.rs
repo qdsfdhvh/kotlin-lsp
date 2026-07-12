@@ -1,6 +1,6 @@
 //! Call-argument diagnostics for check --diagnose.
 use crate::indexer::Indexer;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tower_lsp::lsp_types::Url;
 
@@ -40,7 +40,7 @@ pub(crate) fn diagnose_call_args(file: &Path, idx: &Arc<Indexer>) -> Vec<CallArg
     let lang = crate::Language::from_path(file.to_str().unwrap_or(""));
     let mut parser = tree_sitter::Parser::new();
     let ts_lang = match lang {
-        crate::Language::Kotlin => tree_sitter_kotlin::LANGUAGE.into(),
+        crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
         crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
         _ => return vec![],
     };

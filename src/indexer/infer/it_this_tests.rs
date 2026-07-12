@@ -558,7 +558,9 @@ fn it_type_indexed_inner_fn_cst_still_works() {
 fn parse_kotlin(src: &str) -> tree_sitter::Tree {
     let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
+        .set_language(&tree_sitter::Language::from(
+            tree_sitter_kotlin_sg::LANGUAGE,
+        ))
         .unwrap();
     parser.parse(src, None).unwrap()
 }

@@ -55,7 +55,7 @@ fun externalCaller(): String {
 fn kotlin_parser() -> tree_sitter::Parser {
     let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&tree_sitter_kotlin::LANGUAGE.into())
+        .set_language(&tree_sitter_kotlin_sg::LANGUAGE.into())
         .ok();
     parser
 }

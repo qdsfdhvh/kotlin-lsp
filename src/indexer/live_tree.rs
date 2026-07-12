@@ -20,7 +20,7 @@ pub(crate) fn lang_for_path(path: &str) -> Option<TsLanguage> {
             Some(tree_sitter::Language::from(tree_sitter_java::LANGUAGE))
         }
         crate::Language::Kotlin if path.ends_with(".kt") || path.ends_with(".kts") => {
-            Some(tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
+            Some(tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE))
         }
         _ => None,
     }

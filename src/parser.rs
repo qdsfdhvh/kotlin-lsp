@@ -48,7 +48,7 @@ fn kotlin_def_query() -> Option<&'static DefQueryCache> {
     KOTLIN_DEF_QUERY_CACHE
         .get_or_init(|| {
             match Query::new(
-                &tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE),
+                &tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE),
                 KOTLIN_DEFINITIONS,
             ) {
                 Ok(query) => {
@@ -104,7 +104,7 @@ fn swift_def_query() -> Option<&'static DefQueryCache> {
 thread_local! {
     static KOTLIN_PARSER: RefCell<Parser> = RefCell::new({
         let mut p = Parser::new();
-        let _ = p.set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE));
+        let _ = p.set_language(&tree_sitter::Language::from(tree_sitter_kotlin_sg::LANGUAGE));
         p
     });
     static SWIFT_PARSER: RefCell<Parser> = RefCell::new({

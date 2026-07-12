@@ -65,7 +65,7 @@ pub(crate) fn classify_reference(loc: &Location, name: &str) -> RefKind {
     let lang = crate::Language::from_path(file_path.to_str().unwrap_or(""));
     let mut parser = tree_sitter::Parser::new();
     let ts_lang = match lang {
-        crate::Language::Kotlin => tree_sitter_kotlin::LANGUAGE.into(),
+        crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
         crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
         crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),
     };

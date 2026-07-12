@@ -118,7 +118,7 @@ fn find_and_classify_refs(
             let lang = crate::Language::from_path(candidate_file.to_str().unwrap_or(""));
             let mut parser = tree_sitter::Parser::new();
             let ts_lang = match lang {
-                crate::Language::Kotlin => tree_sitter_kotlin::LANGUAGE.into(),
+                crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
                 crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
                 crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),
             };
@@ -261,7 +261,7 @@ fn find_direct_callers(name: &str, _index: &Arc<Indexer>, project_root: &Path) -
             let lang = crate::Language::from_path(candidate_file.to_str().unwrap_or(""));
             let mut parser = tree_sitter::Parser::new();
             let ts_lang = match lang {
-                crate::Language::Kotlin => tree_sitter_kotlin::LANGUAGE.into(),
+                crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
                 crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
                 crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),
             };

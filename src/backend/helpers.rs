@@ -166,7 +166,7 @@ pub(super) fn nullable_receiver_diagnostics(
 
     let mut parser = tree_sitter::Parser::new();
     let ts_lang = match lang {
-        crate::Language::Kotlin => tree_sitter_kotlin::LANGUAGE.into(),
+        crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
         crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
         _ => return vec![],
     };
@@ -294,7 +294,9 @@ pub(super) fn inspection_diagnostics(lines: &[String]) -> Vec<Diagnostic> {
     let bytes = content.as_bytes();
     let mut parser = tree_sitter::Parser::new();
     if parser
-        .set_language(&tree_sitter::Language::from(tree_sitter_kotlin::LANGUAGE))
+        .set_language(&tree_sitter::Language::from(
+            tree_sitter_kotlin_sg::LANGUAGE,
+        ))
         .is_err()
     {
         return diags;
