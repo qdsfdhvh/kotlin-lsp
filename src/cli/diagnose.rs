@@ -13,6 +13,22 @@ pub(crate) struct CallArgDiagnostic {
     pub severity: String,
 }
 
+pub(crate) fn run_diagnose(files: &[PathBuf], idx: &Arc<Indexer>, json: bool) {
+    for file in files {
+        let diagnostics = diagnose_call_args(file, idx);
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&diagnostics).unwrap_or_default()
+            );
+        } else {
+            for d in &diagnostics {
+                println!("{}:{}:{} {}", d.file, d.line, d.col, d.message);
+            }
+        }
+    }
+}
+
 pub(crate) fn diagnose_call_args(file: &Path, idx: &Arc<Indexer>) -> Vec<CallArgDiagnostic> {
     let Ok(source) = std::fs::read_to_string(file) else {
         return vec![];

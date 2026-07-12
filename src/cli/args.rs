@@ -102,6 +102,7 @@ pub(crate) enum Subcommand {
     /// Check files for syntax errors.  No index / LSP session needed.
     Check {
         files: Vec<PathBuf>,
+        diagnose: bool,
     },
     /// Show index cache statistics and health checks.
     Cache {
@@ -397,6 +398,7 @@ struct ParsedCliFlags {
     expand: usize,
     exclude_imports: bool,
     ref_kind: Option<String>,
+    diagnose: bool,
     name_arg: Option<String>,
 }
 
@@ -465,6 +467,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         expand: 0,
         exclude_imports: false,
         ref_kind: None,
+        diagnose: false,
         name_arg: None,
     };
 
@@ -548,6 +551,9 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Long("ref-kind")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
                 parsed.ref_kind = Some(value.to_string_lossy().into_owned());
+            }
+            Some(lexopt::Arg::Long("diagnose")) => {
+                parsed.diagnose = true;
             }
             Some(lexopt::Arg::Long("source-set")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
@@ -752,6 +758,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }),
         "check" => Ok(Subcommand::Check {
             files: positionals.into_iter().map(PathBuf::from).collect(),
+            diagnose: parsed.diagnose,
         }),
         "cache" => Ok(Subcommand::Cache {
             sub: positionals.first().cloned().unwrap_or_default(),
