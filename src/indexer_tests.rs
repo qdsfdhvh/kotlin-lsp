@@ -1,6 +1,8 @@
 // Tests for src/indexer.rs
 
 use super::*;
+use crate::indexer::resolution::{build_type_param_subst_impl, IndexRead};
+use crate::types::{CallerContext, FileData, SymbolEntry, Visibility};
 
 fn uri(path: &str) -> Url {
     Url::parse(&format!("file:///test{path}")).unwrap()
@@ -2118,4 +2120,102 @@ fn named_arg_completion_param_names() {
 fn named_arg_completion_returns_expected_param_names() {
     let names = super::param_names_from_sig("service: Class<T>");
     assert_eq!(names, vec!["service"]);
+}
+
+// ── Phase 23: function-level type param substitution ────────────────────
+/// Test index returning pre-configured call-site type args.
+struct FnSubstIdx {
+    files: std::collections::HashMap<String, std::sync::Arc<FileData>>,
+    type_args: Vec<String>,
+}
+
+impl IndexRead for FnSubstIdx {
+    fn get_definitions(&self, _name: &str) -> Option<Vec<Location>> {
+        None
+    }
+    fn get_file_data(&self, uri: &str) -> Option<std::sync::Arc<FileData>> {
+        self.files.get(uri).cloned()
+    }
+    fn call_site_type_args(
+        &self,
+        _calling_uri: &str,
+        _cursor_line: Option<u32>,
+        _fn_name: &str,
+    ) -> Vec<String> {
+        self.type_args.clone()
+    }
+}
+
+#[test]
+fn fn_type_subst_matches_params_to_args() {
+    let sym = SymbolEntry {
+        name: "genericFun".into(),
+        kind: SymbolKind::FUNCTION,
+        visibility: Visibility::Public,
+        range: Default::default(),
+        selection_range: Default::default(),
+        detail: "fun <T, R> genericFun(a: T): R".into(),
+        type_params: vec!["T".into(), "R".into()],
+        extension_receiver: String::new(),
+        deprecated: false,
+    };
+
+    let sym_data = std::sync::Arc::new(FileData {
+        symbols: vec![sym],
+        ..Default::default()
+    });
+
+    let mut files = std::collections::HashMap::new();
+    files.insert("file:///generic.kt".into(), sym_data);
+
+    let idx = FnSubstIdx {
+        files,
+        type_args: vec!["String".into(), "Int".into()],
+    };
+
+    let caller = CallerContext {
+        uri: Some("file:///caller.kt"),
+        cursor_line: Some(5),
+    };
+
+    let subst = build_type_param_subst_impl(&idx, "file:///generic.kt", 0, caller);
+    assert_eq!(subst.get("T").map(|s| s.as_str()), Some("String"));
+    assert_eq!(subst.get("R").map(|s| s.as_str()), Some("Int"));
+}
+
+#[test]
+fn fn_type_subst_arg_count_mismatch() {
+    let sym = SymbolEntry {
+        name: "genericFun".into(),
+        kind: SymbolKind::FUNCTION,
+        visibility: Visibility::Public,
+        range: Default::default(),
+        selection_range: Default::default(),
+        detail: "fun <T, R> genericFun(a: T): R".into(),
+        type_params: vec!["T".into(), "R".into()],
+        extension_receiver: String::new(),
+        deprecated: false,
+    };
+
+    let sym_data = std::sync::Arc::new(FileData {
+        symbols: vec![sym],
+        ..Default::default()
+    });
+
+    let mut files = std::collections::HashMap::new();
+    files.insert("file:///generic.kt".into(), sym_data);
+
+    // Only 1 type arg for 2 type params → should return empty
+    let idx = FnSubstIdx {
+        files,
+        type_args: vec!["String".into()],
+    };
+
+    let caller = CallerContext {
+        uri: Some("file:///caller.kt"),
+        cursor_line: Some(5),
+    };
+
+    let subst = build_type_param_subst_impl(&idx, "file:///generic.kt", 0, caller);
+    assert!(subst.is_empty());
 }
