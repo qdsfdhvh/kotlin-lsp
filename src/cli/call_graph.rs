@@ -396,6 +396,8 @@ fn print_call_tree(node: &CallNode, indent: usize) {
 #[path = "call_graph_tests.rs"]
 mod tests;
 
+#[allow(dead_code)]
+#[allow(dead_code)]
 fn extract_function_name_and_pos(
     decl: &tree_sitter::Node,
     source: &str,
