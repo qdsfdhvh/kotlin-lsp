@@ -101,7 +101,12 @@ pub(crate) fn lambda_type_nth_input(ty: &str, n: usize) -> Option<String> {
 /// lambda** (`T.() -> R` or `T.(Params) -> R`).  Returns `None` for regular lambdas
 /// (`(T) -> R`) since `this` in those refers to the enclosing class, not the param.
 pub(crate) fn lambda_type_receiver(ty: &str) -> Option<String> {
-    let ty = strip_suspend(ty.trim());
+    // A *nullable* function type is parenthesised: `(Receiver.() -> R)?`. Strip a
+    // leading `(` so the receiver before `.(` isn't preceded by the wrapping paren
+    // (e.g. a Compose slot `content: (LazyListScope.() -> Unit)? = null`).
+    let ty = strip_suspend(ty.trim())
+        .trim_start_matches('(')
+        .trim_start();
     if let Some(dot_paren) = ty.find(".(") {
         let receiver = ty[..dot_paren].trim();
         let base: String = receiver.dotted_ident_prefix();
