@@ -55,7 +55,7 @@ cargo clippy -- -D warnings
 4. **No bare `unwrap()`** — use `expect("reason")`
 5. **Tests in `*_tests.rs` files** — not inline `mod tests {}`
 6. **`#[serde(default)]` on new `SymbolEntry` fields** — bump `CACHE_VERSION`
-7. **Always PR, never push to main** — `git push origin feat/<name>`, create PR, squash-merge on green CI
+7. **Always PR, never push to main** — Repo settings enforce this (Require a PR before merging, squash-merge only).
 8. **Run locally before push** — `cargo fmt --all -- --check && cargo test && cargo clippy -- -D warnings`
 
    **With fmt proxy issue:** `find src tests -name '*.rs' | xargs rustfmt --edition 2021 --check`
@@ -67,14 +67,6 @@ cargo clippy -- -D warnings
    - Verify the test passes after the fix
    - Run `cargo test --bin kotlin-lsp 'parser::tests::'` to confirm no regressions
    - Group related tests under `// ── false positive syntax error regression tests ───────────`
-
-10. **Always create a PR — never push to main directly** — Every change, no matter how small:
-    - Cut a branch: `git checkout -b feat/xxx` or `fix/xxx`
-    - Push: `git push origin feat/xxx`
-    - Create PR: `gh pr create --base main --head feat/xxx --title "..." --body "..."`
-    - Wait for CI green, then merge: `gh pr merge --squash`
-    - NEVER use `git push origin main` or `git push origin master`
-    - Exceptions: doc-only fixes (CHANGELOG/README/AGENTS/SKILL.md), version bumps, and releases
 
 ## CLI Reference
 
