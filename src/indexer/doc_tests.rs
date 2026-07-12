@@ -88,3 +88,24 @@ fun example() {}"#;
     assert!(doc.contains("`Foo.bar()`"), "got: {doc}");
     assert!(doc.contains("`Baz`"), "got: {doc}");
 }
+
+#[test]
+fn kdoc_preserves_utf_8_text() {
+    let src = r#"
+/**
+ * Lorem Ipsum является стандартной "рыбой" для текстов на латинице с начала XVI века.
+ * См. также [Widget] для деталей.
+ */
+fun doThing() {}"#;
+    let ls = lines(src);
+    let decl = ls.iter().position(|l| l.contains("fun doThing")).unwrap();
+    let doc = extract_doc_comment(&ls, decl).unwrap();
+    assert!(
+        doc.contains(
+            r#"Lorem Ipsum является стандартной "рыбой" для текстов на латинице с начала XVI века."#
+        ),
+        "got: {doc}"
+    );
+    assert!(doc.contains("`Widget`"), "got: {doc}");
+    assert!(!doc.contains('\u{fffd}'), "got: {doc}");
+}
