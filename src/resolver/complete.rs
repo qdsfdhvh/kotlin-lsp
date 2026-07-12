@@ -392,8 +392,12 @@ fn complete_super(idx: &Indexer, from_uri: &Url, snippets: bool) -> Vec<Completi
     );
     filter_inaccessible_completion_items(&mut items);
     strip_completion_snippets(&mut items, snippets);
-    items.sort_by_key(|item| (kind_sort_rank(item.kind), item.label.clone()));
-    items.dedup_by_key(|item| item.label.clone());
+    items.sort_by(|a, b| {
+        kind_sort_rank(a.kind)
+            .cmp(&kind_sort_rank(b.kind))
+            .then_with(|| a.label.cmp(&b.label))
+    });
+    items.dedup_by(|a, b| a.label == b.label);
     items
 }
 
