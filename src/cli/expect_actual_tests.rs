@@ -1,5 +1,5 @@
-use std::path::Path;
 use super::{detect_ss, first_id, has_mod, parse_kotlin};
+use std::path::Path;
 
 #[test]
 fn parse_smoke() {

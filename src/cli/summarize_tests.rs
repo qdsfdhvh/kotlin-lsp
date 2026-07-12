@@ -7,8 +7,14 @@ fn loc(file: &str, line: u32, col: u32) -> Location {
     Location {
         uri: Url::parse(&format!("file:///{file}")).unwrap(),
         range: Range {
-            start: Position { line, character: col },
-            end: Position { line, character: col },
+            start: Position {
+                line,
+                character: col,
+            },
+            end: Position {
+                line,
+                character: col,
+            },
         },
     }
 }
@@ -16,7 +22,13 @@ fn loc(file: &str, line: u32, col: u32) -> Location {
 #[test]
 fn class() {
     let src = "package com.test\n\nclass Greeter(val name: String)\n";
-    let s = build_summary("Greeter", Path::new("/t.kt"), src, &loc("t.kt", 2, 0), false);
+    let s = build_summary(
+        "Greeter",
+        Path::new("/t.kt"),
+        src,
+        &loc("t.kt", 2, 0),
+        false,
+    );
     assert_eq!(s.kind, "class");
 }
 

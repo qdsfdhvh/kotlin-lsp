@@ -1,7 +1,7 @@
+use super::diagnose_call_args;
+use crate::indexer::Indexer;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::indexer::Indexer;
-use super::diagnose_call_args;
 
 #[test]
 fn smoke_main_no_args() {

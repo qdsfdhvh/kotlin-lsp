@@ -7,8 +7,14 @@ fn make_loc(file: &str, line: u32, col: u32) -> Location {
     Location {
         uri: Url::parse(&format!("file:///{file}")).unwrap(),
         range: Range {
-            start: Position { line, character: col },
-            end: Position { line, character: col },
+            start: Position {
+                line,
+                character: col,
+            },
+            end: Position {
+                line,
+                character: col,
+            },
         },
     }
 }
@@ -20,10 +26,10 @@ fn roundtrip_save_and_load() {
 
     let defs = dashmap::DashMap::new();
     defs.insert("Foo".into(), vec![make_loc("com/Foo.kt", 1, 2)]);
-    defs.insert("Bar".into(), vec![
-        make_loc("com/Foo.kt", 5, 2),
-        make_loc("com/Bar.kt", 3, 2),
-    ]);
+    defs.insert(
+        "Bar".into(),
+        vec![make_loc("com/Foo.kt", 5, 2), make_loc("com/Bar.kt", 3, 2)],
+    );
 
     let uris = dashmap::DashSet::new();
     uris.insert("file:///com/Foo.kt".into());
@@ -48,7 +54,10 @@ fn version_mismatch_rejected() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let path = tmp.path().join("lib.bin");
 
-    let idx = SymbolIndex { version: SYMBOL_INDEX_VERSION - 1, symbols: HashMap::new() };
+    let idx = SymbolIndex {
+        version: SYMBOL_INDEX_VERSION - 1,
+        symbols: HashMap::new(),
+    };
     let bytes = bincode::serialize(&idx).unwrap();
     let compressed = crate::indexer::cache::zstd_compress(&bytes);
     std::fs::write(symbol_index_path(&path), &compressed).unwrap();
