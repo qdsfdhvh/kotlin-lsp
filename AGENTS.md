@@ -41,6 +41,28 @@ Rules:
 
 ## Quick Start
 
+### Test coverage
+
+Check coverage of a specific module:
+
+```sh
+# Install tarpaulin once
+cargo install cargo-tarpaulin
+
+# Run coverage on specific files (use --features to include tests)
+cargo tarpaulin --skip-clean --include-files 'src/indexer/resolution.rs' 'src/resolver/complete.rs' -o Html --output-dir coverage
+open coverage/tarpaulin-report.html
+```
+
+Manual coverage audit pattern:
+- List all `fn` entries in the changed module
+- Trace each code path (match/if/else branches)
+- Map to test names via `cargo test -- --list | grep <module>`
+- Identify uncovered paths:
+  - Early returns (None, empty collections)
+  - Error branches (`else`, `Err`, `None`)
+  - Edge cases (count mismatches, out-of-range indices)
+
 ```sh
 cargo build --release
 cargo test
