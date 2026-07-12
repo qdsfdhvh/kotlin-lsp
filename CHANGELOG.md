@@ -1,6 +1,33 @@
 # Changelog
 
 
+## 0.24.2 (2026-07-12)
+
+### Phase 23 — Generic Type Param Substitution (#112)
+
+- **Function-level type param substitution** — generic functions now show
+  substituted types in hover/completion when called with explicit type args.
+  Example: `transform<String, Int>("hello", 42)` → hover shows
+  `T → String, R → Int`.
+- New `call_site_type_args` on `IndexRead` trait with tree-sitter CST extraction.
+- `build_type_param_subst_impl` now falls back to function-level substitution
+  after enclosing-class substitution.
+
+### Phase 26 — Implicit Receiver Completion (#112)
+
+- **Bare completion now includes `this` members** — when typing without a dot
+  prefix inside a class body or scope-function lambda (`apply`/`run`/`with`),
+  non-private members of the implicit receiver are offered.
+- New `add_implicit_receiver_completions` resolves `this` type via
+  `infer_lambda_param_type_at` (scope functions) + `enclosing_class_at` (class
+  bodies). Filters private members, deduplicates against existing items.
+
+### Internal
+
+- `complete_bare` gains new `cursor_line: Option<u32>` parameter for scope-
+  aware completion.
+
+
 ## 0.24.1 (2026-07-12)
 
 ### Agent Knowledge Server — Phases 13-21 (#109)
