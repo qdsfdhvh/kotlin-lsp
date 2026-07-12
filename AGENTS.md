@@ -43,26 +43,16 @@ Rules:
 
 ### Test coverage
 
-Check coverage of a specific module:
+Use `coverage.sh` for instant targeted or full-project reports:
 
 ```sh
-# Install tarpaulin once
-cargo install cargo-tarpaulin
-
-# Run coverage on specific files (use --features to include tests)
-cargo tarpaulin --skip-clean --include-files 'src/indexer/resolution.rs' 'src/resolver/complete.rs' -o Html --output-dir coverage
-open coverage/tarpaulin-report.html
+./coverage.sh                          # Phase 23+26 core files
+./coverage.sh src/indexer/resolution.rs  # single file
+./coverage.sh --all                      # everything
 ```
 
-Manual coverage audit pattern:
-- List all `fn` entries in the changed module
-- Trace each code path (match/if/else branches)
-- Map to test names via `cargo test -- --list | grep <module>`
-- Identify uncovered paths:
-  - Early returns (None, empty collections)
-  - Error branches (`else`, `Err`, `None`)
-  - Edge cases (count mismatches, out-of-range indices)
-
+Under the hood it uses `-C instrument-coverage` + `llvm-cov`.
+Manual audit pattern when adding new code:
 ```sh
 cargo build --release
 cargo test
