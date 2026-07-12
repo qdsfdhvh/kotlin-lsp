@@ -121,17 +121,12 @@ mod tests {
     fn make_index(subtypes: Vec<(&str, &str)>) -> Arc<Indexer> {
         let index = Indexer::new();
         for (sub_file, super_name) in subtypes {
+            let uri = temp_uri(sub_file);
             let loc = Location {
-                uri: Url::parse(&format!("file:///{sub_file}.kt")).unwrap(),
+                uri: uri.clone(),
                 range: Range {
-                    start: Position {
-                        line: 0,
-                        character: 0,
-                    },
-                    end: Position {
-                        line: 0,
-                        character: 0,
-                    },
+                    start: Position { line: 0, character: 0 },
+                    end: Position { line: 0, character: 0 },
                 },
             };
             index
@@ -141,6 +136,12 @@ mod tests {
                 .push(loc);
         }
         Arc::new(index)
+    }
+
+    /// Platform-independent URI for tests.
+    fn temp_uri(name: &str) -> Url {
+        let path = std::path::PathBuf::from(format!("/{name}.kt"));
+        Url::from_file_path(&path).unwrap_or_else(|_| Url::parse(&format!("file:///{name}.kt")).unwrap())
     }
 
     #[test]
