@@ -105,7 +105,7 @@ pub(super) fn write_status_file(content: &str) {
 
 /// Compress bytes with zstd at the default compression level.
 fn zstd_compress(bytes: &[u8]) -> Vec<u8> {
-    zstd::encode_all(bytes, 3).expect("zstd compress")
+    zstd::encode_all(bytes, 9).expect("zstd compress")
 }
 
 /// Decompress zstd-compressed bytes.
