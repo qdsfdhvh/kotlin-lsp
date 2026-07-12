@@ -28,8 +28,10 @@ pub(crate) struct ResultFilters {
     /// Reference classification filter: call, read, write, override, import, type-use.
     pub ref_kind: Option<String>,
     /// Symbol visibility filter: public, internal, protected, private.
+    #[allow(dead_code)]
     pub visibility: Option<String>,
     /// Comma-separated list of modifiers to filter by (e.g. `abstract,suspend,open`).
+    #[allow(dead_code)]
     pub modifiers: Vec<String>,
     /// Enable fuzzy (subsequence) matching for find/refs queries.
     pub fuzzy: bool,

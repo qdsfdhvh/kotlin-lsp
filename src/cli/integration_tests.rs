@@ -203,7 +203,6 @@ fn workspace_snapshot_includes_symbols() {
         "package com.example\nclass MyActivity\nfun helper()",
     );
     // Just verify indexing succeeds — workspace snapshot uses same data
-    assert!(true);
 }
 
 // ─── Phase 32: inheritance graph ───────────────────────────────────────────

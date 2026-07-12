@@ -14,6 +14,7 @@ use crate::types::SymbolEntry;
 use tower_lsp::lsp_types::Location;
 
 /// Unified query engine trait. All consumers (CLI, LSP, MCP) call these methods.
+#[allow(dead_code)]
 pub(crate) trait QueryEngine: Send + Sync {
     fn definitions(&self, name: &str) -> Vec<Location>;
     fn references(&self, name: &str) -> Vec<Location>;
@@ -27,18 +28,17 @@ pub(crate) trait QueryEngine: Send + Sync {
 }
 
 /// Production implementation wrapping the workspace indexer.
+#[allow(dead_code)]
 pub(crate) struct IndexQueryEngine {
     index: Arc<Indexer>,
 }
 
 impl IndexQueryEngine {
+    #[allow(dead_code)]
     pub(crate) fn new(index: Arc<Indexer>) -> Self {
         Self { index }
     }
 
-    pub(crate) fn get_index(&self) -> &Arc<Indexer> {
-        &self.index
-    }
 }
 
 impl QueryEngine for IndexQueryEngine {
