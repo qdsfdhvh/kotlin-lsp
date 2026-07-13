@@ -341,7 +341,9 @@ fn type_hierarchy_defaults_to_subtypes() {
             name,
             subtypes,
             supertypes,
-            graph: _graph, .. } => {
+            graph: _graph,
+            ..
+        } => {
             assert_eq!(name, "Base");
             assert!(subtypes);
             assert!(!supertypes);
@@ -360,7 +362,9 @@ fn type_hierarchy_supertypes_flag_is_reachable() {
             name,
             subtypes,
             supertypes,
-            graph: _graph, .. } => {
+            graph: _graph,
+            ..
+        } => {
             assert_eq!(name, "Child");
             assert!(!subtypes);
             assert!(supertypes);
@@ -379,7 +383,9 @@ fn type_hierarchy_can_request_both_directions() {
             name,
             subtypes,
             supertypes,
-            graph: _graph, .. } => {
+            graph: _graph,
+            ..
+        } => {
             assert_eq!(name, "Node");
             assert!(subtypes);
             assert!(supertypes);
