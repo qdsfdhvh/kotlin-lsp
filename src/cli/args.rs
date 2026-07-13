@@ -378,8 +378,11 @@ impl CliArgs {
         let Some(first) = parse_first_argument(&mut args)? else {
             return Ok(None);
         };
-        let Some(subcommand) = parse_subcommand_name(first)? else {
-            return Ok(None);
+        let Some(subcommand) = parse_subcommand_name(first.clone())? else {
+            return Err(format!(
+                "unknown subcommand '{}'\nRun `kotlin-lsp --help` for usage.",
+                first.to_string_lossy()
+            ));
         };
         let parsed = parse_cli_flags(&mut args)?;
         let mode = parsed.mode;

@@ -181,6 +181,12 @@ pub(crate) fn parse_kotlin(content: &str) -> FileData {
         // ── fun interface (tree-sitter parses these as ERROR + lambda_literal) ─
         data.extract_fun_interfaces(root, bytes);
 
+        // ── salvage functions from ERROR nodes (annotated function types) ────
+        // When tree-sitter can't parse annotated function types like
+        // @Composable (Int) -> Unit, the entire function_declaration becomes
+        // an ERROR node. Extract function names from these errors.
+        extract_functions_from_errors(root, bytes, &mut data.symbols);
+
         // ── supertype relationships (delegation specifiers) ────────────────────
         data.extract_supers_kotlin(root, bytes);
 
@@ -732,6 +738,59 @@ fn has_any_fun_interface_in_tree(root: &Node, bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// Walk ERROR nodes and salvage function declarations that tree-sitter
+/// could not parse due to annotated function types like `@Composable (Int) -> Unit`.
+fn extract_functions_from_errors(root: Node, bytes: &[u8], symbols: &mut Vec<SymbolEntry>) {
+    let mut cursor = root.walk();
+    for child in root.children(&mut cursor) {
+        if child.kind() == "ERROR" {
+            extract_fun_from_error(&child, bytes, symbols);
+        }
+    }
+}
+
+fn extract_fun_from_error(err: &Node, bytes: &[u8], symbols: &mut Vec<SymbolEntry>) {
+    let text = err.utf8_text(bytes).unwrap_or("");
+    if !text.starts_with("fun ") {
+        return;
+    }
+    let mut cursor = err.walk();
+    let mut fun_name = None;
+    let mut fun_range = None;
+    for child in err.children(&mut cursor) {
+        if child.kind() == "simple_identifier" {
+            fun_name = child.utf8_text(bytes).ok().map(|s| s.to_string());
+            fun_range = Some(child.range());
+            break;
+        }
+    }
+    if let (Some(name), Some(range)) = (fun_name, fun_range) {
+        let lsp_range = ts_to_lsp(err.range());
+        let sel_range = ts_to_lsp(range);
+        if symbols
+            .iter()
+            .any(|s| s.name == name && s.selection_range == sel_range)
+        {
+            return;
+        }
+        symbols.push(SymbolEntry {
+            name,
+            kind: tower_lsp::lsp_types::SymbolKind::FUNCTION,
+            visibility: crate::types::Visibility::Public,
+            range: lsp_range,
+            selection_range: sel_range,
+            detail: text.lines().next().unwrap_or(text).to_string(),
+            type_params: Vec::new(),
+            extension_receiver: String::new(),
+            deprecated: false,
+            parent_fq_name: None,
+            return_type: None,
+            parameters: Vec::new(),
+            documentation: None,
+        });
+    }
 }
 
 fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
