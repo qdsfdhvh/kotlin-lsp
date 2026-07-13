@@ -1802,12 +1802,17 @@ async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, graph:
                         .files
                         .get(loc.uri.as_str())
                         .and_then(|f| {
-                            f.symbols.iter()
+                            f.symbols
+                                .iter()
                                 .find(|s| s.selection_range.start.line == loc.range.start.line)
                                 .map(|s| s.name.clone())
                         })
                         .unwrap_or_else(|| "?".to_owned());
-                    println!("  ├── {sub_name} ({}:{})", loc.uri, loc.range.start.line + 1);
+                    println!(
+                        "  ├── {sub_name} ({}:{})",
+                        loc.uri,
+                        loc.range.start.line + 1
+                    );
                     // Recursively show subtypes? No, depth-based would need graph traversal
                     // For now, simple tree with direct subtypes only
                 }
