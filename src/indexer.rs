@@ -149,6 +149,9 @@ pub(crate) struct Indexer {
     /// Reverse supertype index: supertype name → locations of implementing/extending classes.
     /// Populated during `index_content()` for fast `goToImplementation` lookups.
     pub(crate) subtypes: DashMap<String, Vec<Location>>,
+    /// Forward supertype index: subtype_name → [(supertype_name, file)].
+    /// Built during workspace indexing for fast supertype lookups.
+    pub(crate) supertypes_index: DashMap<String, Vec<(String, String)>>,
     /// Call graph edges: callee_name → [(caller_file, caller_name)].
     /// Built during workspace indexing; used by callers/callees commands.
     pub(crate) call_edges: DashMap<String, Vec<(String, String)>>,
@@ -271,6 +274,7 @@ impl Indexer {
             completion_cache: DashMap::new(),
             live_lines: DashMap::new(),
             subtypes: DashMap::new(),
+            supertypes_index: DashMap::new(),
             call_edges: DashMap::new(),
             bare_name_cache: std::sync::RwLock::new(Vec::new()),
             last_completion: std::sync::Mutex::new(None),
@@ -305,6 +309,7 @@ impl Indexer {
         self.qualified.clear();
         self.packages.clear();
         self.subtypes.clear();
+        self.supertypes_index.clear();
         self.call_edges.clear();
         self.content_hashes.clear();
         self.completion_cache.clear();
