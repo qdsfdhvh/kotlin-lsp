@@ -1960,6 +1960,18 @@ fn fp_inline_fun_with_reified() {
 }
 
 #[test]
+
+#[test]
+fn fp_annotated_function_type() {
+    assert_no_errors("package com.example\nannotation class Composable\nfun container(content: @Composable (Int) -> Unit) = Unit");
+}
+
+#[test]
+fn fp_annotated_function_type_with_target() {
+    assert_no_errors("package com.example\n@Target(AnnotationTarget.TYPE)\nannotation class Composable\nfun container(content: @Composable (Int) -> Unit) = Unit");
+}
+
+#[test]
 fn fp_annotation_params() {
     assert_no_errors(
         "package com.example\n@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)\n@Retention(AnnotationRetention.RUNTIME)\nannotation class MyAnnotation",
