@@ -104,6 +104,27 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
             .or_default()
             .push(class_loc.clone());
     }
+
+    // Build forward supertype map: subtype_name → [(supertype_name, file)]
+    let mut supertypes_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for (super_name, class_loc) in &result.supertypes {
+        // Find the subtype name at this location
+        if let Some(sub_name) = result
+            .data
+            .symbols
+            .iter()
+            .find(|s| {
+                s.selection_range.start.line == class_loc.range.start.line
+                    && s.selection_range.start.character == class_loc.range.start.character
+            })
+            .map(|s| s.name.clone())
+        {
+            supertypes_map
+                .entry(sub_name)
+                .or_default()
+                .push((super_name.clone(), uri_str.clone()));
+        }
+    }
     // Build call edge index: callee_name → [(caller_file, caller_name)]
     let mut call_edges: HashMap<String, Vec<(String, String)>> = HashMap::new();
     for (caller, callee) in &result.data.call_edges {
@@ -118,6 +139,7 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
         qualified,
         packages,
         subtypes,
+        supertypes_map,
         call_edges,
         file_data: (uri_str.clone(), Arc::new(result.data.clone())),
         content_hash: (uri_str, result.content_hash),
@@ -697,6 +719,15 @@ impl Indexer {
                     .any(|l| l.uri == loc.uri && l.range == loc.range)
                 {
                     entry.push(loc);
+                }
+            }
+        }
+
+        for (sub_name, sup_entries) in contrib.supertypes_map {
+            let mut entry = self.supertypes_index.entry(sub_name).or_default();
+            for sup in sup_entries {
+                if !entry.contains(&sup) {
+                    entry.push(sup);
                 }
             }
         }

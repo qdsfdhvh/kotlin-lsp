@@ -30,15 +30,17 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Need syntax check on edited files → kotlin-lsp check <file>
    ├─ Need formatting check (like spotlessCheck) → kotlin-lsp format check <file/dir>...
    ├─ Need formatting apply (like spotlessApply) → kotlin-lsp format apply <file/dir>...
-   ├─ Need caller tree (who calls this?) → kotlin-lsp callers <file> <line> <col>
-   ├─ Need change impact before refactoring → kotlin-lsp impact <file> <line> <col>
-   ├─ Need symbol overview (members + KDoc) → kotlin-lsp summarize <Name>
-   ├─ Need to find tests for a symbol → kotlin-lsp find-test <file> <line> <col>
-   ├─ Need KMP expect/actual resolution → kotlin-lsp expect-actual <Name>
-   ├─ Need module structure → kotlin-lsp modules / module-deps / module-files
    ├─ Need callee tree (what does this call?) → kotlin-lsp callees <file> <line> <col>
+   ├─ Need implementation tree → kotlin-lsp implementations <Name>
+   ├─ Need subclass tree → kotlin-lsp subclasses <Name>
+   ├─ Need fuzzy search → kotlin-lsp find --fuzzy "<query>"
    ├─ Need call hierarchy → kotlin-lsp call-hierarchy <file> <line> <col>
    ├─ Need class hierarchy → kotlin-lsp type-hierarchy <Name>
+   ├─ Need batch of queries → echo '[...]' | kotlin-lsp query --json
+   ├─ Need which files import X → kotlin-lsp imports-of <Name>
+   ├─ Need symbols by annotation → kotlin-lsp annotated <Name>
+   ├─ Need package deps → kotlin-lsp package-deps <package>
+   ├─ Need to search signatures → kotlin-lsp docs <query>
    ├─ Imports are messy → kotlin-lsp organize-imports <file>
    ├─ Need batch type injection for a file → kotlin-lsp inject <file>
    ├─ Need signature/type at a declaration → kotlin-lsp hover <file> <line> <col>
@@ -168,6 +170,73 @@ each callee to its declaration location, and returns a tree of callees.
 return tree-structured output designed for AI agents, while `call-hierarchy`
 targets LSP protocol shapes (flat lists). For agent workflows, prefer
 `callers`/`callees`.
+
+#### fuzzy — fuzzy search (new)
+
+```bash
+kotlin-lsp find --fuzzy "<tokens>" [--limit N]
+```
+
+Splits query on whitespace, matches each token as a subsequence.
+Returns results sorted by relevance. `--limit` defaults to 20.
+
+```bash
+kotlin-lsp find --fuzzy "login repo" --limit 5
+```
+
+#### implementations — interface implementations (new)
+
+```bash
+kotlin-lsp implementations <Name> [depth] [--json]
+```
+
+Tree of all classes implementing the given interface.
+
+```bash
+kotlin-lsp implementations Repository
+kotlin-lsp implementations ViewModel 2 --json
+```
+
+#### subclasses — class subclasses (new)
+
+```bash
+kotlin-lsp subclasses <Name> [depth] [--json]
+```
+
+Tree of all subclasses of the given class.
+
+```bash
+kotlin-lsp subclasses Activity --json
+```
+
+#### query — batch query (new)
+
+```bash
+echo '[...]' | kotlin-lsp query --json
+```
+
+Accepts JSON array on stdin, loads index once, returns results.
+Types: "definition", "references", "hover", "summarize", "callers".
+
+```bash
+echo '[{"type":"definition","name":"LoginViewModel"}]' | kotlin-lsp query --json
+```
+
+#### imports-of / annotated / package-deps / docs (new)
+
+```bash
+kotlin-lsp imports-of com.example.Foo --json       # files importing Foo
+kotlin-lsp annotated Composable --json              # @Composable symbols
+kotlin-lsp package-deps com.example --json          # package dependencies
+kotlin-lsp docs "login" --json                      # search signatures
+```
+
+#### visibility / modifier filters (new)
+
+```bash
+kotlin-lsp find <Name> --visibility public --modifier suspend
+```
+
 #### call-hierarchy — caller lookup
 
 ```bash
