@@ -2696,3 +2696,19 @@ fn fp_fun_interface_trailing_sealed() {
                 }\n";
     assert_no_errors(src);
 }
+
+#[test]
+fn fp_error_node_function_extraction() {
+    assert_no_errors(
+        "package example\n@Target(AnnotationTarget.TYPE)\nannotation class Content\nfun container(content: @Content (() -> Unit)? = null) = Unit",
+    );
+}
+
+#[test]
+fn find_function_in_error_node() {
+    let data = parse_kotlin(
+        "package example\n@Target(AnnotationTarget.TYPE)\nannotation class Content\nfun container(content: @Content (() -> Unit)? = null) = Unit",
+    );
+    let func = data.symbols.iter().find(|s| s.name == "container");
+    assert!(func.is_some(), "container should be found despite ERROR node");
+}
