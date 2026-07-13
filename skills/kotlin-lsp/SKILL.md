@@ -1,16 +1,19 @@
 ---
 name: kotlin-lsp
 description: Use the `kotlin-lsp` CLI for precise symbol lookup in Kotlin/Java/Swift projects — faster than grep/rg and returns typed answers (declarations, refs, signatures) instead of raw text matches. Saves tokens because results are scoped and structured.
+min_version: "0.24.0"
 ---
 
 # kotlin-lsp
 
 `kotlin-lsp` is a tree-sitter–backed language server that ships a scriptable CLI (no daemon, no JVM). Reach for it when working with Kotlin, Java, or Swift symbols, especially in Android / KMP projects — it returns *declaration locations* and *type-aware references*, not text matches.
 
-Check installation:
+Check installation and verify version >= 0.24.0:
 
 ```bash
 kotlin-lsp --version
+# Must be >= 0.24.0 for all commands documented below.
+# Older versions lack: --fuzzy, implementations, subclasses, query, symbol-graph, etc.
 ```
 
 If missing, suggest the install one-liner from the project README; do not auto-install without asking.
