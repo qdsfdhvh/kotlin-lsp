@@ -353,8 +353,15 @@ class MyClass {
 ";
     let (idx, uri) = index_single("/ParentTest.kt", src);
     let data = idx.files.get(uri.as_str()).expect("indexed");
-    let method = data.symbols.iter().find(|s| s.name == "myMethod").expect("method");
-    assert_eq!(method.parent_fq_name.as_deref(), Some("com.example.MyClass"));
+    let method = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "myMethod")
+        .expect("method");
+    assert_eq!(
+        method.parent_fq_name.as_deref(),
+        Some("com.example.MyClass")
+    );
 }
 
 #[test]
@@ -364,6 +371,13 @@ fun topLevel() = 1
 ";
     let (idx, uri) = index_single("/NoParent.kt", src);
     let data = idx.files.get(uri.as_str()).expect("indexed");
-    let func = data.symbols.iter().find(|s| s.name == "topLevel").expect("func");
-    assert!(func.parent_fq_name.is_none(), "top-level function should have no parent");
+    let func = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "topLevel")
+        .expect("func");
+    assert!(
+        func.parent_fq_name.is_none(),
+        "top-level function should have no parent"
+    );
 }
