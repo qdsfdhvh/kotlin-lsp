@@ -528,35 +528,43 @@ val result = add(1, 2)
     let uri = file_uri(root, "src/Math.kt");
     client.open_file(&uri, "kotlin", src);
 
-    // Request inlay hints for the whole file.
-    let resp = client.request(
-        "textDocument/inlayHint",
-        json!({
-            "textDocument": {"uri": uri},
-            "range": {
-                "start": {"line": 0, "character": 0},
-                "end":   {"line": 6, "character": 0},
-            },
-        }),
-    );
-
-    let hints = resp["result"].as_array().cloned().unwrap_or_default();
-    // The server may return an empty list if no hints are emitted, but when it
-    // does return hints they must be well-formed `: Type` labels.
-    let labels: Vec<String> = hints
-        .iter()
-        .filter_map(|h| {
-            // label may be a plain string or an array of InlayHintLabelPart
-            if let Some(s) = h["label"].as_str() {
-                Some(s.to_owned())
-            } else if let Some(arr) = h["label"].as_array() {
-                let parts: Vec<&str> = arr.iter().filter_map(|p| p["value"].as_str()).collect();
-                Some(parts.join(""))
-            } else {
+    // RHS type inference for inlay hints may still be running after
+    // indexing completes. Retry a few times with a short sleep.
+    let labels: Vec<String> = (0..5)
+        .find_map(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let resp = client.request(
+                "textDocument/inlayHint",
+                json!({
+                    "textDocument": {"uri": uri},
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end":   {"line": 6, "character": 0},
+                    },
+                }),
+            );
+            let hints = resp["result"].as_array().cloned().unwrap_or_default();
+            let labels: Vec<String> = hints
+                .iter()
+                .filter_map(|h| {
+                    if let Some(s) = h["label"].as_str() {
+                        Some(s.to_owned())
+                    } else if let Some(arr) = h["label"].as_array() {
+                        let parts: Vec<&str> =
+                            arr.iter().filter_map(|p| p["value"].as_str()).collect();
+                        Some(parts.join(""))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if labels.is_empty() {
                 None
+            } else {
+                Some(labels)
             }
         })
-        .collect();
+        .unwrap_or_default();
 
     // Every label that is present must look like `: SomeType` — the server
     // only emits type-annotation hints, never other kinds.
