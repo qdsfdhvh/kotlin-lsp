@@ -1672,6 +1672,8 @@ impl crate::types::FileData {
             let deprecated = is_deprecated_at_line(&self.lines, sel.start.line as usize);
             // Java extension methods (static methods in a class annotated with @JvmName etc.)
             // are not real Kotlin extensions; leave extension_receiver empty for Java.
+            let _ret = extract_return_type(&detail);
+            let _params = extract_parameters(&detail);
             self.symbols.push(SymbolEntry {
                 name,
                 kind,
@@ -1683,8 +1685,8 @@ impl crate::types::FileData {
                 extension_receiver: String::new(),
                 deprecated,
                 parent_fq_name: None,
-                return_type: None,
-                parameters: Vec::new(),
+                return_type: _ret,
+                parameters: _params,
                 documentation: None,
             });
         }
@@ -1712,6 +1714,8 @@ impl crate::types::FileData {
         for child in node.children_of_kind(KIND_VAR_DECLARATOR) {
             if let Some((name, sel)) = first_identifier(&child, bytes) {
                 let deprecated = is_deprecated_at_line(&self.lines, sel.start.line as usize);
+                let _ret2 = extract_return_type(&detail);
+                let _params2 = extract_parameters(&detail);
                 self.symbols.push(SymbolEntry {
                     name,
                     kind,
@@ -1723,8 +1727,8 @@ impl crate::types::FileData {
                     extension_receiver: String::new(),
                     deprecated,
                     parent_fq_name: None,
-                    return_type: None,
-                    parameters: Vec::new(),
+                    return_type: _ret2,
+                    parameters: _params2,
                     documentation: None,
                 });
             }
@@ -1815,6 +1819,56 @@ fn extract_constructor_params(detail: &str) -> Vec<String> {
     }
     params
 }
+
+/// Extract return type from a function signature detail string.
+pub(crate) fn extract_return_type(detail: &str) -> Option<String> {
+    let mut depth = 0u32;
+    let mut last_colon = None;
+    for (i, ch) in detail.char_indices() {
+        match ch {
+            '(' | '<' => depth += 1,
+            ')' | '>' => depth = depth.saturating_sub(1),
+            ':' if depth == 0 => last_colon = Some(i),
+            _ => {}
+        }
+    }
+    last_colon.map(|i| detail[i + 1..].trim().split('{').next().unwrap_or("").trim().to_string())
+}
+
+/// Extract parameters from function signature: Vec of (name, type).
+pub(crate) fn extract_parameters(detail: &str) -> Vec<(String, String)> {
+    let start = match detail.find('(') { Some(s) => s, None => return vec![] };
+    let end = match detail.rfind(')') { Some(e) => e, None => return vec![] };
+    let block = &detail[start + 1..end];
+    let mut params = Vec::new();
+    let mut depth = 0u32;
+    let mut current = String::new();
+    for ch in block.chars() {
+        match ch {
+            '(' | '<' => { depth += 1; current.push(ch); }
+            ')' | '>' => { depth = depth.saturating_sub(1); current.push(ch); }
+            ',' if depth == 0 => {
+                let t = current.trim().to_string();
+                if !t.is_empty() { params.push(parse_param_from_sig(&t)); }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    let t = current.trim().to_string();
+    if !t.is_empty() { params.push(parse_param_from_sig(&t)); }
+    params
+}
+
+fn parse_param_from_sig(param: &str) -> (String, String) {
+    let parts: Vec<&str> = param.rsplitn(2, ':').collect();
+    if parts.len() == 2 {
+        (parts[1].trim().to_string(), parts[0].trim().to_string())
+    } else {
+        (param.trim().to_string(), String::new())
+    }
+}
+
 
 /// Walk a tree-sitter CST and extract (caller_name, callee_name) edges.
 /// For each call_expression node, finds the enclosing function declaration
@@ -1912,3 +1966,45 @@ fn find_caller_fn_name_from_call(node: &tree_sitter::Node, source: &str) -> Opti
 #[cfg(test)]
 #[path = "parser_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod return_type_tests {
+    use super::*;
+
+    #[test]
+    fn extract_simple_return_type() {
+        assert_eq!(extract_return_type("fun foo(): String"), Some("String".into()));
+        assert_eq!(extract_return_type("fun bar(a: Int): Boolean"), Some("Boolean".into()));
+    }
+
+    #[test]
+    fn extract_no_return_type() {
+        assert_eq!(extract_return_type("fun foo()"), None);
+        assert_eq!(extract_return_type("fun bar(a: Int)"), None);
+    }
+
+    #[test]
+    fn extract_generic_return() {
+        assert_eq!(extract_return_type("fun <T> map(f: () -> T): List<T>"), Some("List<T>".into()));
+    }
+
+    #[test]
+    fn extract_parameters_simple() {
+        let params = extract_parameters("fun foo(a: Int, b: String)");
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0], ("a".into(), "Int".into()));
+        assert_eq!(params[1], ("b".into(), "String".into()));
+    }
+
+    #[test]
+    fn extract_parameters_no_params() {
+        let params = extract_parameters("fun foo()");
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn extract_parameters_generic() {
+        let params = extract_parameters("fun <T> map(list: List<T>, f: (T) -> R): List<R>");
+        assert_eq!(params.len(), 2);
+    }
+}
