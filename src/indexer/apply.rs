@@ -127,6 +127,14 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
     }
     // Build call edge index: callee_name → [(caller_file, caller_name)]
     let mut call_edges: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    // Build import edge index: imported_fqn → [(importing_file, local_name)]
+    let mut import_edges: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for import in &result.data.imports {
+        import_edges
+            .entry(import.full_path.clone())
+            .or_default()
+            .push((uri_str.clone(), import.local_name.clone()));
+    }
     for (caller, callee) in &result.data.call_edges {
         call_edges
             .entry(callee.clone())
@@ -141,6 +149,7 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
         subtypes,
         supertypes_map,
         call_edges,
+        import_edges,
         file_data: (uri_str.clone(), Arc::new(result.data.clone())),
         content_hash: (uri_str, result.content_hash),
     }
@@ -758,6 +767,14 @@ impl Indexer {
             }
         }
 
+        for (fqn, entries) in contrib.import_edges {
+            let mut entry = self.import_edges.entry(fqn).or_default();
+            for e in entries {
+                if !entry.contains(&e) {
+                    entry.push(e);
+                }
+            }
+        }
         for (callee, entries) in contrib.call_edges {
             let mut edge_entry = self.call_edges.entry(callee).or_default();
             for entry in entries {

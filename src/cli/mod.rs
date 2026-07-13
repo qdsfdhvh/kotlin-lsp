@@ -31,6 +31,7 @@ mod skills;
 mod sources;
 mod summarize;
 mod symbol_queries;
+mod symbol_graph;
 pub(crate) mod templates;
 mod tokens;
 mod workspace;

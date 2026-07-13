@@ -111,6 +111,8 @@ pub(crate) struct FileContributions {
     pub supertypes_map: HashMap<String, Vec<(String, String)>>,
     /// Call edges (callee → [(caller_file, caller_name)]).
     pub call_edges: HashMap<String, Vec<(String, String)>>,
+    /// Import edges: fqn → [(file, local_name)].
+    pub import_edges: HashMap<String, Vec<(String, String)>>,
     pub file_data: (String, Arc<crate::types::FileData>),
     pub content_hash: (String, u64),
 }
@@ -154,6 +156,9 @@ pub(crate) struct Indexer {
     /// Forward supertype index: subtype_name → [(supertype_name, file)].
     /// Built during workspace indexing for fast supertype lookups.
     pub(crate) supertypes_index: DashMap<String, Vec<(String, String)>>,
+    /// Import edges: imported_fqn → [(importing_file, local_name)].
+    /// Built during workspace indexing for fast import analysis.
+    pub(crate) import_edges: DashMap<String, Vec<(String, String)>>,
     /// Call graph edges: callee_name → [(caller_file, caller_name)].
     /// Built during workspace indexing; used by callers/callees commands.
     pub(crate) call_edges: DashMap<String, Vec<(String, String)>>,
@@ -277,6 +282,7 @@ impl Indexer {
             live_lines: DashMap::new(),
             subtypes: DashMap::new(),
             supertypes_index: DashMap::new(),
+            import_edges: DashMap::new(),
             call_edges: DashMap::new(),
             bare_name_cache: std::sync::RwLock::new(Vec::new()),
             last_completion: std::sync::Mutex::new(None),
@@ -312,6 +318,7 @@ impl Indexer {
         self.packages.clear();
         self.subtypes.clear();
         self.supertypes_index.clear();
+        self.import_edges.clear();
         self.call_edges.clear();
         self.content_hashes.clear();
         self.completion_cache.clear();
