@@ -461,7 +461,7 @@ fn build_summary_from_index(
         modifiers,
         signature,
         members,
-        doc: None, // KDoc not in index — only available via source re-parse
+        doc: sym.documentation.clone(),
         dependencies: vec![],
         file: file_path.display().to_string(),
         line: loc.range.start.line + 1,
