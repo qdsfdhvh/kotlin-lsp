@@ -139,10 +139,10 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
     let mut override_edges: HashMap<String, Vec<(String, String)>> = HashMap::new();
     for sym in &result.data.symbols {
         if sym.detail.contains("override") && sym.kind == tower_lsp::lsp_types::SymbolKind::METHOD {
-            override_edges
-                .entry(sym.name.clone())
-                .or_default()
-                .push((uri_str.clone(), sym.parent_fq_name.clone().unwrap_or_default()));
+            override_edges.entry(sym.name.clone()).or_default().push((
+                uri_str.clone(),
+                sym.parent_fq_name.clone().unwrap_or_default(),
+            ));
         }
     }
     for (caller, callee) in &result.data.call_edges {

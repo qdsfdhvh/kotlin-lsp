@@ -49,8 +49,6 @@ pub(crate) async fn run_symbol_graph(json: bool) {
         }
     }
 
-
-
     let output = serde_json::json!({
         "symbols": index.definitions.iter().map(|e| e.key().clone()).collect::<Vec<_>>(),
         "edges": {
