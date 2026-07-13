@@ -38,12 +38,26 @@ pub(crate) async fn run_symbol_graph(json: bool) {
         }
     }
 
+    let mut override_edges: Vec<serde_json::Value> = Vec::new();
+    for entry in index.override_edges.iter() {
+        for (file, class_name) in entry.value().iter() {
+            override_edges.push(serde_json::json!({
+                "method": entry.key(),
+                "file": file,
+                "class": class_name,
+            }));
+        }
+    }
+
+
+
     let output = serde_json::json!({
         "symbols": index.definitions.iter().map(|e| e.key().clone()).collect::<Vec<_>>(),
         "edges": {
             "calls": call_edges,
             "inheritance": inherit_edges,
             "imports": import_edges,
+            "overrides": override_edges,
         },
         "module": crate::cli::modules::discover_modules(),
     });

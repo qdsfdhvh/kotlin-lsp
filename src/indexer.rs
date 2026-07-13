@@ -113,6 +113,8 @@ pub(crate) struct FileContributions {
     pub call_edges: HashMap<String, Vec<(String, String)>>,
     /// Import edges: fqn → [(file, local_name)].
     pub import_edges: HashMap<String, Vec<(String, String)>>,
+    /// Override edges: method_name → [(file, class)].
+    pub override_edges: HashMap<String, Vec<(String, String)>>,
     pub file_data: (String, Arc<crate::types::FileData>),
     pub content_hash: (String, u64),
 }
@@ -159,6 +161,9 @@ pub(crate) struct Indexer {
     /// Import edges: imported_fqn → [(importing_file, local_name)].
     /// Built during workspace indexing for fast import analysis.
     pub(crate) import_edges: DashMap<String, Vec<(String, String)>>,
+    /// Override edges: method_name → [(overriding_file, overriding_class)].
+    /// Built during workspace indexing for override analysis.
+    pub(crate) override_edges: DashMap<String, Vec<(String, String)>>,
     /// Call graph edges: callee_name → [(caller_file, caller_name)].
     /// Built during workspace indexing; used by callers/callees commands.
     pub(crate) call_edges: DashMap<String, Vec<(String, String)>>,
@@ -283,6 +288,7 @@ impl Indexer {
             subtypes: DashMap::new(),
             supertypes_index: DashMap::new(),
             import_edges: DashMap::new(),
+            override_edges: DashMap::new(),
             call_edges: DashMap::new(),
             bare_name_cache: std::sync::RwLock::new(Vec::new()),
             last_completion: std::sync::Mutex::new(None),
@@ -319,6 +325,7 @@ impl Indexer {
         self.subtypes.clear();
         self.supertypes_index.clear();
         self.import_edges.clear();
+        self.override_edges.clear();
         self.call_edges.clear();
         self.content_hashes.clear();
         self.completion_cache.clear();

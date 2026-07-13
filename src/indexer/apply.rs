@@ -135,6 +135,16 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
             .or_default()
             .push((uri_str.clone(), import.local_name.clone()));
     }
+    // Build override edges: method_name → [(file, class)]
+    let mut override_edges: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for sym in &result.data.symbols {
+        if sym.detail.contains("override") && sym.kind == tower_lsp::lsp_types::SymbolKind::METHOD {
+            override_edges
+                .entry(sym.name.clone())
+                .or_default()
+                .push((uri_str.clone(), sym.parent_fq_name.clone().unwrap_or_default()));
+        }
+    }
     for (caller, callee) in &result.data.call_edges {
         call_edges
             .entry(callee.clone())
@@ -150,6 +160,7 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
         supertypes_map,
         call_edges,
         import_edges,
+        override_edges,
         file_data: (uri_str.clone(), Arc::new(result.data.clone())),
         content_hash: (uri_str, result.content_hash),
     }
@@ -767,6 +778,14 @@ impl Indexer {
             }
         }
 
+        for (method_name, entries) in contrib.override_edges {
+            let mut entry = self.override_edges.entry(method_name).or_default();
+            for e in entries {
+                if !entry.contains(&e) {
+                    entry.push(e);
+                }
+            }
+        }
         for (fqn, entries) in contrib.import_edges {
             let mut entry = self.import_edges.entry(fqn).or_default();
             for e in entries {
