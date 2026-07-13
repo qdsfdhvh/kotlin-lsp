@@ -100,6 +100,18 @@ pub(crate) struct SymbolEntry {
     /// in completion responses.
     #[serde(default)]
     pub deprecated: bool,
+    /// Enclosing class/interface/object FQ name, if any.
+    #[serde(default)]
+    pub parent_fq_name: Option<String>,
+    /// Return type extracted from signature, if any.
+    #[serde(default)]
+    pub return_type: Option<String>,
+    /// Parameter list: (name, type_name).
+    #[serde(default)]
+    pub parameters: Vec<(String, String)>,
+    /// KDoc summary line, if any.
+    #[serde(default)]
+    pub documentation: Option<String>,
 }
 
 impl SymbolEntry {

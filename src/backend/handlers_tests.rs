@@ -643,6 +643,10 @@ mod code_action_tests {
             type_params: vec![],
             extension_receiver: String::new(),
             deprecated: false,
+            parent_fq_name: None,
+            return_type: None,
+            parameters: Vec::new(),
+            documentation: None,
         }
     }
 
