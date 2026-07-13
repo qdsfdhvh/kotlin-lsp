@@ -360,6 +360,36 @@ impl Indexer {
         let lang = crate::Language::from_path(uri.path());
         data.call_edges = crate::parser::extract_call_edges(content, lang);
 
+        // Set parent_fq_name: for each non-class symbol, find enclosing class by range.
+        let class_kinds_set: std::vec::Vec<tower_lsp::lsp_types::SymbolKind> =
+            class_kinds.to_vec();
+        let mut class_symbols: Vec<(String, tower_lsp::lsp_types::Range)> = data
+            .symbols
+            .iter()
+            .filter(|s| class_kinds.contains(&s.kind))
+            .map(|s| {
+                let fq = if let Some(ref pkg) = data.package {
+                    format!("{}.{}", pkg, s.name)
+                } else {
+                    s.name.clone()
+                };
+                (fq, s.range)
+            })
+            .collect();
+        for sym in data.symbols.iter_mut() {
+            if class_kinds.contains(&sym.kind) {
+                continue;
+            }
+            for (ref class_fq, class_range) in &class_symbols {
+                if class_range.start <= sym.range.start
+                    && sym.range.end <= class_range.end
+                {
+                    sym.parent_fq_name = Some(class_fq.clone());
+                    break;
+                }
+            }
+        }
+
         FileIndexResult {
             uri: uri.clone(),
             data,
