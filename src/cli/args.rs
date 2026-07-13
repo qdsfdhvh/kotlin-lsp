@@ -323,6 +323,13 @@ pub(crate) enum Subcommand {
     Workspace,
     /// Export full symbol graph (calls, inheritance, imports).
     SymbolGraph,
+    /// Export complete workspace snapshot as JSON (symbols + relationships + modules).
+    Snapshot {
+        /// Filter by symbol kind (comma-separated: class,fun,interface...)
+        filter_kind: Option<String>,
+        /// Exclude relationship graph from output (symbols only).
+        exclude_relationships: bool,
+    },
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -446,6 +453,7 @@ struct ParsedCliFlags {
     ref_kind: Option<String>,
     diagnose: bool,
     name_arg: Option<String>,
+    exclude_relationships: bool,
 }
 
 fn parse_first_argument(args: &mut lexopt::Parser) -> Result<Option<std::ffi::OsString>, String> {
@@ -518,6 +526,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         modifier_filter: None,
         ref_kind: None,
         diagnose: false,
+        exclude_relationships: false,
         name_arg: None,
     };
 
@@ -602,6 +611,9 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Long("ref-kind")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
                 parsed.ref_kind = Some(value.to_string_lossy().into_owned());
+            }
+            Some(lexopt::Arg::Long("exclude-relationships")) => {
+                parsed.exclude_relationships = true;
             }
             Some(lexopt::Arg::Long("diagnose")) => {
                 parsed.diagnose = true;
@@ -809,6 +821,14 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }
         "workspace" => Ok(Subcommand::Workspace),
         "symbol-graph" => Ok(Subcommand::SymbolGraph),
+        "snapshot" => {
+            let filter_kind: Option<String> = None;
+            let exclude_relationships = parsed.exclude_relationships;
+            Ok(Subcommand::Snapshot {
+                filter_kind,
+                exclude_relationships,
+            })
+        }
         "sources" => Ok(Subcommand::Sources {
             explain: positionals.first().map(|s| s.as_str()) == Some("explain"),
         }),
@@ -1244,6 +1264,7 @@ fn is_subcommand(value: &str) -> bool {
             | "android-composables"
             | "inspect"
             | "symbol-graph"
+            | "snapshot"
             | "rename"
             | "refs-at"
             | "doctor"
