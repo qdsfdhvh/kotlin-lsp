@@ -162,6 +162,38 @@ fn cli_rename_in_scope_skips_package() {
     );
 }
 
+// ─── Supertypes index ───────────────────────────────────────────────────
+
+#[test]
+fn supertypes_index_populated() {
+    let src = "package com.example\nopen class Base\nclass Child : Base()\n";
+    let (idx, _uri) = index_single("/SuperTest.kt", src);
+    // Child should have "Base" as supertype in the forward index
+    let child_entries = idx.supertypes_index.get("Child");
+    assert!(
+        child_entries.is_some(),
+        "Child should have supertype entries"
+    );
+    let entries = child_entries.unwrap();
+    assert!(
+        entries.iter().any(|(sup, _)| sup == "Base"),
+        "Child should extend Base"
+    );
+}
+
+// ─── Type hierarchy ──────────────────────────────────────────────────────
+
+#[test]
+fn type_hierarchy_finds_subtypes() {
+    let src =
+        "package com.example\nopen class Animal\nclass Dog : Animal()\nclass Cat : Animal()\n";
+    let (idx, _uri) = index_single("/TypeHier.kt", src);
+    // subtypes index should have Animal -> [Dog, Cat]
+    let locs = idx.subtypes.get("Animal");
+    assert!(locs.is_some(), "Animal should have subtypes");
+    assert_eq!(locs.unwrap().len(), 2, "Animal should have 2 subtypes");
+}
+
 // ─── Phase 29: visibility/modifier filters ────────────────────────────────
 
 #[test]
