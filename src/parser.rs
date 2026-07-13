@@ -372,6 +372,10 @@ fn push_def_symbols(
                 type_params,
                 extension_receiver,
                 deprecated,
+                parent_fq_name: None,
+                return_type: None,
+                parameters: Vec::new(),
+                documentation: None,
             });
         }
     }
@@ -643,6 +647,10 @@ fn push_interface_symbol(
         type_params,
         extension_receiver: String::new(),
         deprecated,
+        parent_fq_name: None,
+        return_type: None,
+        parameters: Vec::new(),
+        documentation: None,
     });
 }
 
@@ -1674,6 +1682,10 @@ impl crate::types::FileData {
                 type_params,
                 extension_receiver: String::new(),
                 deprecated,
+                parent_fq_name: None,
+                return_type: None,
+                parameters: Vec::new(),
+                documentation: None,
             });
         }
     }
@@ -1710,6 +1722,10 @@ impl crate::types::FileData {
                     type_params: Vec::new(),
                     extension_receiver: String::new(),
                     deprecated,
+                    parent_fq_name: None,
+                    return_type: None,
+                    parameters: Vec::new(),
+                    documentation: None,
                 });
             }
         }
@@ -1752,6 +1768,10 @@ fn synthesize_data_class_copy(symbols: &mut Vec<SymbolEntry>, _lines: &[String])
             type_params: Vec::new(),
             extension_receiver: String::new(),
             deprecated: false,
+            parent_fq_name: None,
+            return_type: None,
+            parameters: Vec::new(),
+            documentation: None,
         });
     }
 }

@@ -1641,6 +1641,10 @@ fn stale_keys_includes_both_qualified_aliases() {
         type_params: Vec::new(),
         extension_receiver: String::new(),
         deprecated: false,
+        parent_fq_name: None,
+        return_type: None,
+        parameters: Vec::new(),
+        documentation: None,
     };
     data.symbols.push(sym);
     let stale = super::stale_keys_for(&uri, &data);
@@ -1676,6 +1680,10 @@ fn stale_keys_stem_equals_sym_no_alias() {
         type_params: Vec::new(),
         extension_receiver: String::new(),
         deprecated: false,
+        parent_fq_name: None,
+        return_type: None,
+        parameters: Vec::new(),
+        documentation: None,
     };
     data.symbols.push(sym);
     let stale = super::stale_keys_for(&uri, &data);
@@ -2159,6 +2167,10 @@ fn fn_type_subst_matches_params_to_args() {
         type_params: vec!["T".into(), "R".into()],
         extension_receiver: String::new(),
         deprecated: false,
+        parent_fq_name: None,
+        return_type: None,
+        parameters: Vec::new(),
+        documentation: None,
     };
 
     let sym_data = std::sync::Arc::new(FileData {
@@ -2196,6 +2208,10 @@ fn fn_type_subst_arg_count_mismatch() {
         type_params: vec!["T".into(), "R".into()],
         extension_receiver: String::new(),
         deprecated: false,
+        parent_fq_name: None,
+        return_type: None,
+        parameters: Vec::new(),
+        documentation: None,
     };
 
     let sym_data = std::sync::Arc::new(FileData {
@@ -2249,6 +2265,10 @@ fn fn_type_subst_no_type_params() {
         type_params: vec![], // no type params
         extension_receiver: String::new(),
         deprecated: false,
+        parent_fq_name: None,
+        return_type: None,
+        parameters: Vec::new(),
+        documentation: None,
     };
     let sym_data = std::sync::Arc::new(FileData {
         symbols: vec![sym],

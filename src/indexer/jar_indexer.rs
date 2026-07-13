@@ -244,6 +244,10 @@ pub(crate) fn symbols_to_filedata(
             type_params: Vec::new(),
             extension_receiver: String::new(),
             deprecated: false,
+            parent_fq_name: None,
+            return_type: None,
+            parameters: Vec::new(),
+            documentation: None,
         };
         file_symbols.push(entry);
         definitions.push((
