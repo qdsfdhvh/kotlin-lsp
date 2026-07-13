@@ -769,7 +769,10 @@ fn extract_fun_from_error(err: &Node, bytes: &[u8], symbols: &mut Vec<SymbolEntr
     if let (Some(name), Some(range)) = (fun_name, fun_range) {
         let lsp_range = ts_to_lsp(err.range());
         let sel_range = ts_to_lsp(range);
-        if symbols.iter().any(|s| s.name == name && s.selection_range == sel_range) {
+        if symbols
+            .iter()
+            .any(|s| s.name == name && s.selection_range == sel_range)
+        {
             return;
         }
         symbols.push(SymbolEntry {

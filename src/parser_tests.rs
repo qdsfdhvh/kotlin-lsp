@@ -2710,5 +2710,8 @@ fn find_function_in_error_node() {
         "package example\n@Target(AnnotationTarget.TYPE)\nannotation class Content\nfun container(content: @Content (() -> Unit)? = null) = Unit",
     );
     let func = data.symbols.iter().find(|s| s.name == "container");
-    assert!(func.is_some(), "container should be found despite ERROR node");
+    assert!(
+        func.is_some(),
+        "container should be found despite ERROR node"
+    );
 }
