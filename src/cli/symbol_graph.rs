@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-
 pub(crate) async fn run_symbol_graph(json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
     let index = crate::cli::run::build_index(&root, false).await;
