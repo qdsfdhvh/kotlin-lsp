@@ -361,8 +361,7 @@ impl Indexer {
         data.call_edges = crate::parser::extract_call_edges(content, lang);
 
         // Set parent_fq_name: for each non-class symbol, find enclosing class by range.
-        let class_kinds_set: std::vec::Vec<tower_lsp::lsp_types::SymbolKind> = class_kinds.to_vec();
-        let mut class_symbols: Vec<(String, tower_lsp::lsp_types::Range)> = data
+        let class_symbols: Vec<(String, tower_lsp::lsp_types::Range)> = data
             .symbols
             .iter()
             .filter(|s| class_kinds.contains(&s.kind))
