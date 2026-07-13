@@ -1832,31 +1832,55 @@ pub(crate) fn extract_return_type(detail: &str) -> Option<String> {
             _ => {}
         }
     }
-    last_colon.map(|i| detail[i + 1..].trim().split('{').next().unwrap_or("").trim().to_string())
+    last_colon.map(|i| {
+        detail[i + 1..]
+            .trim()
+            .split('{')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    })
 }
 
 /// Extract parameters from function signature: Vec of (name, type).
 pub(crate) fn extract_parameters(detail: &str) -> Vec<(String, String)> {
-    let start = match detail.find('(') { Some(s) => s, None => return vec![] };
-    let end = match detail.rfind(')') { Some(e) => e, None => return vec![] };
+    let start = match detail.find('(') {
+        Some(s) => s,
+        None => return vec![],
+    };
+    let end = match detail.rfind(')') {
+        Some(e) => e,
+        None => return vec![],
+    };
     let block = &detail[start + 1..end];
     let mut params = Vec::new();
     let mut depth = 0u32;
     let mut current = String::new();
     for ch in block.chars() {
         match ch {
-            '(' | '<' => { depth += 1; current.push(ch); }
-            ')' | '>' => { depth = depth.saturating_sub(1); current.push(ch); }
+            '(' | '<' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' | '>' => {
+                depth = depth.saturating_sub(1);
+                current.push(ch);
+            }
             ',' if depth == 0 => {
                 let t = current.trim().to_string();
-                if !t.is_empty() { params.push(parse_param_from_sig(&t)); }
+                if !t.is_empty() {
+                    params.push(parse_param_from_sig(&t));
+                }
                 current.clear();
             }
             _ => current.push(ch),
         }
     }
     let t = current.trim().to_string();
-    if !t.is_empty() { params.push(parse_param_from_sig(&t)); }
+    if !t.is_empty() {
+        params.push(parse_param_from_sig(&t));
+    }
     params
 }
 
@@ -1868,7 +1892,6 @@ fn parse_param_from_sig(param: &str) -> (String, String) {
         (param.trim().to_string(), String::new())
     }
 }
-
 
 /// Walk a tree-sitter CST and extract (caller_name, callee_name) edges.
 /// For each call_expression node, finds the enclosing function declaration
@@ -1973,8 +1996,14 @@ mod return_type_tests {
 
     #[test]
     fn extract_simple_return_type() {
-        assert_eq!(extract_return_type("fun foo(): String"), Some("String".into()));
-        assert_eq!(extract_return_type("fun bar(a: Int): Boolean"), Some("Boolean".into()));
+        assert_eq!(
+            extract_return_type("fun foo(): String"),
+            Some("String".into())
+        );
+        assert_eq!(
+            extract_return_type("fun bar(a: Int): Boolean"),
+            Some("Boolean".into())
+        );
     }
 
     #[test]
@@ -1985,7 +2014,10 @@ mod return_type_tests {
 
     #[test]
     fn extract_generic_return() {
-        assert_eq!(extract_return_type("fun <T> map(f: () -> T): List<T>"), Some("List<T>".into()));
+        assert_eq!(
+            extract_return_type("fun <T> map(f: () -> T): List<T>"),
+            Some("List<T>".into())
+        );
     }
 
     #[test]
