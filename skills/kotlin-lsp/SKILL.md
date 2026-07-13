@@ -347,7 +347,7 @@ Use before refactoring to gauge blast radius.
 kotlin-lsp summarize <Name> [--expand]
 ```
 
-Returns kind, signature, members list, and KDoc (if present).
+Returns kind, signature, members list, return type, parameters, and KDoc.
 One call replaces N hover + context calls. Use `--expand` for full member signatures.
 
 #### find-test — locate tests
