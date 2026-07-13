@@ -1,9 +1,7 @@
 //! Symbol graph export — serializes the full relationship graph as JSON.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use crate::indexer::Indexer;
 
 pub(crate) async fn run_symbol_graph(json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
