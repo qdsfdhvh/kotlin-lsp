@@ -1003,6 +1003,12 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::SymbolGraph => {
             crate::cli::symbol_graph::run_symbol_graph(json).await;
         }
+        Subcommand::Snapshot {
+            filter_kind,
+            exclude_relationships,
+        } => {
+            crate::cli::snapshot::run_snapshot(filter_kind, exclude_relationships, json).await;
+        }
         Subcommand::Workspace => {
             crate::cli::workspace::run_workspace(json);
         }

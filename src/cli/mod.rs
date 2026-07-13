@@ -28,6 +28,7 @@ mod query_engine;
 mod ref_kind;
 mod run;
 mod skills;
+mod snapshot;
 mod sources;
 mod summarize;
 mod symbol_graph;
