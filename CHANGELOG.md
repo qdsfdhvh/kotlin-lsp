@@ -1,7 +1,7 @@
 # Changelog
 
 
-## 0.24.2 (2026-07-12)
+## 0.24.2 (2026-07-13)
 
 ### Phase 23 — Generic Type Param Substitution (#112)
 
@@ -22,13 +22,36 @@
   `infer_lambda_param_type_at` (scope functions) + `enclosing_class_at` (class
   bodies). Filters private members, deduplicates against existing items.
 
+### Agent Knowledge Server — Phases 29-39 (#115)
+
+- **Symbol Graph** — export full workspace symbol graph as JSON:
+  `kotlin-lsp symbol-graph --root <dir>` includes nodes, import edges,
+  override edges, and call edges.
+- **Type Hierarchy Graph** — `type-hierarchy --graph` outputs tree-format
+  supertype chains.
+- **Supertypes Index** — `supertypes_index` for fast forward-edge lookups
+  without scanning all files.
+- **Rich SymbolEntry fields** — `parent_fq_name`, `return_type`,
+  `parameters`, `documentation` populated from tree-sitter signature
+  extraction.
+- **Enclosing class resolution** — `parent_fq_name` computed via
+  range-based class containment for all non-class symbols.
+
+### Fixes
+
+- **Annotated function-type parsing** (#121, #127) — functions with
+  `@Composable (Int) -> Unit` parameters are now correctly extracted
+  from tree-sitter ERROR nodes via `extract_functions_from_errors`.
+- **Unknown subcommand exit code** (#125) — misspelled/unavailable
+  subcommands now exit 1 with a clear error message.
+
 ### Internal
 
 - `complete_bare` gains new `cursor_line: Option<u32>` parameter for scope-
   aware completion.
-
-
-## 0.24.1 (2026-07-12)
+- SKILL.md updated with symbol-graph, integration tests, and min_version
+  0.24.0.
+- `coverage.sh` added for instant targeted or full-project coverage reports.
 
 ### Agent Knowledge Server — Phases 13-21 (#109)
 
