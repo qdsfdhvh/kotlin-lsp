@@ -107,6 +107,8 @@ pub(crate) struct FileContributions {
     pub qualified: HashMap<String, Location>,
     pub packages: HashMap<String, Vec<String>>,
     pub subtypes: HashMap<String, Vec<Location>>,
+    /// Forward supertype map: subtype_name → [(supertype_name, file)].
+    pub supertypes_map: HashMap<String, Vec<(String, String)>>,
     /// Call edges (callee → [(caller_file, caller_name)]).
     pub call_edges: HashMap<String, Vec<(String, String)>>,
     pub file_data: (String, Arc<crate::types::FileData>),
