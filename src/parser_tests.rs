@@ -1960,7 +1960,6 @@ fn fp_inline_fun_with_reified() {
 }
 
 #[test]
-#[test]
 fn fp_annotated_function_type() {
     assert_no_errors("package com.example\nannotation class Composable\nfun container(content: @Composable (Int) -> Unit) = Unit");
 }
