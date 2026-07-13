@@ -341,3 +341,43 @@ fn package_deps_from_imports() {
     let data = idx.files.get(_uri.as_str()).expect("indexed");
     assert_eq!(data.package.as_deref(), Some("com.example"));
 }
+
+// ─── parent_fq_name ─────────────────────────────────────────────────────
+
+#[test]
+fn parent_fq_name_set_for_methods() {
+    let src = "package com.example
+class MyClass {
+    fun myMethod() = 1
+}
+";
+    let (idx, uri) = index_single("/ParentTest.kt", src);
+    let data = idx.files.get(uri.as_str()).expect("indexed");
+    let method = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "myMethod")
+        .expect("method");
+    assert_eq!(
+        method.parent_fq_name.as_deref(),
+        Some("com.example.MyClass")
+    );
+}
+
+#[test]
+fn top_level_function_no_parent() {
+    let src = "package com.example
+fun topLevel() = 1
+";
+    let (idx, uri) = index_single("/NoParent.kt", src);
+    let data = idx.files.get(uri.as_str()).expect("indexed");
+    let func = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "topLevel")
+        .expect("func");
+    assert!(
+        func.parent_fq_name.is_none(),
+        "top-level function should have no parent"
+    );
+}
