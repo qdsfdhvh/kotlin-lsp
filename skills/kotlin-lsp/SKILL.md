@@ -40,6 +40,7 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Need which files import X → kotlin-lsp imports-of <Name>
    ├─ Need symbols by annotation → kotlin-lsp annotated <Name>
    ├─ Need package deps → kotlin-lsp package-deps <package>
+   ├─ Need full relationship graph → kotlin-lsp symbol-graph --json
    ├─ Need to search signatures → kotlin-lsp docs <query>
    ├─ Imports are messy → kotlin-lsp organize-imports <file>
    ├─ Need batch type injection for a file → kotlin-lsp inject <file>
@@ -254,6 +255,20 @@ kotlin-lsp type-hierarchy <Name> [--subtypes] [--supertypes]
 Shows subtypes (classes implementing/extending) and/or supertypes. Default: subtypes only.
 
 ### Project analysis
+
+#### symbol-graph — full relationship export (new)
+
+```bash
+kotlin-lsp symbol-graph [--json]
+```
+
+Exports the complete symbol relationship graph:
+calls (who calls whom), inheritance (subtype ↔ supertype),
+imports (who imports what), overrides (method overrides).
+
+```bash
+kotlin-lsp symbol-graph --json
+```
 
 #### check — syntax validation
 
