@@ -1225,6 +1225,32 @@ fn is_subcommand(value: &str) -> bool {
             | "benchmark"
             | "skills"
             | "format"
+            | "implementations"
+            | "subclasses"
+            | "imports-of"
+            | "annotated"
+            | "package-deps"
+            | "docs"
+            | "summarize"
+            | "callers"
+            | "callees"
+            | "impact"
+            | "find-test"
+            | "expect-actual"
+            | "modules"
+            | "module-deps"
+            | "module-files"
+            | "android-activities"
+            | "android-composables"
+            | "inspect"
+            | "symbol-graph"
+            | "rename"
+            | "refs-at"
+            | "doctor"
+            | "insert-import"
+            | "insert-member"
+            | "insert-function"
+            | "insert-override"
     )
 }
 
@@ -1258,20 +1284,31 @@ SUBCOMMANDS:
     check <file>...                    Check syntax errors without LSP
     call-hierarchy <file> <line> <col> Show callers/callees
     type-hierarchy <name>              Show subtypes or supertypes
+    implementations <name> [depth]     Show implementations of interface/trait
+    subclasses <name> [depth]          Show subclasses of a class
+    imports-of <name>                  Show files importing the given symbol
+    annotated <name>                   Find symbols annotated with @name
+    package-deps [name]                Show package-level import dependencies
+    docs <query>                       Search symbols by name or signature
     organize-imports <file>...         Sort, dedup, and remove unused imports
     inject <file>                      Batch-resolve referenced type signatures
-    insert <file> <line>               Insert code before/after a line
-    batch <rule.json>                  Apply JSON find/replace/insert rules
-    batch-imports <file>               Report missing import candidates
-    code-action <file> <line> <col>    List or apply code actions
-    new-file <template> <Name>         Create a file from a template
-    index                              Build and cache the workspace index
-    index-jars [root]                  Index library symbols from sources jars
-    sources [explain]                  List auto-discovered source roots
-    extract-sources [PATTERN...]       Extract Gradle *-sources.jar files
-    cache stats                        Show index cache statistics
-    benchmark                          Run indexing benchmark
-    tokens <file>                      Dump semantic tokens (debug)
+    index-jars [root]                  Index JAR/class files for navigation
+    index [--root <dir>]               Index workspace (auto-detect build system)
+    cache stats                        Show disk cache statistics
+    batch-imports <file>               Batch add missing imports (from rules)
+    callers <file> <line> <col> [depth] Show callers tree for symbol at position
+    callees <file> <line> <col> [depth] Show callees tree for symbol at position
+    impact <file> <line> <col>         Impact analysis: what depends on this?
+    summarize <name>                   Show rich summary for a symbol
+    find-test <file> <line> <col>      Find related test files
+    expect-actual <name>               Find KMP expect/actual declarations
+    modules                            List all project modules
+    module-deps <name>                 Show module dependencies
+    module-files <name>                List files in a module
+    android-activities                 List Android activities from AndroidManifest
+    android-composables                Find @Composable functions
+    inspect <file>                     Display detailed file diagnostics
+    benchmark                          Run LSP operation benchmarks
     tree <file>                        Dump tree-sitter parse tree (debug)
     format check <file/dir>...          Check formatting violations (like spotlessCheck)
     format apply <file/dir>...         Apply formatting in-place (like spotlessApply)

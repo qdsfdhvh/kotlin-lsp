@@ -2715,3 +2715,107 @@ fn find_function_in_error_node() {
         "container should be found despite ERROR node"
     );
 }
+
+// ── Phase 29: Rich Symbol Model tests ────────────────────────────────────
+
+#[test]
+fn kdoc_extracted_to_documentation_field() {
+    let data = parse_kotlin(
+        "/**\n         * Login ViewModel for the authentication screen.\n         */\n         class LoginViewModel",
+    );
+    let sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "LoginViewModel")
+        .unwrap();
+    assert_eq!(
+        sym.documentation.as_deref(),
+        Some("Login ViewModel for the authentication screen.")
+    );
+}
+
+#[test]
+fn kdoc_for_function_extracted() {
+    let data = parse_kotlin(
+        "/**\n         * Process the login request.\n         */\n         fun login(username: String, password: String): Boolean",
+    );
+    let sym = data.symbols.iter().find(|s| s.name == "login").unwrap();
+    assert_eq!(
+        sym.documentation.as_deref(),
+        Some("Process the login request.")
+    );
+}
+
+#[test]
+fn return_type_extracted_for_function() {
+    let data = parse_kotlin(
+        "package com.example\n         fun login(username: String, password: String): Boolean",
+    );
+    let sym = data.symbols.iter().find(|s| s.name == "login").unwrap();
+    assert_eq!(sym.return_type.as_deref(), Some("Boolean"));
+}
+
+#[test]
+fn return_type_extracted_for_property() {
+    let data = parse_kotlin("package com.example\n         val isLoggedIn: Boolean = false");
+    let sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "isLoggedIn")
+        .unwrap();
+    assert_eq!(sym.return_type.as_deref(), Some("Boolean"));
+}
+
+#[test]
+fn return_type_none_for_class() {
+    let data = parse_kotlin("package com.example\n         class UserRepository");
+    let sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "UserRepository")
+        .unwrap();
+    assert_eq!(sym.return_type, None);
+}
+
+#[test]
+fn parameters_extracted_for_function() {
+    let data = parse_kotlin(
+        "package com.example\n         fun login(username: String, password: String, remember: Boolean = false)",
+    );
+    let sym = data.symbols.iter().find(|s| s.name == "login").unwrap();
+    assert_eq!(sym.parameters.len(), 3);
+    assert_eq!(
+        sym.parameters[0],
+        ("username".to_string(), "String".to_string())
+    );
+    assert_eq!(
+        sym.parameters[1],
+        ("password".to_string(), "String".to_string())
+    );
+    assert_eq!(
+        sym.parameters[2],
+        ("remember".to_string(), "Boolean".to_string())
+    );
+}
+
+#[test]
+fn parameters_empty_for_class() {
+    let data = parse_kotlin("package com.example\n         class UserRepository");
+    let sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "UserRepository")
+        .unwrap();
+    assert!(sym.parameters.is_empty());
+}
+
+#[test]
+fn no_kdoc_yields_none() {
+    let data = parse_kotlin("package com.example\n         fun plainFunction(): Unit");
+    let sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "plainFunction")
+        .unwrap();
+    assert_eq!(sym.documentation, None);
+}

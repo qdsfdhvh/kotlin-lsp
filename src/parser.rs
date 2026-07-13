@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::thread::LocalKey;
 use tree_sitter::StreamingIterator;
 
@@ -185,7 +185,7 @@ pub(crate) fn parse_kotlin(content: &str) -> FileData {
         // When tree-sitter can't parse annotated function types like
         // @Composable (Int) -> Unit, the entire function_declaration becomes
         // an ERROR node. Extract function names from these errors.
-        extract_functions_from_errors(root, bytes, &mut data.symbols);
+        extract_functions_from_errors(root, bytes, &mut data.symbols, &data.lines);
 
         // ── supertype relationships (delegation specifiers) ────────────────────
         data.extract_supers_kotlin(root, bytes);
@@ -362,7 +362,24 @@ fn push_def_symbols(
         if kind != SymbolKind::NULL {
             let visibility = vis_fn(lines, sel.start.line as usize);
             let detail = extract_detail(lines, range.start.line, range.end.line);
-            let extension_receiver = if kind == SymbolKind::FUNCTION {
+            let return_type = if kind == SymbolKind::FUNCTION
+                || kind == SymbolKind::METHOD
+                || kind == SymbolKind::PROPERTY
+            {
+                extract_return_type(&detail)
+            } else {
+                None
+            };
+            let parameters = if kind == SymbolKind::FUNCTION
+                || kind == SymbolKind::METHOD
+                || kind == SymbolKind::CONSTRUCTOR
+            {
+                extract_parameters(&detail)
+            } else {
+                Vec::new()
+            };
+            let documentation = extract_kdoc_from_lines(lines, range.start.line);
+            let extension_receiver = if kind == SymbolKind::FUNCTION || kind == SymbolKind::METHOD {
                 extract_extension_receiver(&detail).to_owned()
             } else {
                 String::new()
@@ -379,9 +396,9 @@ fn push_def_symbols(
                 extension_receiver,
                 deprecated,
                 parent_fq_name: None,
-                return_type: None,
-                parameters: Vec::new(),
-                documentation: None,
+                return_type,
+                parameters,
+                documentation,
             });
         }
     }
@@ -636,11 +653,12 @@ fn push_interface_symbol(
     sel_node_range: tree_sitter::Range,
     bytes: &[u8],
     data: &mut FileData,
+    lines: Arc<Vec<String>>,
 ) {
-    let visibility = visibility_at_line(&data.lines, node.range().start_point.row);
+    let visibility = visibility_at_line(&lines, node.range().start_point.row);
     let range = ts_to_lsp(node.range());
     let sel = ts_to_lsp(sel_node_range);
-    let detail = extract_detail(&data.lines, range.start.line, range.end.line);
+    let detail = extract_detail(&lines, range.start.line, range.end.line);
     let type_params = node.extract_type_params_or_error_child(bytes);
     let deprecated = is_deprecated_at_line(&data.lines, sel.start.line as usize);
     data.symbols.push(SymbolEntry {
@@ -656,7 +674,7 @@ fn push_interface_symbol(
         parent_fq_name: None,
         return_type: None,
         parameters: Vec::new(),
-        documentation: None,
+        documentation: extract_kdoc_from_lines(&lines, node.range().start_point.row as u32),
     });
 }
 
@@ -686,7 +704,8 @@ fn extract_fun_interfaces(root: Node, bytes: &[u8], data: &mut FileData) {
                 });
             if let Some(child) = name_node {
                 if let Ok(name) = child.utf8_text(bytes) {
-                    push_interface_symbol(name, &node, child.range(), bytes, data);
+                    let lines = data.lines.clone();
+                    push_interface_symbol(name, &node, child.range(), bytes, data, lines);
                 }
             }
             // Don't recurse further into ERROR children.
@@ -704,7 +723,8 @@ fn extract_fun_interfaces(root: Node, bytes: &[u8], data: &mut FileData) {
                         && s.selection_start() == sel.start.line
                         && matches!(s.kind, SymbolKind::FUNCTION | SymbolKind::METHOD))
                 });
-                push_interface_symbol(name, &node, name_ts_range, bytes, data);
+                let lines = data.lines.clone();
+                push_interface_symbol(name, &node, name_ts_range, bytes, data, lines);
             }
             // Still recurse into children to find nested fun interfaces.
         }
@@ -742,16 +762,26 @@ fn has_any_fun_interface_in_tree(root: &Node, bytes: &[u8]) -> bool {
 
 /// Walk ERROR nodes and salvage function declarations that tree-sitter
 /// could not parse due to annotated function types like `@Composable (Int) -> Unit`.
-fn extract_functions_from_errors(root: Node, bytes: &[u8], symbols: &mut Vec<SymbolEntry>) {
+fn extract_functions_from_errors(
+    root: Node,
+    bytes: &[u8],
+    symbols: &mut Vec<SymbolEntry>,
+    lines: &[String],
+) {
     let mut cursor = root.walk();
     for child in root.children(&mut cursor) {
         if child.kind() == "ERROR" {
-            extract_fun_from_error(&child, bytes, symbols);
+            extract_fun_from_error(&child, bytes, symbols, lines);
         }
     }
 }
 
-fn extract_fun_from_error(err: &Node, bytes: &[u8], symbols: &mut Vec<SymbolEntry>) {
+fn extract_fun_from_error(
+    err: &Node,
+    bytes: &[u8],
+    symbols: &mut Vec<SymbolEntry>,
+    lines: &[String],
+) {
     let text = err.utf8_text(bytes).unwrap_or("");
     if !text.starts_with("fun ") {
         return;
@@ -788,7 +818,7 @@ fn extract_fun_from_error(err: &Node, bytes: &[u8], symbols: &mut Vec<SymbolEntr
             parent_fq_name: None,
             return_type: None,
             parameters: Vec::new(),
-            documentation: None,
+            documentation: extract_kdoc_from_lines(lines, err.range().start_point.row as u32),
         });
     }
 }
@@ -1010,16 +1040,29 @@ pub(crate) fn extract_detail(lines: &[String], start_line: u32, end_line: u32) -
             collected.push(' ');
         }
         collected.push_str(line.trim_start());
-        // Stop collecting when we hit the body opener or annotation-only lines.
-        if collected.contains('{') || collected.contains(" = ") || collected.ends_with('=') {
+        // Stop collecting when we hit `{` (class body) or `=` at depth 0 (property init).
+        // Do NOT trim at `=` inside parens (function default parameter values).
+        if collected.contains('{') || depth_zero_equals_after_last_paren(&collected) {
             break;
         }
     }
-    // Trim at body opener `{` or ` =`.
+    // Trim at `{`, or `=` after last `)` (property init).
     let trimmed = if let Some(pos) = collected.find('{') {
         collected[..pos].trim_end().to_owned()
-    } else if let Some(pos) = collected.find(" = ") {
-        collected[..pos].trim_end().to_owned()
+    } else if depth_zero_equals_after_last_paren(&collected) {
+        if let Some(pos) = collected.rfind(')') {
+            let after_paren = &collected[(pos + 1)..];
+            if let Some(eq_pos) = after_paren.find(" = ") {
+                let cutoff = (pos + 1) + eq_pos;
+                collected[..cutoff].trim_end().to_owned()
+            } else {
+                collected
+            }
+        } else if let Some(pos) = collected.find(" = ") {
+            collected[..pos].trim_end().to_owned()
+        } else {
+            collected
+        }
     } else {
         collected
     };
@@ -1030,6 +1073,23 @@ pub(crate) fn extract_detail(lines: &[String], start_line: u32, end_line: u32) -
         format!("{}…", s)
     } else {
         trimmed
+    }
+}
+
+/// Returns true if `collected` contains `=` at paren-depth 0 after the last `)`.
+/// This prevents cutting off function signatures at default parameter values
+/// (e.g. `fun login(a: Int = 5)` should not be trimmed at ` = `).
+fn depth_zero_equals_after_last_paren(collected: &str) -> bool {
+    let last_rparen = collected.rfind(')');
+    match last_rparen {
+        Some(pos) => {
+            // Only treat `=` after the closing paren as the body start.
+            collected[(pos + 1)..].contains(" = ") || collected[(pos + 1)..].ends_with('=')
+        }
+        None => {
+            // No closing paren: trim at ` = ` as before (properties, expression bodies).
+            collected.contains(" = ") || collected.ends_with('=')
+        }
     }
 }
 
@@ -1746,7 +1806,10 @@ impl crate::types::FileData {
                 parent_fq_name: None,
                 return_type: _ret,
                 parameters: _params,
-                documentation: None,
+                documentation: extract_kdoc_from_lines(
+                    &self.lines,
+                    node.range().start_point.row as u32,
+                ),
             });
         }
     }
@@ -1788,7 +1851,10 @@ impl crate::types::FileData {
                     parent_fq_name: None,
                     return_type: _ret2,
                     parameters: _params2,
-                    documentation: None,
+                    documentation: extract_kdoc_from_lines(
+                        &self.lines,
+                        node.range().start_point.row as u32,
+                    ),
                 });
             }
         }
@@ -1809,7 +1875,7 @@ impl crate::types::FileData {
 
 // ─── tests ───────────────────────────────────────────────────────────────────
 
-fn synthesize_data_class_copy(symbols: &mut Vec<SymbolEntry>, _lines: &[String]) {
+fn synthesize_data_class_copy(symbols: &mut Vec<SymbolEntry>, lines: &[String]) {
     let data_classes: Vec<(usize, String)> = symbols
         .iter()
         .enumerate()
@@ -1834,7 +1900,7 @@ fn synthesize_data_class_copy(symbols: &mut Vec<SymbolEntry>, _lines: &[String])
             parent_fq_name: None,
             return_type: None,
             parameters: Vec::new(),
-            documentation: None,
+            documentation: extract_kdoc_from_lines(lines, symbols[idx].range.start.line),
         });
     }
 }
@@ -1943,10 +2009,87 @@ pub(crate) fn extract_parameters(detail: &str) -> Vec<(String, String)> {
     params
 }
 
+/// Extract KDoc summary from the lines preceding a declaration.
+/// Looks for `/** ... */` comment blocks immediately above `decl_start_line`.
+pub(crate) fn extract_kdoc_from_lines(lines: &[String], decl_start_line: u32) -> Option<String> {
+    let start = decl_start_line as usize;
+    if start == 0 {
+        return None;
+    }
+    // Scan backwards from the line before the declaration.
+    let mut kdoc_lines: Vec<&str> = Vec::new();
+    let mut found_open = false;
+    for i in (0..start).rev() {
+        let line = lines[i].trim();
+        if line.ends_with("*/") {
+            kdoc_lines.push(line);
+            found_open = true;
+            break;
+        }
+        // Blank lines and annotations break the chain.
+        if line.is_empty() || line.starts_with('@') {
+            break;
+        }
+        kdoc_lines.push(line);
+    }
+    if !found_open {
+        return None;
+    }
+    // Now look for the opening `/**`.
+    for i in (0..start).rev().skip(1) {
+        let line = lines[i].trim();
+        if line.starts_with("/**") {
+            kdoc_lines.push(line);
+            break;
+        }
+        if line.starts_with('*') {
+            kdoc_lines.push(line);
+        } else if line.is_empty() {
+            // Keep scanning; blank lines before KDoc are ok.
+            break;
+        } else {
+            break;
+        }
+    }
+    kdoc_lines.reverse();
+    if kdoc_lines.is_empty() {
+        return None;
+    }
+    Some(strip_kdoc_markers(&kdoc_lines.join("\n")))
+}
+
+fn strip_kdoc_markers(kdoc: &str) -> String {
+    kdoc.lines()
+        .map(|l| {
+            let mut s = l.trim();
+            if s.starts_with("/**") {
+                s = s[3..].trim_start();
+            }
+            if s.ends_with("*/") {
+                s = s[..s.len().saturating_sub(2)].trim_end();
+            }
+            if s.starts_with('*') {
+                s = s[1..].trim_start();
+            }
+            s.trim()
+        })
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn parse_param_from_sig(param: &str) -> (String, String) {
     let parts: Vec<&str> = param.rsplitn(2, ':').collect();
     if parts.len() == 2 {
-        (parts[1].trim().to_string(), parts[0].trim().to_string())
+        let param_name = parts[1].trim().to_string();
+        // Strip default value (e.g. "Boolean = false" → "Boolean")
+        let raw_type = parts[0].trim();
+        let param_type = if let Some(eq_pos) = raw_type.find('=') {
+            raw_type[..eq_pos].trim().to_string()
+        } else {
+            raw_type.to_string()
+        };
+        (param_name, param_type)
     } else {
         (param.trim().to_string(), String::new())
     }
