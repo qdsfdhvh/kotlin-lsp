@@ -1048,8 +1048,9 @@ pub(crate) async fn run(args: CliArgs) {
             name,
             subtypes,
             supertypes,
+            graph,
         } => {
-            run_type_hierarchy(&name, subtypes, supertypes, json).await;
+            run_type_hierarchy(&name, subtypes, supertypes, graph, json).await;
         }
         Subcommand::Implementations { name, depth } => {
             crate::cli::inheritance::run_implementations(&name, depth, json).await;
@@ -1769,7 +1770,7 @@ fn find_callers_via_rg(
 
 // ── type-hierarchy ────────────────────────────────────────────────────────────
 
-async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, json: bool) {
+async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, graph: bool, json: bool) {
     let root = resolve_root(None);
     let index = build_index(&root, false).await;
 
@@ -1790,6 +1791,44 @@ async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, json: 
         }
     }
 
+    if graph {
+        // Tree output: show subtypes/supertypes as nested tree
+        println!("## Type hierarchy for `{name}`\n");
+        if subtypes {
+            println!("### Subtypes (tree)");
+            if let Some(locs) = index.subtypes.get(name) {
+                for loc in locs.iter() {
+                    let sub_name = index
+                        .files
+                        .get(loc.uri.as_str())
+                        .and_then(|f| {
+                            f.symbols.iter()
+                                .find(|s| s.selection_range.start.line == loc.range.start.line)
+                                .map(|s| s.name.clone())
+                        })
+                        .unwrap_or_else(|| "?".to_owned());
+                    println!("  ├── {sub_name} ({}:{})", loc.uri, loc.range.start.line + 1);
+                    // Recursively show subtypes? No, depth-based would need graph traversal
+                    // For now, simple tree with direct subtypes only
+                }
+            } else {
+                println!("  (none)");
+            }
+            println!();
+        }
+        if supertypes {
+            println!("### Supertypes (tree)");
+            if let Some(entries) = index.supertypes_index.get(name) {
+                for (sup_name, _file) in entries.iter() {
+                    println!("  ├── {sup_name}");
+                }
+            } else {
+                println!("  (none)");
+            }
+            println!();
+        }
+        return;
+    }
     if json {
         let mut output = serde_json::json!({"name": name});
         if subtypes {
@@ -1838,7 +1877,7 @@ async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, json: 
                         .and_then(|f| {
                             f.symbols
                                 .iter()
-                                .find(|s| s.selection_start() == loc.range.start.line)
+                                .find(|s| s.selection_range.start.line == loc.range.start.line)
                                 .map(|s| s.name.clone())
                         })
                         .unwrap_or_else(|| "?".to_owned());

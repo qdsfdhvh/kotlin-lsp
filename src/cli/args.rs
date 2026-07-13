@@ -164,6 +164,7 @@ pub(crate) enum Subcommand {
         name: String,
         subtypes: bool,
         supertypes: bool,
+        graph: bool,
     },
     /// Find all implementations of an interface/abstract class.
     Implementations {
@@ -428,6 +429,7 @@ struct ParsedCliFlags {
     apply_action: bool,
     type_subtypes: bool,
     type_supertypes: bool,
+    type_graph: bool,
     source_set_filter: Vec<String>,
     kind_filter: Option<String>,
     owner_filter: Option<String>,
@@ -503,6 +505,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         source_set_filter: Vec::new(),
         type_subtypes: false,
         type_supertypes: false,
+        type_graph: false,
         expand: 0,
         exclude_imports: false,
         fuzzy_filter: false,
@@ -551,6 +554,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Long("apply")) => parsed.apply_action = true,
             Some(lexopt::Arg::Long("subtypes")) => parsed.type_subtypes = true,
             Some(lexopt::Arg::Long("supertypes")) => parsed.type_supertypes = true,
+            Some(lexopt::Arg::Long("graph")) => parsed.type_graph = true,
             Some(lexopt::Arg::Long("absolute")) => parsed.absolute = true,
             Some(lexopt::Arg::Long("flat")) => parsed.flat = true,
             Some(lexopt::Arg::Long("exclude-imports")) => parsed.exclude_imports = true,
@@ -652,6 +656,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         dir_filter,
         type_subtypes,
         type_supertypes,
+        type_graph,
         exclude_imports,
         fuzzy_filter,
         visibility_filter,
@@ -994,7 +999,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             Ok(Subcommand::Docs { query })
         }
         "type-hierarchy" => {
-            build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes)
+            build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes, type_graph)
         }
         "format" => {
             if positionals.is_empty() {
@@ -1156,6 +1161,7 @@ fn build_type_hierarchy_subcommand(
     positionals: Vec<String>,
     type_subtypes: bool,
     type_supertypes: bool,
+    type_graph: bool,
 ) -> Result<Subcommand, String> {
     let mut name: Option<String> = None;
 
@@ -1170,6 +1176,7 @@ fn build_type_hierarchy_subcommand(
         name,
         subtypes,
         supertypes: type_supertypes,
+        graph: type_graph,
     })
 }
 
