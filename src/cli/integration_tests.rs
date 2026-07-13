@@ -381,3 +381,30 @@ fun topLevel() = 1
         "top-level function should have no parent"
     );
 }
+
+// ─── Symbol graph ─────────────────────────────────────────────────────────
+
+#[test]
+fn symbol_graph_includes_call_edges() {
+    let src = "package com.example\nclass A {\n    fun foo() { bar() }\n    fun bar() {}\n}\n";
+    let (idx, _uri) = index_single("/SymGraph.kt", src);
+    // foo should call bar
+    let edges = idx.call_edges.get("bar");
+    assert!(edges.is_some(), "bar should be called");
+}
+
+#[test]
+fn symbol_graph_includes_import_edges() {
+    let src = "package com.example\nimport com.lib.Foo\nclass UsesFoo";
+    let (idx, _uri) = index_single("/ImportEdge.kt", src);
+    let edges = idx.import_edges.get("com.lib.Foo");
+    assert!(edges.is_some(), "should track import of com.lib.Foo");
+}
+
+#[test]
+fn symbol_graph_includes_override_edges() {
+    let src = "package com.example\nopen class Base {\n    open fun foo() {}\n}\nclass Child : Base() {\n    override fun foo() {}\n}\n";
+    let (idx, _uri) = index_single("/OverrideEdge.kt", src);
+    let edges = idx.override_edges.get("foo");
+    assert!(edges.is_some(), "foo should have override edges from Child");
+}
