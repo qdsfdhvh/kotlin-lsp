@@ -1,6 +1,40 @@
 # Changelog
 
 
+## 0.25.0 (2026-07-13)
+
+### Phase 29 — Rich Symbol Model (#130)
+
+Extract `return_type`, `parameters`, and `documentation` (KDoc) at parse time.
+Previously these fields were always `None`/empty — now populated during
+tree-sitter parsing.
+
+- **return_type**: from function/property declarations (`fun foo(): Boolean` → `Some("Boolean")`)
+- **parameters**: from function params (`fun login(u: String, p: String)` → `[("u","String"),("p","String")]`)
+- **documentation**: KDoc extracted from preceding lines
+- `summarize` fast path now reads `documentation` from index
+- CACHE_VERSION bumped 12 → 13
+- Fixed `extract_detail` to not trim `=` inside parens (default param values)
+- Fixed `parse_param_from_sig` to strip default values from type
+
+### Phase 31 — Workspace Snapshot (#131)
+
+New `kotlin-lsp snapshot` command — single JSON export of the complete workspace:
+project info, module structure, full symbol metadata, relationship graph
+(calls/extends/overrides/imports), and entry points.
+
+```bash
+kotlin-lsp snapshot                          # full snapshot as JSON
+kotlin-lsp snapshot --exclude-relationships  # symbols + modules only
+```
+
+### CLI Subcommand Registration Fix (#130)
+
+26 commands were missing from `is_subcommand()` (including `summarize`,
+`callers`, `callees`, `impact`, `modules`, `inspect`, etc.) — causing them to
+appear as unknown commands. All 53 subcommands now properly registered.
+
+
 ## 0.24.2 (2026-07-13)
 
 ### Phase 23 — Generic Type Param Substitution (#112)
