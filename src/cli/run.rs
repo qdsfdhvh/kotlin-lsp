@@ -1000,6 +1000,9 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
         }
+        Subcommand::SymbolGraph => {
+            crate::cli::symbol_graph::run_symbol_graph(json).await;
+        }
         Subcommand::Workspace => {
             crate::cli::workspace::run_workspace(json);
         }

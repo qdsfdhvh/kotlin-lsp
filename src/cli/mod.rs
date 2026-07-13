@@ -30,6 +30,7 @@ mod run;
 mod skills;
 mod sources;
 mod summarize;
+mod symbol_graph;
 mod symbol_queries;
 pub(crate) mod templates;
 mod tokens;

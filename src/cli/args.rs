@@ -321,6 +321,8 @@ pub(crate) enum Subcommand {
     },
     /// Workspace overview: modules, packages, symbol counts.
     Workspace,
+    /// Export full symbol graph (calls, inheritance, imports).
+    SymbolGraph,
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -803,6 +805,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             Ok(Subcommand::AndroidComposables { file })
         }
         "workspace" => Ok(Subcommand::Workspace),
+        "symbol-graph" => Ok(Subcommand::SymbolGraph),
         "sources" => Ok(Subcommand::Sources {
             explain: positionals.first().map(|s| s.as_str()) == Some("explain"),
         }),
