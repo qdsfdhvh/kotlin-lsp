@@ -109,9 +109,14 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
     let mut supertypes_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
     for (super_name, class_loc) in &result.supertypes {
         // Find the subtype name at this location
-        if let Some(sub_name) = result.data.symbols.iter()
-            .find(|s| s.selection_range.start.line == class_loc.range.start.line
-                && s.selection_range.start.character == class_loc.range.start.character)
+        if let Some(sub_name) = result
+            .data
+            .symbols
+            .iter()
+            .find(|s| {
+                s.selection_range.start.line == class_loc.range.start.line
+                    && s.selection_range.start.character == class_loc.range.start.character
+            })
             .map(|s| s.name.clone())
         {
             supertypes_map
