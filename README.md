@@ -9,7 +9,6 @@ scriptable CLI and LSP transport.
 Built with [tree-sitter](https://tree-sitter.github.io/) — instant startup,
 low memory, zero external runtime.
 
-![kotlin-lsp CLI demo](demo/cli.gif)
 
 ---
 
