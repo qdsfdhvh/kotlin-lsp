@@ -1,140 +1,99 @@
+//! Integration tests for new CLI commands: check, context, organize-imports.
+
+use std::path::Path;
 use std::process::Command;
 
-use tempfile;
+const BIN: &str = env!("CARGO_BIN_EXE_kotlin-lsp");
 
-/// Build the release binary once, reused by all tests.
-const BIN: &str = "target/debug/kotlin-lsp";
-
-/// Create a .kt fixture file under `root`.
-fn write_fixture(root: &std::path::Path, rel: &str, body: &str) {
-    let dest = root.join(rel);
-    std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
-    std::fs::write(&dest, body).unwrap();
+fn write_fixture(dir: &Path, rel_path: &str, content: &str) {
+    let full = dir.join(rel_path);
+    if let Some(parent) = full.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(&full, content).unwrap();
 }
 
-/// Run `kotlin-lsp index --root <root>`.
-fn index(root: &std::path::Path) {
-    let status = Command::new(BIN)
-        .args(["index", "--root", &root.to_string_lossy()])
-        .status()
+fn index(dir: &Path) {
+    let output = Command::new(BIN)
+        .args(["index", "--root"])
+        .arg(dir)
+        .output()
         .unwrap();
-    assert!(status.success());
+    assert!(output.status.success(), "index failed: {:?}", output);
 }
+
+// ── check ────────────────────────────────────────────────────────────────────
 
 #[test]
 fn check_valid_file_exits_zero() {
     let dir = tempfile::tempdir().unwrap();
-    write_fixture(dir.path(), "src/Ok.kt", "class Ok");
+    write_fixture(dir.path(), "src/Ok.kt", "class Ok(val x: Int)");
     let output = Command::new(BIN)
         .args(["check", &dir.path().join("src/Ok.kt").to_string_lossy()])
         .output()
         .unwrap();
-    assert!(output.status.success());
+    assert!(output.status.success(), "check ok file: {:?}", output);
 }
 
 #[test]
 fn check_syntax_error_exits_one() {
     let dir = tempfile::tempdir().unwrap();
-    write_fixture(dir.path(), "src/Bad.kt", "class {");
+    write_fixture(dir.path(), "src/Bad.kt", "class Bad {");
     let output = Command::new(BIN)
         .args(["check", &dir.path().join("src/Bad.kt").to_string_lossy()])
         .output()
         .unwrap();
-    assert!(!output.status.success());
+    assert!(!output.status.success(), "check bad file should exit 1");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("error"),
+        "stderr should mention error: {}",
+        stderr
+    );
 }
 
 #[test]
 fn check_json_output() {
     let dir = tempfile::tempdir().unwrap();
-    write_fixture(dir.path(), "src/Ok.kt", "class Ok");
+    write_fixture(dir.path(), "src/Bad.kt", "class Bad {");
     let output = Command::new(BIN)
         .args([
             "check",
             "--json",
-            &dir.path().join("src/Ok.kt").to_string_lossy(),
+            &dir.path().join("src/Bad.kt").to_string_lossy(),
         ])
         .output()
         .unwrap();
-    assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("\"errors\""));
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["files_ok"], 0);
+    assert_eq!(v["files_with_errors"], 1);
 }
 
-#[test]
-fn cache_stats_subcommand_runs() {
-    let output = Command::new(BIN).args(["cache", "stats"]).output().unwrap();
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(!stdout.is_empty());
-}
-
-#[test]
-fn insert_writes_content_in_place() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("InsertMe.kt");
-    let original = "package com.example\nclass InsertMe\n";
-    std::fs::write(&path, original).unwrap();
-    let output = Command::new(BIN)
-        .args([
-            "insert",
-            "--before-last",
-            "}",
-            "    val added = true",
-            &path.to_string_lossy(),
-        ])
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-    let after = std::fs::read_to_string(&path).unwrap();
-    assert!(after.contains("val added = true"));
-}
-
-#[test]
-fn batch_dry_run_reports_changes_without_writing() {
-    let dir = tempfile::tempdir().unwrap();
-    write_fixture(
-        dir.path(),
-        "src/NeedsImport.kt",
-        "package com.example\nclass NeedsImport",
-    );
-    index(dir.path());
-    let output = Command::new(BIN)
-        .args([
-            "batch-imports",
-            "--dry-run",
-            "--root",
-            &dir.path().to_string_lossy(),
-        ])
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-}
+// ── organize-imports ─────────────────────────────────────────────────────────
 
 #[test]
 fn organize_imports_removes_unused() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(
         dir.path(),
-        "src/UnusedImport.kt",
-        "import java.util.Date\n\nclass UnusedImport\n",
+        "src/Main.kt",
+        "package com.example\n\nimport java.util.List\nimport java.util.Map\n\nclass Main(val list: List<String>)",
     );
-    index(dir.path());
     let output = Command::new(BIN)
         .args([
             "organize-imports",
-            "--apply",
-            "--root",
-            &dir.path().to_string_lossy(),
-            &dir.path()
-                .join("src/UnusedImport.kt")
-                .to_string_lossy()
-                .to_string(),
+            &dir.path().join("src/Main.kt").to_string_lossy(),
         ])
         .output()
         .unwrap();
     assert!(output.status.success());
-    let after = std::fs::read_to_string(dir.path().join("src/UnusedImport.kt")).unwrap();
-    assert!(!after.contains("import java.util.Date"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Map is unused, should be removed
+    assert!(
+        stdout.contains("- import java.util.Map"),
+        "unused Map should be removed: {stdout}"
+    );
 }
 
 #[test]
@@ -142,26 +101,33 @@ fn organize_imports_keeps_delegate_operator_imports() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(
         dir.path(),
-        "src/DelegateOp.kt",
-        "import kotlin.properties.Delegates\n\nval x by Delegates.notNull<Int>()\n",
+        "src/Screen.kt",
+        // var delegate — needs both getValue AND setValue
+        r#"package example
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+var x by lazy { 0 }
+"#,
     );
     index(dir.path());
     let output = Command::new(BIN)
         .args([
             "organize-imports",
-            "--apply",
+            &dir.path().join("src/Screen.kt").to_string_lossy(),
             "--root",
             &dir.path().to_string_lossy(),
-            &dir.path()
-                .join("src/DelegateOp.kt")
-                .to_string_lossy()
-                .to_string(),
         ])
         .output()
         .unwrap();
     assert!(output.status.success());
-    let after = std::fs::read_to_string(dir.path().join("src/DelegateOp.kt")).unwrap();
-    assert!(after.contains("import kotlin.properties.Delegates"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Both getValue and setValue kept → no changes needed
+    assert!(
+        stdout.contains("All imports are already organized"),
+        "expected no changes for var delegate; got: {stdout}"
+    );
 }
 
 #[test]
@@ -169,50 +135,150 @@ fn organize_imports_removes_setvalue_for_val_delegate() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(
         dir.path(),
-        "src/ValDelegate.kt",
-        "import kotlin.properties.Delegates\n\nval count by Delegates.observable(0) { _, _, _ ->\n}\n",
+        "src/Screen.kt",
+        // val delegate — only needs getValue, setValue should be removable
+        r#"package example
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+val x by lazy { 0 }
+"#,
     );
     index(dir.path());
     let output = Command::new(BIN)
         .args([
             "organize-imports",
-            "--apply",
+            &dir.path().join("src/Screen.kt").to_string_lossy(),
             "--root",
             &dir.path().to_string_lossy(),
-            &dir.path()
-                .join("src/ValDelegate.kt")
-                .to_string_lossy()
-                .to_string(),
         ])
         .output()
         .unwrap();
     assert!(output.status.success());
-    // Delegates import should be preserved because it's used by `Delegates.observable`
-    let after = std::fs::read_to_string(dir.path().join("src/ValDelegate.kt")).unwrap();
-    assert!(after.contains("import kotlin.properties.Delegates"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // setValue should be removed (val is read-only)
+    assert!(
+        stdout.contains("getValue"),
+        "getValue import must be kept for val delegated property: {stdout}"
+    );
+    assert!(
+        stdout.contains("setValue"),
+        "setValue should appear in diff for val delegated property: {stdout}"
+    );
+    assert!(
+        stdout.contains("- import"),
+        "expected at least one removal for val delegate: {stdout}"
+    );
 }
 
+// ── context ──────────────────────────────────────────────────────────────────
+
+#[ignore]
 #[test]
-#[ignore = "sort is not deterministic across platforms"]
 fn inject_sorts_by_frequency() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(
         dir.path(),
-        "src/Multi.kt",
-        "import java.util.Date\nimport java.util.List\n\nclass Multi\n",
+        "src/Main.kt",
+        "class User\nclass UserRepository\nclass App {\n    val repo: UserRepository = UserRepository()\n    val u1: User = User()\n    val u2: User = User()\n}",
     );
     index(dir.path());
     let output = Command::new(BIN)
         .args([
             "inject",
+            &dir.path().join("src/Main.kt").to_string_lossy(),
             "--root",
             &dir.path().to_string_lossy(),
-            &dir.path()
-                .join("src/Multi.kt")
-                .to_string_lossy()
-                .to_string(),
         ])
         .output()
         .unwrap();
     assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // User should appear before UserRepository (referenced more often)
+    let user_pos = stdout.find("User:").unwrap_or(usize::MAX);
+    let repo_pos = stdout.find("UserRepository:").unwrap_or(usize::MAX);
+    assert!(
+        user_pos < repo_pos,
+        "User (3 refs) should come before UserRepository (2 refs): {stdout}"
+    );
+}
+
+#[test]
+fn insert_writes_content_in_place() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(dir.path(), "T.kt", "line1\nline2");
+    let output = Command::new(BIN)
+        .args([
+            "insert",
+            &dir.path().join("T.kt").to_string_lossy(),
+            "1",
+            "--after",
+            "--content",
+            "INSERTED",
+            "--in-place",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "insert failed: {:?}", output);
+    let file = std::fs::read_to_string(dir.path().join("T.kt")).unwrap();
+    assert!(
+        file.contains("line1\nINSERTED\nline2"),
+        "should insert content after line 1: {file}"
+    );
+}
+
+#[test]
+fn batch_dry_run_reports_changes_without_writing() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("T.kt");
+    write_fixture(dir.path(), "T.kt", "fun oldName() {}\n");
+
+    let rule = serde_json::json!({
+        "files": {
+            target.to_string_lossy().to_string(): [
+                {
+                    "action": "replace",
+                    "old": "oldName",
+                    "new": "newName"
+                }
+            ]
+        }
+    });
+    let rule_file = dir.path().join("rules.json");
+    std::fs::write(&rule_file, serde_json::to_string(&rule).unwrap()).unwrap();
+
+    let output = Command::new(BIN)
+        .args(["batch", &rule_file.to_string_lossy(), "--dry-run"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "batch failed: {:?}", output);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("dry-run"),
+        "should report dry-run: {stdout}"
+    );
+    assert!(
+        stdout.contains("newName"),
+        "should preview replacement: {stdout}"
+    );
+    let file = std::fs::read_to_string(target).unwrap();
+    assert_eq!(file, "fun oldName() {}\n");
+}
+
+#[test]
+fn cache_stats_subcommand_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = Command::new(BIN)
+        .args(["cache", "stats", "--root", &dir.path().to_string_lossy()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "cache stats failed: {:?}", output);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Cache path:") && stdout.contains("Status:"),
+        "cache stats should print status: {stdout}"
+    );
 }
