@@ -11,9 +11,10 @@ pub(crate) type CallerInfo = (String, String);
 pub(crate) type CalleeInfo = (String, String);
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct SupertypeInfo {
-    pub name: String,
-    pub file: String,
+    pub(crate) name: String,
+    pub(crate) file: String,
 }
 
 pub(crate) struct SymbolGraph<'a> {
@@ -21,12 +22,13 @@ pub(crate) struct SymbolGraph<'a> {
 }
 
 impl<'a> SymbolGraph<'a> {
-    pub fn new(index: &'a Indexer) -> Self {
+    pub(crate) fn new(index: &'a Indexer) -> Self {
         Self { index }
     }
 
     /// Returns who calls `fn_name` (callee → callers).
-    pub fn callers_of(&self, fn_name: &str) -> Vec<CallerInfo> {
+    #[allow(dead_code)]
+    pub(crate) fn callers_of(&self, fn_name: &str) -> Vec<CallerInfo> {
         self.index
             .call_edges
             .get(fn_name)
@@ -35,7 +37,7 @@ impl<'a> SymbolGraph<'a> {
     }
 
     /// Returns what `fn_name` calls (reverse lookup through call_edges).
-    pub fn callees_of(&self, fn_name: &str) -> Vec<CalleeInfo> {
+    pub(crate) fn callees_of(&self, fn_name: &str) -> Vec<CalleeInfo> {
         let mut result: Vec<CalleeInfo> = Vec::new();
         for entry in self.index.call_edges.iter() {
             let callee = entry.key();
@@ -50,7 +52,8 @@ impl<'a> SymbolGraph<'a> {
     }
 
     /// Direct supertypes of `name` (classes/interfaces it extends/implements).
-    pub fn supertypes_of(&self, name: &str) -> Vec<SupertypeInfo> {
+    #[allow(dead_code)]
+    pub(crate) fn supertypes_of(&self, name: &str) -> Vec<SupertypeInfo> {
         self.index
             .supertypes_index
             .get(name)
@@ -66,7 +69,8 @@ impl<'a> SymbolGraph<'a> {
     }
 
     /// Direct subtypes of `name` (classes that extend/implement it).
-    pub fn subtypes_of(&self, name: &str) -> Vec<Location> {
+    #[allow(dead_code)]
+    pub(crate) fn subtypes_of(&self, name: &str) -> Vec<Location> {
         self.index
             .subtypes
             .get(name)
@@ -75,7 +79,8 @@ impl<'a> SymbolGraph<'a> {
     }
 
     /// Files that import `fqn`.
-    pub fn importers_of(&self, fqn: &str) -> Vec<(String, String)> {
+    #[allow(dead_code)]
+    pub(crate) fn importers_of(&self, fqn: &str) -> Vec<(String, String)> {
         self.index
             .import_edges
             .get(fqn)
@@ -84,7 +89,8 @@ impl<'a> SymbolGraph<'a> {
     }
 
     /// Files that override `method_name`.
-    pub fn overrides_of(&self, method_name: &str) -> Vec<(String, String)> {
+    #[allow(dead_code)]
+    pub(crate) fn overrides_of(&self, method_name: &str) -> Vec<(String, String)> {
         self.index
             .override_edges
             .get(method_name)
@@ -92,7 +98,8 @@ impl<'a> SymbolGraph<'a> {
             .unwrap_or_default()
     }
 
-    pub fn stats(&self) -> SymbolGraphStats {
+    #[allow(dead_code)]
+    pub(crate) fn stats(&self) -> SymbolGraphStats {
         SymbolGraphStats {
             call_edges: self.index.call_edges.len(),
             import_edges: self.index.import_edges.len(),
@@ -104,10 +111,11 @@ impl<'a> SymbolGraph<'a> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct SymbolGraphStats {
-    pub call_edges: usize,
-    pub import_edges: usize,
-    pub override_edges: usize,
-    pub supertype_edges: usize,
-    pub subtype_edges: usize,
+    pub(crate) call_edges: usize,
+    pub(crate) import_edges: usize,
+    pub(crate) override_edges: usize,
+    pub(crate) supertype_edges: usize,
+    pub(crate) subtype_edges: usize,
 }

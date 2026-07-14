@@ -77,6 +77,7 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
 }
 
 // ── Helper: get tree-sitter Language from Language enum ──────────────────────
+#[allow(dead_code)]
 
 fn ts_lang(lang: crate::Language) -> tree_sitter::Language {
     match lang {
@@ -121,6 +122,7 @@ fn find_callers_tree(
     children
 }
 
+#[allow(dead_code)]
 /// Extract the callee name from a `call_expression` node.
 /// Returns the simple identifier or the last segment of a navigation expression.
 fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
@@ -144,7 +146,8 @@ fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
     String::new()
 }
 
-// ── Callee tree building ────────────────────────────────────────────────────
+// ── Callee tree building (legacy tree-sitter, kept for reference) ────────────
+#[allow(dead_code)]
 
 fn find_callees_tree(
     name: &str,
@@ -285,6 +288,7 @@ fn find_callees_from_graph(
         .collect()
 }
 
+#[allow(dead_code)]
 /// Find a function declaration node near the given line.
 fn find_function_decl_near<'a>(
     root: tree_sitter::Node<'a>,
@@ -320,6 +324,7 @@ fn find_function_decl_near<'a>(
     best
 }
 
+#[allow(dead_code)]
 /// Collect all callee names (function calls) within a function declaration node.
 fn collect_callee_names(decl: &tree_sitter::Node, source: &str) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();

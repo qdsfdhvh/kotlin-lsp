@@ -54,9 +54,7 @@ pub(crate) use self::infer::{
     // sig.rs
     CallInfo,
 };
-pub(crate) use symbol_graph::{
-    CalleeInfo, CallerInfo, SupertypeInfo, SymbolGraph, SymbolGraphStats,
-};
+pub(crate) use symbol_graph::SymbolGraph;
 
 mod cache;
 pub(crate) mod jar_indexer;
