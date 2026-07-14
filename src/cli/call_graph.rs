@@ -76,7 +76,6 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
     output_call_tree(&root_node, json);
 }
 
-
 // ── Caller tree building (edge-index based) ─────────────────────────────────
 
 /// Find callers using the pre-built call edge index.
@@ -135,7 +134,6 @@ fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
     }
     String::new()
 }
-
 
 /// Build a callee tree using the pre-built call edge index (graph-based, no re-parse).
 fn find_callees_from_graph(
