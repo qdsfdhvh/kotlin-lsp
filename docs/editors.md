@@ -4,7 +4,6 @@ Install `kotlin-lsp` via the [install script](../README.md#install). Run `which 
 
 ## VS Code
 
-![VS Code with kotlin-lsp](../demo/vscode.png)
 
 Download the `.vsix` for your platform from the [latest release](https://github.com/qdsfdhvh/kotlin-lsp/releases/latest) and install it:
 

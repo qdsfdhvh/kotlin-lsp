@@ -158,4 +158,4 @@ strip = true            # Strip debug symbols for smaller binary
 
 - **C compiler required:** tree-sitter grammars compile C code at build time
 - **Target platforms:** Linux x86_64, Linux aarch64, macOS x86_64, macOS aarch64; prebuilt binaries on GitHub Releases and crates.io
-- **crates.io package size:** 309 KB compressed (demo/contrib/docs excluded via `exclude` in Cargo.toml)
+- **crates.io package size:** 309 KB compressed (contrib/docs excluded via `exclude` in Cargo.toml)
