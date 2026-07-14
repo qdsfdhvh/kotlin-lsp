@@ -14,6 +14,7 @@ pub(crate) use self::scan::{NoopReporter, ProgressReporter};
 pub(crate) use crate::rg::IgnoreMatcher;
 
 mod doc;
+mod symbol_graph;
 
 mod infer;
 pub(crate) mod resolution;
@@ -53,6 +54,7 @@ pub(crate) use self::infer::{
     // sig.rs
     CallInfo,
 };
+pub(crate) use symbol_graph::SymbolGraph;
 
 mod cache;
 pub(crate) mod jar_indexer;

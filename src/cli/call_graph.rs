@@ -52,6 +52,7 @@ pub(crate) async fn run_callers(file: &Path, line: u32, col: u32, depth: u32, js
 }
 
 pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, json: bool) {
+    use crate::indexer::SymbolGraph;
     let root = crate::cli::run::resolve_root_for_file(None, file);
     let index = crate::cli::run::build_index(&root, false).await;
     let uri = Url::from_file_path(file).expect("valid file path");
@@ -62,6 +63,7 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
         std::process::exit(1);
     }
 
+    let graph = SymbolGraph::new(&index);
     let line = normalize_line_1(line);
     let root_node = CallNode {
         name: word.clone(),
@@ -69,20 +71,9 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
         file: file.display().to_string(),
         line,
         col,
-        children: find_callees_tree(&word, file, line, &index, depth, &mut HashSet::new()),
+        children: find_callees_from_graph(&word, &graph, &index, depth, &mut HashSet::new()),
     };
-
     output_call_tree(&root_node, json);
-}
-
-// ── Helper: get tree-sitter Language from Language enum ──────────────────────
-
-fn ts_lang(lang: crate::Language) -> tree_sitter::Language {
-    match lang {
-        crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
-        crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
-        crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),
-    }
 }
 
 // ── Caller tree building (edge-index based) ─────────────────────────────────
@@ -120,6 +111,7 @@ fn find_callers_tree(
     children
 }
 
+#[allow(dead_code)]
 /// Extract the callee name from a `call_expression` node.
 /// Returns the simple identifier or the last segment of a navigation expression.
 fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
@@ -143,13 +135,11 @@ fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
     String::new()
 }
 
-// ── Callee tree building ────────────────────────────────────────────────────
-
-fn find_callees_tree(
+/// Build a callee tree using the pre-built call edge index (graph-based, no re-parse).
+fn find_callees_from_graph(
     name: &str,
-    file: &Path,
-    line: u32,
-    index: &Arc<Indexer>,
+    graph: &crate::indexer::SymbolGraph,
+    index: &Arc<crate::indexer::Indexer>,
     depth: u32,
     visited: &mut HashSet<String>,
 ) -> Vec<CallNode> {
@@ -157,89 +147,39 @@ fn find_callees_tree(
         return vec![];
     }
 
-    let mut callees: Vec<CallNode> = Vec::new();
-
-    let Ok(content) = std::fs::read_to_string(file) else {
-        return callees;
-    };
-
-    let lang = crate::Language::from_path(file.to_str().unwrap_or(""));
-    let mut parser = tree_sitter::Parser::new();
-    parser.set_language(&ts_lang(lang)).ok();
-    let Some(tree) = parser.parse(&content, None) else {
-        return callees;
-    };
-
-    let root_node = tree.root_node();
-
-    // Find the function declaration for `name` at approximate position.
-    let Some(decl_node) = find_function_decl_near(root_node, line.saturating_sub(1), &content)
-    else {
-        return callees;
-    };
-
-    // Collect all call expressions within this function body.
-    let call_names = collect_callee_names(&decl_node, &content);
-
-    for callee_name in call_names {
-        if callee_name.is_empty() || is_keyword(&callee_name) {
-            continue;
-        }
-
-        // Look up the declaration in the index.
-        let file_uri =
-            Url::from_file_path(file).unwrap_or_else(|_| Url::parse("file:///").unwrap());
-        let decl_locs = index.find_definition_qualified(&callee_name, None, &file_uri);
-
-        let (callee_file, callee_line, callee_col) = if let Some(loc) = decl_locs.first() {
-            (
-                loc.uri
-                    .to_file_path()
-                    .unwrap_or_else(|_| file.to_path_buf())
-                    .display()
-                    .to_string(),
-                loc.range.start.line + 1,
-                loc.range.start.character + 1,
-            )
-        } else {
-            (file.display().to_string(), 0u32, 0u32)
-        };
-
-        let child_depth = depth.saturating_sub(1);
-
-        let mut callee_visited = visited.clone();
-        let callee_path = if let Ok(p) = Url::parse(&format!("file://{}", callee_file)) {
-            p.to_file_path().unwrap_or_else(|_| file.to_path_buf())
-        } else {
-            file.to_path_buf()
-        };
-
-        let children = if child_depth > 0 {
-            find_callees_tree(
-                &callee_name,
-                &callee_path,
-                callee_line,
-                index,
-                child_depth,
-                &mut callee_visited,
-            )
-        } else {
-            vec![]
-        };
-
-        callees.push(CallNode {
-            name: callee_name,
-            kind: "function".to_string(),
-            file: callee_file,
-            line: callee_line,
-            col: callee_col,
-            children,
-        });
-    }
+    let callees = graph.callees_of(name);
+    let next_depth = depth.saturating_sub(1);
 
     callees
+        .into_iter()
+        .map(|(callee_file, callee_name)| {
+            let (file, line, col) = if let Some(locs) = index.definitions.get(&callee_name) {
+                if let Some(loc) = locs.first() {
+                    (
+                        loc.uri.to_string(),
+                        loc.range.start.line + 1,
+                        loc.range.start.character + 1,
+                    )
+                } else {
+                    (callee_file.clone(), 0, 0)
+                }
+            } else {
+                (callee_file.clone(), 0, 0)
+            };
+
+            CallNode {
+                name: callee_name.clone(),
+                kind: "function".to_string(),
+                file,
+                line,
+                col,
+                children: find_callees_from_graph(&callee_name, graph, index, next_depth, visited),
+            }
+        })
+        .collect()
 }
 
+#[allow(dead_code)]
 /// Find a function declaration node near the given line.
 fn find_function_decl_near<'a>(
     root: tree_sitter::Node<'a>,
@@ -275,6 +215,7 @@ fn find_function_decl_near<'a>(
     best
 }
 
+#[allow(dead_code)]
 /// Collect all callee names (function calls) within a function declaration node.
 fn collect_callee_names(decl: &tree_sitter::Node, source: &str) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
@@ -320,7 +261,7 @@ fn normalize_line_1(line: u32) -> u32 {
         line
     }
 }
-
+#[allow(dead_code)]
 fn is_keyword(s: &str) -> bool {
     matches!(
         s,

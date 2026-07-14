@@ -1058,8 +1058,9 @@ pub(crate) async fn run(args: CliArgs) {
             subtypes,
             supertypes,
             graph,
+            depth,
         } => {
-            run_type_hierarchy(&name, subtypes, supertypes, graph, json).await;
+            run_type_hierarchy(&name, subtypes, supertypes, graph, depth, json).await;
         }
         Subcommand::Implementations { name, depth } => {
             crate::cli::inheritance::run_implementations(&name, depth, json).await;
@@ -1779,7 +1780,14 @@ fn find_callers_via_rg(
 
 // ── type-hierarchy ────────────────────────────────────────────────────────────
 
-async fn run_type_hierarchy(name: &str, subtypes: bool, supertypes: bool, graph: bool, json: bool) {
+async fn run_type_hierarchy(
+    name: &str,
+    subtypes: bool,
+    supertypes: bool,
+    graph: bool,
+    _depth: u32,
+    json: bool,
+) {
     let root = resolve_root(None);
     let index = build_index(&root, false).await;
 
