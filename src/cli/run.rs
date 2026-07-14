@@ -277,7 +277,7 @@ fn cli_workspace_source_roots(root: &Path) -> Vec<String> {
 
 // ── Smart-mode find ───────────────────────────────────────────────────────────
 
-fn smart_find(
+pub(crate) fn smart_find(
     indexer: &Arc<Indexer>,
     name: &str,
     root: &Path,
@@ -296,11 +296,37 @@ fn smart_find(
         indexer.definition_locations(name)
     };
     if !locs.is_empty() {
-        return locs_to_results(locs, name, "");
+        let mut results = locs_to_results(locs, name, "");
+        enrich_result_kinds(&mut results, indexer);
+        return results;
     }
     let source_roots = cli_workspace_source_roots(root);
     let locs = rg_find_definition(name, Some(root), &source_roots, None);
-    locs_to_results(locs, name, "")
+    let mut results = locs_to_results(locs, name, "");
+    enrich_result_kinds(&mut results, indexer);
+    results
+}
+
+/// Populate each CliResult's `kind` field from the Indexer's SymbolEntry.
+fn enrich_result_kinds(results: &mut [CliResult], indexer: &Indexer) {
+    for r in results {
+        if !r.kind.is_empty() {
+            continue;
+        }
+        // Derive uri from the file path stored in the result
+        if let Ok(uri) = tower_lsp::lsp_types::Url::from_file_path(std::path::Path::new(&r.file)) {
+            let uri_str = uri.as_str();
+            if let Some(file_data) = indexer.files.get(uri_str) {
+                if let Some(sym) = file_data
+                    .symbols
+                    .iter()
+                    .find(|s| s.name == r.name && s.selection_range.start.line + 1 == r.line)
+                {
+                    r.kind = format!("{:?}", sym.kind).to_lowercase();
+                }
+            }
+        }
+    }
 }
 
 /// Find the first .kt file in the workspace for use as a resolution scope anchor.

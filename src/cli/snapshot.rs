@@ -212,9 +212,87 @@ mod tests {
     }
 
     #[test]
+    fn is_entry_point_application() {
+        assert!(is_entry_point("MyApplication", "class", ""));
+    }
+
+    #[test]
     fn is_not_entry_point() {
-        assert!(!is_entry_point("LoginViewModel", "class", ""));
         assert!(!is_entry_point("UserRepository", "class", ""));
+        assert!(!is_entry_point("Application", "function", ""));
         assert!(!is_entry_point("main", "function", ""));
+        assert!(!is_entry_point("", "class", ""));
+    }
+
+    #[test]
+    fn collect_relationships_empty_index() {
+        let idx = crate::indexer::Indexer::new();
+        let rels = collect_relationships(&idx);
+        assert!(rels.calls.is_empty());
+        assert!(rels.extends.is_empty());
+        assert!(rels.overrides.is_empty());
+        assert!(rels.imports.is_empty());
+    }
+
+    #[test]
+    fn collect_relationships_populated_call_edges() {
+        let idx = crate::indexer::Indexer::new();
+        idx.call_edges.insert(
+            "bar".to_string(),
+            vec![("/a.kt".to_string(), "foo".to_string())],
+        );
+        idx.call_edges.insert(
+            "baz".to_string(),
+            vec![("/a.kt".to_string(), "foo".to_string())],
+        );
+
+        let rels = collect_relationships(&idx);
+        assert_eq!(rels.calls.len(), 2);
+        assert!(rels.calls.contains(&["foo".to_string(), "bar".to_string()]));
+        assert!(rels.calls.contains(&["foo".to_string(), "baz".to_string()]));
+    }
+
+    #[test]
+    fn collect_relationships_populated_extends() {
+        let idx = crate::indexer::Indexer::new();
+        idx.supertypes_index.insert(
+            "Dog".to_string(),
+            vec![("Animal".to_string(), "/a.kt".to_string())],
+        );
+
+        let rels = collect_relationships(&idx);
+        assert_eq!(rels.extends.len(), 1);
+        assert!(rels
+            .extends
+            .contains(&["Dog".to_string(), "Animal".to_string()]));
+    }
+
+    #[test]
+    fn collect_relationships_populated_overrides() {
+        let idx = crate::indexer::Indexer::new();
+        idx.override_edges.insert(
+            "onCreate".to_string(),
+            vec![("/app.kt".to_string(), "MyActivity".to_string())],
+        );
+
+        let rels = collect_relationships(&idx);
+        assert_eq!(rels.overrides.len(), 1);
+        let expect = "MyActivity.onCreate".to_string();
+        assert!(rels.overrides[0].contains(&expect));
+    }
+
+    #[test]
+    fn collect_relationships_populated_imports() {
+        let idx = crate::indexer::Indexer::new();
+        idx.import_edges.insert(
+            "com.lib.Foo".to_string(),
+            vec![("/a.kt".to_string(), "Foo".to_string())],
+        );
+
+        let rels = collect_relationships(&idx);
+        assert_eq!(rels.imports.len(), 1);
+        assert!(rels
+            .imports
+            .contains(&["/a.kt".to_string(), "com.lib.Foo".to_string()]));
     }
 }

@@ -282,3 +282,49 @@ fn cache_stats_subcommand_runs() {
         "cache stats should print status: {stdout}"
     );
 }
+
+// ── symbol-graph ───────────────────────────────────────────────────────────
+
+#[test]
+fn symbol_graph_json_includes_call_edges() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(
+        dir.path(),
+        "src/Graph.kt",
+        "package com.example\nclass A {\n    fun foo() { bar() }\n    fun bar() {}\n}\n",
+    );
+    index(dir.path());
+    let output = Command::new(BIN)
+        .args([
+            "symbol-graph",
+            "--json",
+            "--root",
+            &dir.path().to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "symbol-graph failed: {:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"calls\""),
+        "should include calls: {stdout}"
+    );
+    assert!(stdout.contains("bar"), "should reference bar in output");
+}
+
+#[test]
+fn symbol_graph_no_flag_shows_summary() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(dir.path(), "src/Graph.kt", "package com.example\nclass A\n");
+    index(dir.path());
+    let output = Command::new(BIN)
+        .args(["symbol-graph", "--root", &dir.path().to_string_lossy()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "symbol-graph failed: {:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Symbol Graph:"),
+        "should print summary header: {stdout}"
+    );
+}

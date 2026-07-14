@@ -805,3 +805,6 @@ pub(crate) fn param_names_from_sig(raw: &str) -> Vec<String> {
 #[cfg(test)]
 #[path = "indexer_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod symbol_graph_tests;

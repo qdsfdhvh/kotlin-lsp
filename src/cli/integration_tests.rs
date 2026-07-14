@@ -408,3 +408,89 @@ fn symbol_graph_includes_override_edges() {
     let edges = idx.override_edges.get("foo");
     assert!(edges.is_some(), "foo should have override edges from Child");
 }
+
+// ─── issue #139: find --kind fun drops top-level functions ─────────────────
+
+#[test]
+fn find_kind_fun_retains_top_level_function() {
+    let (idx, uri) = index_single(
+        "/KindFunTest.kt",
+        "package example\nfun SampleAction(): Unit = Unit\n",
+    );
+    // Verify the indexed symbol has FUNCTION kind
+    let data = idx.files.get(uri.as_str()).expect("indexed");
+    let fun_sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "SampleAction")
+        .expect("SampleAction should be indexed");
+    assert_eq!(format!("{:?}", fun_sym.kind).to_lowercase(), "function");
+}
+
+// ─── issue #139: smart_find with --kind fun ────────────────────────────────
+
+#[test]
+fn smart_find_kind_fun_retains_top_level_function() {
+    let (idx, _uri) = index_single(
+        "/KindFilter.kt",
+        "package example\nfun topLevelAction(): Unit = Unit\n",
+    );
+    let root = std::path::PathBuf::from("/test");
+    let filters = crate::cli::args::ResultFilters {
+        kinds: vec!["function".to_string()],
+        ..Default::default()
+    };
+    let results = crate::cli::run::smart_find(&idx, "topLevelAction", &root, &filters);
+    assert!(
+        !results.is_empty(),
+        "smart_find with kind=function should find topLevelAction"
+    );
+    assert_eq!(results[0].kind, "function");
+}
+
+#[test]
+fn smart_find_kind_populated_for_function() {
+    let (idx, _uri) = index_single(
+        "/KindFilter2.kt",
+        "package example\nfun topLevelAction(): Unit = Unit\nclass MyClass",
+    );
+    let root = std::path::PathBuf::from("/test");
+    let results = crate::cli::run::smart_find(&idx, "topLevelAction", &root, &Default::default());
+    assert!(!results.is_empty(), "should find topLevelAction");
+    assert_eq!(
+        results[0].kind, "function",
+        "kind should be 'function', got '{}'",
+        results[0].kind
+    );
+}
+
+#[test]
+fn smart_find_kind_populated_for_class() {
+    let (idx, _uri) = index_single(
+        "/KindFilter2b.kt",
+        "package example\nfun topLevelAction(): Unit = Unit\nclass MyClass",
+    );
+    let root = std::path::PathBuf::from("/test");
+    let results = crate::cli::run::smart_find(&idx, "MyClass", &root, &Default::default());
+    assert!(!results.is_empty(), "should find MyClass");
+    assert_eq!(
+        results[0].kind, "class",
+        "kind should be 'class', got '{}'",
+        results[0].kind
+    );
+}
+
+#[test]
+fn smart_find_no_kind_filter_finds_everything() {
+    let (idx, _uri) = index_single(
+        "/KindFilter3.kt",
+        "package example\nfun sample(): Unit = Unit\n",
+    );
+    let root = std::path::PathBuf::from("/test");
+    let filters = crate::cli::args::ResultFilters::default();
+    let results = crate::cli::run::smart_find(&idx, "sample", &root, &filters);
+    assert!(
+        !results.is_empty(),
+        "smart_find without kind filter should find sample"
+    );
+}
