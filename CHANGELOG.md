@@ -1,6 +1,31 @@
 # Changelog
 
 
+## 0.26.0 (2026-07-14)
+
+### Phase 30 — SymbolGraph + callees refactor (#135)
+
+- `SymbolGraph` struct in `src/indexer/symbol_graph.rs` — typed query API over index edge maps
+- `callers` command uses pre-built edge index; `callees` refactored to graph-based lookup (no tree-sitter re-parse)
+- `TypeHierarchy` gains `depth` field for future recursive traversal
+- CACHE_VERSION bumped 13 → 14
+- `.pi/` and `.tours/` added to `.gitignore`
+
+### Phase 31-38 — Already implemented
+
+- `snapshot` — full workspace JSON export with symbols + relationships
+- `symbol-graph` — JSON export of call/inherit/import/override edges
+- `fuzzy` flag, `imports-of`, `annotated`, `package-deps`, `docs` commands
+- `implementations`, `subclasses` with recursive tree traversal
+- `query` — batch query from stdin JSON specs
+
+### Phase 39 — Query Engine foundation (#136)
+
+- `WorkspaceQueryEngine` in `src/query/engine.rs` — unified API over Indexer + SymbolGraph
+- Single entry point for CLI and LSP queries, eliminating code duplication
+
+---
+
 ## 0.25.0 (2026-07-13)
 
 ### Phase 29 — Rich Symbol Model (#130)
