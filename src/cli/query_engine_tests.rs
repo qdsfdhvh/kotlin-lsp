@@ -84,7 +84,6 @@ fn find_symbols_respects_limit() {
 
 #[test]
 fn hover_finds_symbol_from_indexed_content() {
-    use std::io::Write;
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("Hover.kt");
     let content = "package com.example\nclass HoverTarget";
