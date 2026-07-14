@@ -76,16 +76,6 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
     output_call_tree(&root_node, json);
 }
 
-// ── Helper: get tree-sitter Language from Language enum ──────────────────────
-#[allow(dead_code)]
-
-fn ts_lang(lang: crate::Language) -> tree_sitter::Language {
-    match lang {
-        crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
-        crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
-        crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),
-    }
-}
 
 // ── Caller tree building (edge-index based) ─────────────────────────────────
 
@@ -146,103 +136,6 @@ fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
     String::new()
 }
 
-// ── Callee tree building (legacy tree-sitter, kept for reference) ────────────
-#[allow(dead_code)]
-
-fn find_callees_tree(
-    name: &str,
-    file: &Path,
-    line: u32,
-    index: &Arc<Indexer>,
-    depth: u32,
-    visited: &mut HashSet<String>,
-) -> Vec<CallNode> {
-    if depth == 0 || !visited.insert(name.to_string()) {
-        return vec![];
-    }
-
-    let mut callees: Vec<CallNode> = Vec::new();
-
-    let Ok(content) = std::fs::read_to_string(file) else {
-        return callees;
-    };
-
-    let lang = crate::Language::from_path(file.to_str().unwrap_or(""));
-    let mut parser = tree_sitter::Parser::new();
-    parser.set_language(&ts_lang(lang)).ok();
-    let Some(tree) = parser.parse(&content, None) else {
-        return callees;
-    };
-
-    let root_node = tree.root_node();
-
-    // Find the function declaration for `name` at approximate position.
-    let Some(decl_node) = find_function_decl_near(root_node, line.saturating_sub(1), &content)
-    else {
-        return callees;
-    };
-
-    // Collect all call expressions within this function body.
-    let call_names = collect_callee_names(&decl_node, &content);
-
-    for callee_name in call_names {
-        if callee_name.is_empty() || is_keyword(&callee_name) {
-            continue;
-        }
-
-        // Look up the declaration in the index.
-        let file_uri =
-            Url::from_file_path(file).unwrap_or_else(|_| Url::parse("file:///").unwrap());
-        let decl_locs = index.find_definition_qualified(&callee_name, None, &file_uri);
-
-        let (callee_file, callee_line, callee_col) = if let Some(loc) = decl_locs.first() {
-            (
-                loc.uri
-                    .to_file_path()
-                    .unwrap_or_else(|_| file.to_path_buf())
-                    .display()
-                    .to_string(),
-                loc.range.start.line + 1,
-                loc.range.start.character + 1,
-            )
-        } else {
-            (file.display().to_string(), 0u32, 0u32)
-        };
-
-        let child_depth = depth.saturating_sub(1);
-
-        let mut callee_visited = visited.clone();
-        let callee_path = if let Ok(p) = Url::parse(&format!("file://{}", callee_file)) {
-            p.to_file_path().unwrap_or_else(|_| file.to_path_buf())
-        } else {
-            file.to_path_buf()
-        };
-
-        let children = if child_depth > 0 {
-            find_callees_tree(
-                &callee_name,
-                &callee_path,
-                callee_line,
-                index,
-                child_depth,
-                &mut callee_visited,
-            )
-        } else {
-            vec![]
-        };
-
-        callees.push(CallNode {
-            name: callee_name,
-            kind: "function".to_string(),
-            file: callee_file,
-            line: callee_line,
-            col: callee_col,
-            children,
-        });
-    }
-
-    callees
-}
 
 /// Build a callee tree using the pre-built call edge index (graph-based, no re-parse).
 fn find_callees_from_graph(
@@ -370,7 +263,7 @@ fn normalize_line_1(line: u32) -> u32 {
         line
     }
 }
-
+#[allow(dead_code)]
 fn is_keyword(s: &str) -> bool {
     matches!(
         s,
