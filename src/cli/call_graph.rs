@@ -52,6 +52,7 @@ pub(crate) async fn run_callers(file: &Path, line: u32, col: u32, depth: u32, js
 }
 
 pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, json: bool) {
+    use crate::indexer::SymbolGraph;
     let root = crate::cli::run::resolve_root_for_file(None, file);
     let index = crate::cli::run::build_index(&root, false).await;
     let uri = Url::from_file_path(file).expect("valid file path");
@@ -62,6 +63,7 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
         std::process::exit(1);
     }
 
+    let graph = SymbolGraph::new(&index);
     let line = normalize_line_1(line);
     let root_node = CallNode {
         name: word.clone(),
@@ -69,9 +71,8 @@ pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, js
         file: file.display().to_string(),
         line,
         col,
-        children: find_callees_tree(&word, file, line, &index, depth, &mut HashSet::new()),
+        children: find_callees_from_graph(&word, &graph, &index, depth, &mut HashSet::new()),
     };
-
     output_call_tree(&root_node, json);
 }
 
@@ -238,6 +239,50 @@ fn find_callees_tree(
     }
 
     callees
+}
+
+/// Build a callee tree using the pre-built call edge index (graph-based, no re-parse).
+fn find_callees_from_graph(
+    name: &str,
+    graph: &crate::indexer::SymbolGraph,
+    index: &Arc<crate::indexer::Indexer>,
+    depth: u32,
+    visited: &mut HashSet<String>,
+) -> Vec<CallNode> {
+    if depth == 0 || !visited.insert(name.to_string()) {
+        return vec![];
+    }
+
+    let callees = graph.callees_of(name);
+    let next_depth = depth.saturating_sub(1);
+
+    callees
+        .into_iter()
+        .map(|(callee_file, callee_name)| {
+            let (file, line, col) = if let Some(locs) = index.definitions.get(&callee_name) {
+                if let Some(loc) = locs.first() {
+                    (
+                        loc.uri.to_string(),
+                        loc.range.start.line + 1,
+                        loc.range.start.character + 1,
+                    )
+                } else {
+                    (callee_file.clone(), 0, 0)
+                }
+            } else {
+                (callee_file.clone(), 0, 0)
+            };
+
+            CallNode {
+                name: callee_name.clone(),
+                kind: "function".to_string(),
+                file,
+                line,
+                col,
+                children: find_callees_from_graph(&callee_name, graph, index, next_depth, visited),
+            }
+        })
+        .collect()
 }
 
 /// Find a function declaration node near the given line.

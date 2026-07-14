@@ -160,11 +160,13 @@ pub(crate) enum Subcommand {
         outgoing: bool,
     },
     /// Type hierarchy: find subtypes or supertypes.
+    /// Use --depth N for recursive tree output with --graph.
     TypeHierarchy {
         name: String,
         subtypes: bool,
         supertypes: bool,
         graph: bool,
+        depth: u32,
     },
     /// Find all implementations of an interface/abstract class.
     Implementations {
@@ -1203,6 +1205,7 @@ fn build_type_hierarchy_subcommand(
         subtypes,
         supertypes: type_supertypes,
         graph: type_graph,
+        depth: 1,
     })
 }
 
