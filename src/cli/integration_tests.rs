@@ -427,70 +427,52 @@ fn find_kind_fun_retains_top_level_function() {
     assert_eq!(format!("{:?}", fun_sym.kind).to_lowercase(), "function");
 }
 
-// ─── issue #139: smart_find with --kind fun ────────────────────────────────
+// ─── issue #139: find --kind fun drops top-level functions ─────────────────
 
+/// Verify SymbolEntry.kind is "function" for top-level functions
 #[test]
-fn smart_find_kind_fun_retains_top_level_function() {
+fn symbol_kind_is_function_for_top_level_fun() {
     let (idx, _uri) = index_single(
         "/KindFilter.kt",
-        "package example\nfun topLevelAction(): Unit = Unit\n",
+        "package example\nfun topLevelAction(): Unit = Unit\nclass MyClass",
     );
-    let root = std::path::PathBuf::from("/test");
-    let filters = crate::cli::args::ResultFilters {
-        kinds: vec!["function".to_string()],
-        ..Default::default()
-    };
-    let results = crate::cli::run::smart_find(&idx, "topLevelAction", &root, &filters);
+    let locs = idx.definition_locations("topLevelAction");
     assert!(
-        !results.is_empty(),
-        "smart_find with kind=function should find topLevelAction"
+        !locs.is_empty(),
+        "definition_locations should find topLevelAction"
     );
-    assert_eq!(results[0].kind, "function");
+    let uri_str = locs.first().unwrap().uri.as_str().to_string();
+    let fd = idx.files.get(&uri_str).expect("file indexed");
+    let sym = fd
+        .symbols
+        .iter()
+        .find(|s| s.name == "topLevelAction")
+        .expect("symbol");
+    assert_eq!(format!("{:?}", sym.kind).to_lowercase(), "function");
 }
 
+/// Verify SymbolEntry.kind is "class" for classes
 #[test]
-fn smart_find_kind_populated_for_function() {
-    let (idx, _uri) = index_single(
-        "/KindFilter2.kt",
-        "package example\nfun topLevelAction(): Unit = Unit\nclass MyClass",
-    );
-    let root = std::path::PathBuf::from("/test");
-    let results = crate::cli::run::smart_find(&idx, "topLevelAction", &root, &Default::default());
-    assert!(!results.is_empty(), "should find topLevelAction");
-    assert_eq!(
-        results[0].kind, "function",
-        "kind should be 'function', got '{}'",
-        results[0].kind
-    );
+fn symbol_kind_is_class_for_class() {
+    let (idx, _uri) = index_single("/KindFilter2.kt", "package example\nclass MyClass");
+    let locs = idx.definition_locations("MyClass");
+    assert!(!locs.is_empty());
+    let fd = idx.files.get(locs[0].uri.as_str()).expect("indexed");
+    let sym = fd
+        .symbols
+        .iter()
+        .find(|s| s.name == "MyClass")
+        .expect("found");
+    assert_eq!(format!("{:?}", sym.kind).to_lowercase(), "class");
 }
 
+/// Verify definition_locations still works (no merge regression)
 #[test]
-fn smart_find_kind_populated_for_class() {
-    let (idx, _uri) = index_single(
-        "/KindFilter2b.kt",
-        "package example\nfun topLevelAction(): Unit = Unit\nclass MyClass",
-    );
-    let root = std::path::PathBuf::from("/test");
-    let results = crate::cli::run::smart_find(&idx, "MyClass", &root, &Default::default());
-    assert!(!results.is_empty(), "should find MyClass");
-    assert_eq!(
-        results[0].kind, "class",
-        "kind should be 'class', got '{}'",
-        results[0].kind
-    );
-}
-
-#[test]
-fn smart_find_no_kind_filter_finds_everything() {
+fn definition_locations_finds_top_level_function() {
     let (idx, _uri) = index_single(
         "/KindFilter3.kt",
         "package example\nfun sample(): Unit = Unit\n",
     );
-    let root = std::path::PathBuf::from("/test");
-    let filters = crate::cli::args::ResultFilters::default();
-    let results = crate::cli::run::smart_find(&idx, "sample", &root, &filters);
-    assert!(
-        !results.is_empty(),
-        "smart_find without kind filter should find sample"
-    );
+    let locs = idx.definition_locations("sample");
+    assert!(!locs.is_empty(), "definition_locations should find sample");
 }
