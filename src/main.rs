@@ -7,6 +7,7 @@ mod lines_ext;
 mod parser;
 mod path_util;
 mod queries;
+mod query;
 mod resolver;
 mod rg;
 mod semantic_tokens;
