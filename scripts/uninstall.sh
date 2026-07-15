@@ -37,17 +37,13 @@ if [ -d "$HOME/.cache/kotlin-lsp" ]; then
     total=$((total + 1))
 fi
 
-# 4. Project-local caches (.kotlin-lsp/cache in all repos)
-echo ""
-echo "  Looking for project-local caches (.kotlin-lsp/cache)..."
-for kid in $(find "$HOME" -maxdepth 5 -type d -name ".kotlin-lsp" 2>/dev/null); do
-    if [ -d "$kid/cache" ]; then
-        size=$(du -sh "$kid" 2>/dev/null | cut -f1)
-        rm -rf "$kid"
-        echo "    ✅ $kid ($size)"
-        total=$((total + 1))
-    fi
-done
-
-echo ""
-echo "${BOLD}Done — $total items removed.${RESET}"
+# 4. Current project cache (.kotlin-lsp/cache in CWD)
+local_cache="$(pwd)/.kotlin-lsp"
+if [ -d "$local_cache/cache" ]; then
+    size=$(du -sh "$local_cache" 2>/dev/null | cut -f1)
+    rm -rf "$local_cache"
+    echo "  ✅ Project cache: $local_cache ($size)"
+    total=$((total + 1))
+else
+    echo "  ⏭️  No project cache at $local_cache"
+fi
