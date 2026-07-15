@@ -137,13 +137,19 @@ test_project() {
 
 }
 
-# ── test projects ──────────────────────────────────────────────────────────
+# ── read projects from config ──────────────────────────────────────────────
 
-test_project "ktor"     "https://github.com/ktorio/ktor.git" \
-    "HttpStatusCode" "Application"
+CONF="$(dirname "$0")/dogfood.conf"
+if [ ! -f "$CONF" ]; then
+    echo "Config not found: $CONF"
+    exit 1
+fi
 
-test_project "nowinandroid" "https://github.com/android/nowinandroid.git" \
-    "NiaApp" "NiaAppState"
+while IFS='|' read -r name url symbol class_symbol _; do
+    [[ "$name" =~ ^# ]] && continue
+    [ -z "$name" ] && continue
+    test_project "$name" "$url" "$symbol" "${class_symbol:-}"
+done < "$CONF"
 
 # ── summary ────────────────────────────────────────────────────────────────
 
@@ -157,15 +163,3 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 [ "$PANICS" -eq 0 ] && [ "$FAIL" -eq 0 ] && exit 0
 exit 1
 
-# ── quick mode: single project ─────────────────────────────────────────────
-if [ "${1:-}" = "--quick" ]; then
-    test_project "nowinandroid" "https://github.com/android/nowinandroid.git" "NiaApp"
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    printf "  ✅ Passed:  %d\n" "$PASS"
-    printf "  ❌ Failed:  %d\n" "$FAIL"
-    printf "  💥 Panics:  %d\n" "$PANICS"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    [ "$PANICS" -eq 0 ] && [ "$FAIL" -eq 0 ] && exit 0
-    exit 1
-fi
