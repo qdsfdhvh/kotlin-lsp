@@ -1,3 +1,39 @@
+## 0.26.7 (2026-07-15)
+
+### Fix: find/refs include library sources (#151)
+
+- FIXED: `find` and `refs` now include declarations from extracted Gradle library sources
+  (`~/.kotlin-lsp/sources`). Library symbols are again searchable.
+
+## 0.26.6 (2026-07-15)
+
+### feat: project-local cache + cache management (#148)
+
+- Workspace cache now lives at `{project}/.kotlin-lsp/cache/index.bin` instead of global XDG dir.
+- Add `kotlin-lsp cache clean`, `cache list`, `cache stats` commands.
+
+### perf: conservative optimizations (#150)
+
+- Skip library cache load for commands that don't need it (benchmark, diagnose, etc.).
+- Skip cache save on warm starts with 0 files parsed.
+- AGENTS.md: no-daemon rule.
+
+### test: dogfood.conf with 5 real projects
+
+- ktor, nowinandroid, coroutines, sqldelight, arrow — 100/100 commands pass.
+
+## 0.26.5 (2026-07-15)
+
+### Fix: --kind fun normalization (#147)
+
+- `--kind fun` now matches `function` (short form → full SymbolKind name).
+
+## 0.26.4 (2026-07-15)
+
+### Fix: remaining relative-path panics (#146)
+
+- `impact`, `callers`, `callees`, `find-test`, `batch-imports` no longer panic on relative paths.
+
 ## 0.26.3 (2026-07-15)
 
 ### Fix: inspect --expand panic on relative paths (#143)
