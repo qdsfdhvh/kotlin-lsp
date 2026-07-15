@@ -313,7 +313,6 @@ pub(crate) fn enrich_result_kinds(results: &mut [CliResult], indexer: &Indexer) 
         if !r.kind.is_empty() {
             continue;
         }
-        // Derive uri from the file path stored in the result
         if let Ok(uri) = tower_lsp::lsp_types::Url::from_file_path(std::path::Path::new(&r.file)) {
             let uri_str = uri.as_str();
             if let Some(file_data) = indexer.files.get(uri_str) {
@@ -1289,6 +1288,21 @@ fn split_qualified_name(name: &str, mut filters: ResultFilters) -> (String, Resu
     }
 }
 
+/// Map short-form kind names to the full SymbolKind debug format.
+/// e.g. "fun" → "function".
+fn normalize_kind_str(k: &str) -> &str {
+    match k {
+        "fun" => "function",
+        "fns" => "function",
+        "field" => "field",
+        "val" => "property",
+        "var" => "property",
+        "iface" => "interface",
+        "enum" => "enum",
+        _ => k,
+    }
+}
+
 fn apply_filters(
     mut results: Vec<CliResult>,
     root: &Path,
@@ -1301,7 +1315,12 @@ fn apply_filters(
         results.retain(|r| r.module.as_deref().is_some_and(|m| m.contains(needle)));
     }
     if !filters.kinds.is_empty() {
-        results.retain(|r| filters.kinds.iter().any(|k| r.kind.eq_ignore_ascii_case(k)));
+        results.retain(|r| {
+            filters
+                .kinds
+                .iter()
+                .any(|k| normalize_kind_str(k).eq_ignore_ascii_case(normalize_kind_str(&r.kind)))
+        });
     }
     if !filters.source_sets.is_empty() {
         results.retain(|r| {

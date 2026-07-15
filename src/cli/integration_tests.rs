@@ -493,11 +493,12 @@ fn enrich_result_kinds_fills_kind_for_top_level_function() {
     let idx = std::sync::Arc::new(crate::indexer::Indexer::new());
     idx.index_content(&uri, src);
 
-    // Simulate what locs_to_results creates: kind is empty (the bug)
-    let file_path = uri.to_file_path().unwrap();
+    // Simulate what locs_to_results creates: kind is empty (the bug), so the file path
+    // round-trips correctly through canonicalize + from_file_path.
+    let file_path = uri.to_file_path().unwrap(); // e.g. "/private/.../KindFilterReal.kt"
     let mut results = vec![crate::cli::output::CliResult {
         name: "topLevelAction".into(),
-        kind: String::new(), // ⬅️ the bug: kind was never populated
+        kind: String::new(), // ← the bug: kind was never populated
         file: file_path.to_string_lossy().into_owned(),
         line: 2,
         col: 5,
