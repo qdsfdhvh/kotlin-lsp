@@ -42,6 +42,54 @@ async fn async_main() {
         .init();
 
     // CLI subcommands: find, refs, hover, index
+    // kotlin-lsp uninstall — clean up everything
+    if std::env::args().any(|a| a == "uninstall") {
+        println!("kotlin-lsp uninstall");
+        println!();
+        println!("This will remove:");
+        println!("  • Library sources (~/.kotlin-lsp/)");
+        println!("  • Global cache (~/.cache/kotlin-lsp/)");
+        println!("  • Current project cache (.kotlin-lsp/cache/)");
+        println!();
+        print!("Continue? [y/N] ");
+        use std::io::Write;
+        std::io::stdout().flush().ok();
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).ok();
+        if input.trim().to_lowercase() != "y" {
+            println!("Cancelled.");
+            return;
+        }
+        println!("Removing...");
+        if let Ok(home) = std::env::var("HOME") {
+            let lib = std::path::PathBuf::from(&home).join(".kotlin-lsp");
+            if lib.exists() {
+                std::fs::remove_dir_all(&lib).ok();
+                println!("  ✅ {}", lib.display());
+            }
+            let cache = std::path::PathBuf::from(&home)
+                .join(".cache")
+                .join("kotlin-lsp");
+            if cache.exists() {
+                std::fs::remove_dir_all(&cache).ok();
+                println!("  ✅ {}", cache.display());
+            }
+        }
+        if let Ok(cwd) = std::env::current_dir() {
+            let pc = cwd.join(".kotlin-lsp");
+            if pc.exists() {
+                std::fs::remove_dir_all(&pc).ok();
+                println!("  ✅ {}", pc.display());
+            }
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            println!("  Binary: {}", exe.display());
+            println!("  To remove the binary: rm '{}'", exe.display());
+        }
+        println!("Done.");
+        return;
+    }
+
     match cli::CliArgs::parse() {
         Ok(Some(args)) => {
             cli::run(args).await;
@@ -85,6 +133,7 @@ async fn async_main() {
     }
 
     // --port <N>  — serve a single LSP client over TCP (useful for Android / Sora Editor)
+
     if args.first().map(|s| s == "--port").unwrap_or(false) {
         let port: u16 = args
             .get(1)
