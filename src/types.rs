@@ -158,8 +158,6 @@ pub(crate) struct FileData {
     /// Raw source lines — kept for `word_at()` lookups without hitting disk.
     /// Wrapped in Arc so that `clone()` is a cheap atomic refcount bump,
     /// not a full Vec<String> copy (which allocates one heap block per line).
-    /// Not cached — re-read from disk when needed for `word_at()`.
-    #[serde(skip)]
     pub lines: Arc<Vec<String>>,
     /// Lower-cased identifiers found before `:` on non-comment lines.
     /// Populated once at parse time; used by completion without re-scanning.
