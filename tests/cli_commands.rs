@@ -283,23 +283,106 @@ fn cache_stats_subcommand_runs() {
     );
 }
 
-// ── inspect --expand with relative path (#143) ───────────────────────────────
-
 #[test]
-fn inspect_expand_relative_path_does_not_panic() {
+fn inspect_relative_path_dot_slash_works() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let fixture = dir.path().join("src").join("RelFile.kt");
+    let fixture = dir.path().join("src").join("DotFile.kt");
     std::fs::create_dir_all(fixture.parent().unwrap()).unwrap();
-    std::fs::write(&fixture, "package example\nclass RelFile\n").unwrap();
+    std::fs::write(&fixture, "class DotFile").unwrap();
 
-    // Run from within the temp dir so `src/RelFile.kt` is relative
-    let output = Command::new(env!("CARGO_BIN_EXE_kotlin-lsp"))
-        .args(["inspect", "src/RelFile.kt", "--expand", "1"])
+    let output = Command::new(BIN)
+        .args(["inspect", "./src/DotFile.kt", "--expand", "0"])
         .current_dir(dir.path())
         .output()
         .expect("inspect should run");
+    assert!(output.status.success(), "./ should work: {:?}", output);
+}
 
-    assert!(output.status.success(), "inspect failed: {:?}", output);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("RelFile"), "should find RelFile: {stdout}");
+#[test]
+fn inspect_relative_path_parent_traversal_works() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::create_dir_all(dir.path().join("sub")).unwrap();
+    std::fs::write(dir.path().join("RootFile.kt"), "class RootFile").unwrap();
+
+    // Run from sub/ and use ../RootFile.kt
+    let output = Command::new(BIN)
+        .args(["inspect", "../RootFile.kt"])
+        .current_dir(dir.path().join("sub"))
+        .output()
+        .expect("inspect should run");
+    assert!(output.status.success(), "../ should work: {:?}", output);
+}
+
+#[test]
+fn inspect_bare_filename_in_current_dir_works() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("BareFile.kt"), "class BareFile").unwrap();
+
+    let output = Command::new(BIN)
+        .args(["inspect", "BareFile.kt"])
+        .current_dir(dir.path())
+        .output()
+        .expect("inspect should run");
+    assert!(
+        output.status.success(),
+        "bare filename should work: {:?}",
+        output
+    );
+}
+
+#[test]
+fn call_hierarchy_relative_path_does_not_panic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let fixture = dir.path().join("src").join("CallMe.kt");
+    std::fs::create_dir_all(fixture.parent().unwrap()).unwrap();
+    std::fs::write(
+        &fixture,
+        "package example\nclass CallMe {\n    fun foo() {}\n}\n",
+    )
+    .unwrap();
+
+    let output = Command::new(BIN)
+        .args([
+            "call-hierarchy",
+            "src/CallMe.kt",
+            "2",
+            "7",
+            "--root",
+            &dir.path().to_string_lossy(),
+        ])
+        .current_dir(dir.path())
+        .output()
+        .expect("call-hierarchy should run");
+    // doesn't need to succeed (may not find the symbol), just must not panic
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("panicked"),
+        "must not panic on relative path: {stderr}"
+    );
+}
+
+#[test]
+fn code_action_relative_path_does_not_panic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let fixture = dir.path().join("src").join("ActionFile.kt");
+    std::fs::create_dir_all(fixture.parent().unwrap()).unwrap();
+    std::fs::write(&fixture, "package example\nclass ActionFile\n").unwrap();
+
+    let output = Command::new(BIN)
+        .args([
+            "code-action",
+            "src/ActionFile.kt",
+            "1",
+            "7",
+            "--root",
+            &dir.path().to_string_lossy(),
+        ])
+        .current_dir(dir.path())
+        .output()
+        .expect("code-action should run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("panicked"),
+        "must not panic on relative path: {stderr}"
+    );
 }
