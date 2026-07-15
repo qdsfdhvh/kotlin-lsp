@@ -110,3 +110,5 @@ Indexing setup → [references/indexing.md](references/indexing.md)
 - **Don't** read the entire file for a signature; use `hover`.
 - **Don't** omit `--limit` on `refs` for common names like `String` or `Result`.
 - **Don't** invoke `kotlin-lsp` recursively inside an LSP context.
+
+- [Release Process](references/releasing.md) — how to bump version and publish releases.

@@ -1,3 +1,14 @@
+## 0.26.8 (2026-07-15)
+
+### perf: local dev optimizations (#156)
+
+- `.cargo/config.toml`: Windows `rust-lld` linker (3-5x faster than MSVC `link.exe`).
+- `.config/nextest.toml`: `cargo nextest` config with retries, timeouts, and CI profile.
+
+### feat: uninstall script (#155)
+
+- `kotlin-lsp uninstall` command to clean up library sources, caches, and guide binary removal.
+
 ## 0.26.7 (2026-07-15)
 
 ### Fix: find/refs include library sources (#151)
