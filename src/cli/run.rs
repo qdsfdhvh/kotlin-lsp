@@ -1200,7 +1200,7 @@ async fn run_find(
     let mut results = match effective_mode(mode, root, "find", verbose) {
         Mode::Fast => fast_find(name, root),
         _ => {
-            let index = build_index(root, true).await;
+            let index = build_index(root, false).await;
             smart_find(&index, name, root, filters)
         }
     };
@@ -1248,7 +1248,7 @@ async fn run_refs(
     let results = match effective_mode(mode, root, "refs", verbose) {
         Mode::Fast => fast_refs(name, root),
         _ => {
-            let index = build_index(root, true).await;
+            let index = build_index(root, false).await;
             smart_refs(&index, name, root)
         }
     };
