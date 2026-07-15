@@ -476,3 +476,102 @@ fn definition_locations_finds_top_level_function() {
     let locs = idx.definition_locations("sample");
     assert!(!locs.is_empty(), "definition_locations should find sample");
 }
+
+// ─── issue #139 end-to-end reproduction ──────────────────────────────────
+
+/// Reproduce the original bug: CliResult with empty kind + kind filter drops
+/// top-level functions. Verifies enrich_result_kinds fixes it.
+#[test]
+fn enrich_result_kinds_fills_kind_for_top_level_function() {
+    // Use a real tempfile so Url::to_file_path round-trip works
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("KindFilterReal.kt");
+    let src = "package example\nfun topLevelAction(): Unit = Unit\n";
+    std::fs::write(&file, src).unwrap();
+
+    let uri = tower_lsp::lsp_types::Url::from_file_path(&file).unwrap();
+    let idx = std::sync::Arc::new(crate::indexer::Indexer::new());
+    idx.index_content(&uri, src);
+
+    // Simulate what locs_to_results creates: kind is empty (the bug)
+    let file_path = uri.to_file_path().unwrap();
+    let mut results = vec![crate::cli::output::CliResult {
+        name: "topLevelAction".into(),
+        kind: String::new(), // ⬅️ the bug: kind was never populated
+        file: file_path.to_string_lossy().into_owned(),
+        line: 2,
+        col: 5,
+        relative_path: None,
+        module: None,
+        owner: None,
+        source_set: None,
+        signature: None,
+        visibility: None,
+        modifiers: None,
+    }];
+
+    crate::cli::run::enrich_result_kinds(&mut results, &idx);
+    assert_eq!(
+        results[0].kind, "function",
+        "kind must be filled from SymbolEntry"
+    );
+}
+
+#[test]
+fn enrich_result_kinds_does_not_overwrite_existing_kind() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("AlreadySet.kt");
+    let src = "package example\nclass AlreadySet\n";
+    std::fs::write(&file, src).unwrap();
+
+    let uri = tower_lsp::lsp_types::Url::from_file_path(&file).unwrap();
+    let idx = std::sync::Arc::new(crate::indexer::Indexer::new());
+    idx.index_content(&uri, src);
+
+    let file_path = uri.to_file_path().unwrap();
+    let mut results = vec![crate::cli::output::CliResult {
+        name: "AlreadySet".into(),
+        kind: "custom-special-kind".into(), // pre-populated
+        file: file_path.to_string_lossy().into_owned(),
+        line: 2,
+        col: 7,
+        relative_path: None,
+        module: None,
+        owner: None,
+        source_set: None,
+        signature: None,
+        visibility: None,
+        modifiers: None,
+    }];
+
+    crate::cli::run::enrich_result_kinds(&mut results, &idx);
+    assert_eq!(
+        results[0].kind, "custom-special-kind",
+        "existing kind must not be overwritten"
+    );
+}
+
+#[test]
+fn enrich_result_kinds_handles_file_not_in_index() {
+    let idx = std::sync::Arc::new(crate::indexer::Indexer::new());
+    let mut results = vec![crate::cli::output::CliResult {
+        name: "Ghost".into(),
+        kind: String::new(),
+        file: "/nonexistent/Ghost.kt".into(),
+        line: 1,
+        col: 1,
+        relative_path: None,
+        module: None,
+        owner: None,
+        source_set: None,
+        signature: None,
+        visibility: None,
+        modifiers: None,
+    }];
+    // must not panic
+    crate::cli::run::enrich_result_kinds(&mut results, &idx);
+    assert!(
+        results[0].kind.is_empty(),
+        "kind stays empty for unknown file"
+    );
+}

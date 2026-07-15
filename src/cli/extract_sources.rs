@@ -301,14 +301,17 @@ mod tests {
 
     #[test]
     fn artifact_dir_includes_version() {
-        let name = artifact_dir_name(Path::new("com.example-lib-1.5.0.jar"));
-        assert_eq!(name, "com.example-lib-1.5.0");
+        // Gradle cache path: files-2.1/{group}/{artifact}/{version}/{hash}.jar
+        let name = artifact_dir_name(Path::new(
+            "caches/files-2.1/com.example/lib/1.5.0/abc123/lib-1.5.0.jar",
+        ));
+        assert_eq!(name, "com.example.lib-1.5.0");
     }
 
     #[test]
     fn artifact_dir_different_versions_differ() {
         let old = artifact_dir_name(Path::new("com.example-lib-1.4.0.jar"));
-        let new = artifact_dir_name(Path::new("com.example-lib-1.5.0.jar"));
+        let new = artifact_dir_name(Path::new("com.example.lib-1.5.0.jar"));
         assert_ne!(
             old, new,
             "different versions must yield different cache paths"
@@ -319,5 +322,23 @@ mod tests {
     fn artifact_dir_fallback_to_filename() {
         let name = artifact_dir_name(Path::new("unknown-format.jar"));
         assert_eq!(name, "unknown-format");
+    }
+
+    #[test]
+    fn artifact_dir_snapshot_version() {
+        // realistic Gradle cache path with SNAPSHOT version in directory
+        let name = artifact_dir_name(Path::new(
+            "caches/files-2.1/com.example/lib/2.0.0-SNAPSHOT/hash/lib-2.0.0-SNAPSHOT.jar",
+        ));
+        assert_eq!(name, "com.example.lib-2.0.0-SNAPSHOT");
+    }
+
+    #[test]
+    fn artifact_dir_sources_classifier_does_not_break_version() {
+        // sources classifier in filename, version from directory structure
+        let name = artifact_dir_name(Path::new(
+            "caches/files-2.1/com.example/lib/1.5.0/hash/lib-1.5.0-sources.jar",
+        ));
+        assert_eq!(name, "com.example.lib-1.5.0");
     }
 }
