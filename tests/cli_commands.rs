@@ -386,3 +386,51 @@ fn code_action_relative_path_does_not_panic() {
         "must not panic on relative path: {stderr}"
     );
 }
+
+// ── uninstall ──────────────────────────────────────────────────────────────
+
+#[test]
+fn uninstall_n_cancels() {
+    let output = Command::new(BIN)
+        .arg("uninstall")
+        .stdin(std::process::Stdio::piped())
+        .output()
+        .unwrap();
+    // No stdin = empty input → not "y" → cancelled
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("Cancelled"));
+}
+
+#[test]
+fn uninstall_y_proceeds() {
+    use std::io::Write;
+    let mut child = Command::new(BIN)
+        .arg("uninstall")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.as_mut().unwrap().write_all(b"y\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("Done"));
+    assert!(!stdout.contains("Cancelled"));
+}
+
+#[test]
+fn uninstall_other_input_cancels() {
+    use std::io::Write;
+    let mut child = Command::new(BIN)
+        .arg("uninstall")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.as_mut().unwrap().write_all(b"yes\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("Cancelled"));
+}
