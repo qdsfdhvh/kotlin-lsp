@@ -25,7 +25,8 @@ struct TestResults {
 pub(crate) async fn run_find_test(file: &Path, line: u32, col: u32, json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, file);
     let index = crate::cli::run::build_index(&root, false).await;
-    let uri = Url::from_file_path(file).expect("valid file path");
+    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let uri = Url::from_file_path(&abs_file).expect("valid file path");
 
     let word = extract_word_at_position(&index, &uri, line, col);
     if word.is_empty() {

@@ -188,7 +188,8 @@ pub(crate) fn run_batch_imports(
         }
     };
 
-    let uri = Url::from_file_path(file).expect("valid file path");
+    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let uri = Url::from_file_path(&abs_file).expect("valid file path");
     let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
     let imports = lines.parse_imports();
 
