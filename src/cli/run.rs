@@ -724,7 +724,8 @@ pub(crate) async fn run(args: CliArgs) {
             let json = args.fmt == OutputFmt::Json;
             let index = build_index(&root, false).await;
 
-            let uri = Url::from_file_path(&file).expect("valid file path");
+            let abs_file = std::path::absolute(&file).unwrap_or_else(|_| file.to_path_buf());
+            let uri = Url::from_file_path(&abs_file).expect("valid file path");
 
             // Run parser diagnostics for the cursor position
             let src = std::fs::read_to_string(&file).unwrap_or_default();
@@ -1567,7 +1568,8 @@ async fn run_call_hierarchy(
 ) {
     let root = resolve_root_for_file(None, file);
     let index = build_index(&root, false).await;
-    let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
+    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
 
     let word: String = {
         let lines = index.mem_lines_for(uri.as_str());
@@ -1632,7 +1634,8 @@ async fn run_call_hierarchy(
 async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
     let root = resolve_root_for_file(None, file);
     let index = build_index(&root, false).await;
-    let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
+    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
 
     let word: String = {
@@ -1745,7 +1748,8 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
 }
 
 async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, _expand: usize) {
-    let uri = tower_lsp::lsp_types::Url::from_file_path(file).expect("valid file path");
+    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let data = index.get_file(uri.as_str());
     let package: String = data
         .as_ref()

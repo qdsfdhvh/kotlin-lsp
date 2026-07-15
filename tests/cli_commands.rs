@@ -282,3 +282,24 @@ fn cache_stats_subcommand_runs() {
         "cache stats should print status: {stdout}"
     );
 }
+
+// ── inspect --expand with relative path (#143) ───────────────────────────────
+
+#[test]
+fn inspect_expand_relative_path_does_not_panic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let fixture = dir.path().join("src").join("RelFile.kt");
+    std::fs::create_dir_all(fixture.parent().unwrap()).unwrap();
+    std::fs::write(&fixture, "package example\nclass RelFile\n").unwrap();
+
+    // Run from within the temp dir so `src/RelFile.kt` is relative
+    let output = Command::new(env!("CARGO_BIN_EXE_kotlin-lsp"))
+        .args(["inspect", "src/RelFile.kt", "--expand", "1"])
+        .current_dir(dir.path())
+        .output()
+        .expect("inspect should run");
+
+    assert!(output.status.success(), "inspect failed: {:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("RelFile"), "should find RelFile: {stdout}");
+}
