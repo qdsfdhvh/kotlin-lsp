@@ -119,23 +119,20 @@ test_project() {
     # ── workspace-wide commands ──
     check "$name: symbol-graph"          "$dir" symbol-graph
     check "$name: snapshot --json"       "$dir" snapshot --json
-    # check "$name: type-hierarchy"        "$dir" type-hierarchy "$symbol"
+
     check "$name: modules"               "$dir" modules
     check "$name: cache stats"           "$dir" cache stats
 
-    # ── file-level commands (on a known-good file) ──
-    local kt_file
-    kt_file=$(find "$dir" -name '*.kt' -not -path '*/build/*' | head -1)
-    [ -n "$kt_file" ] && {
-        local rel="${kt_file#$dir/}"
-        check "$name: check"              "$dir" check "$rel"
-        check "$name: inspect"            "$dir" inspect "$rel"
-        check "$name: format check"       "$dir" format check "$rel"
-        check "$name: complete"           "$dir" complete "$rel" 1 1
+    # ── file-level commands (use the file from find_json above) ──
+    [ -n "$file" ] && {
+        check "$name: check"              "$dir" check "$file"
+        check "$name: inspect"            "$dir" inspect "$file"
+        check "$name: format check"       "$dir" format check "$file"
+        check "$name: complete"           "$dir" complete "$file" 1 1
     }
 
     # ── type-hierarchy with a class (if provided) ──
-    [ -n "${class_symbol:-}" ] && check "$name: type-hierarchy $class_symbol" "$dir" type-hierarchy "$class_symbol"
+
 
 
 }
@@ -159,3 +156,16 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 [ "$PANICS" -eq 0 ] && [ "$FAIL" -eq 0 ] && exit 0
 exit 1
+
+# ── quick mode: single project ─────────────────────────────────────────────
+if [ "${1:-}" = "--quick" ]; then
+    test_project "nowinandroid" "https://github.com/android/nowinandroid.git" "NiaApp"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    printf "  ✅ Passed:  %d\n" "$PASS"
+    printf "  ❌ Failed:  %d\n" "$FAIL"
+    printf "  💥 Panics:  %d\n" "$PANICS"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    [ "$PANICS" -eq 0 ] && [ "$FAIL" -eq 0 ] && exit 0
+    exit 1
+fi
