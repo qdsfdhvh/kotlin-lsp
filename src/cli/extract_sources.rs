@@ -68,7 +68,7 @@ fn parse_jar_meta(jar: &Path) -> Option<GradleMeta> {
 
 fn artifact_dir_name(jar: &Path) -> String {
     if let Some(meta) = parse_jar_meta(jar) {
-        return format!("{}.{}", meta.group, meta.artifact);
+        return format!("{}.{}-{}", meta.group, meta.artifact, meta.version);
     }
     let name = jar
         .file_name()
@@ -291,5 +291,33 @@ pub(crate) fn run_extract_sources(opts: ExtractOptions) {
         for d in &extracted_dirs {
             println!("    \"{}\",", d.display());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn artifact_dir_includes_version() {
+        let name = artifact_dir_name(Path::new("com.example-lib-1.5.0.jar"));
+        assert_eq!(name, "com.example-lib-1.5.0");
+    }
+
+    #[test]
+    fn artifact_dir_different_versions_differ() {
+        let old = artifact_dir_name(Path::new("com.example-lib-1.4.0.jar"));
+        let new = artifact_dir_name(Path::new("com.example-lib-1.5.0.jar"));
+        assert_ne!(
+            old, new,
+            "different versions must yield different cache paths"
+        );
+    }
+
+    #[test]
+    fn artifact_dir_fallback_to_filename() {
+        let name = artifact_dir_name(Path::new("unknown-format.jar"));
+        assert_eq!(name, "unknown-format");
     }
 }
