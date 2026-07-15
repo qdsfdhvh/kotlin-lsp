@@ -1,5 +1,19 @@
-# Changelog
+## 0.26.1 (2026-07-14)
 
+### Fix: `find --kind fun` drops top-level functions (#139)
+
+- FIXED: `--kind fun` / `--kind class` filtering for `find` and `refs` now works correctly.
+  Root cause: `CliResult.kind` was always empty, so kind filters matched nothing.
+  Added `enrich_result_kinds()` to backfill `kind` from the indexer's `SymbolEntry.kind`.
+
+### Test Coverage
+
+- `src/indexer/symbol_graph_tests.rs` — 18 unit tests covering all SymbolGraph methods
+- `src/query/engine_tests.rs` — 17 unit tests for WorkspaceQueryEngine
+- `src/cli/query_engine_tests.rs` — 18 unit tests for IndexQueryEngine (all QueryEngine trait methods)
+- `src/cli/snapshot.rs` — 8 unit tests for `is_entry_point` + `collect_relationships`
+- 4 regression tests for #139 in `integration_tests.rs`
+- 2 symbol-graph CLI integration tests in `tests/cli_commands.rs`
 
 ## 0.26.0 (2026-07-14)
 

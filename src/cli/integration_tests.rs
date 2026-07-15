@@ -408,3 +408,71 @@ fn symbol_graph_includes_override_edges() {
     let edges = idx.override_edges.get("foo");
     assert!(edges.is_some(), "foo should have override edges from Child");
 }
+
+// ─── issue #139: find --kind fun drops top-level functions ─────────────────
+
+#[test]
+fn find_kind_fun_retains_top_level_function() {
+    let (idx, uri) = index_single(
+        "/KindFunTest.kt",
+        "package example\nfun SampleAction(): Unit = Unit\n",
+    );
+    // Verify the indexed symbol has FUNCTION kind
+    let data = idx.files.get(uri.as_str()).expect("indexed");
+    let fun_sym = data
+        .symbols
+        .iter()
+        .find(|s| s.name == "SampleAction")
+        .expect("SampleAction should be indexed");
+    assert_eq!(format!("{:?}", fun_sym.kind).to_lowercase(), "function");
+}
+
+// ─── issue #139: find --kind fun drops top-level functions ─────────────────
+
+/// Verify SymbolEntry.kind is "function" for top-level functions
+#[test]
+fn symbol_kind_is_function_for_top_level_fun() {
+    let (idx, _uri) = index_single(
+        "/KindFilter.kt",
+        "package example\nfun topLevelAction(): Unit = Unit\nclass MyClass",
+    );
+    let locs = idx.definition_locations("topLevelAction");
+    assert!(
+        !locs.is_empty(),
+        "definition_locations should find topLevelAction"
+    );
+    let uri_str = locs.first().unwrap().uri.as_str().to_string();
+    let fd = idx.files.get(&uri_str).expect("file indexed");
+    let sym = fd
+        .symbols
+        .iter()
+        .find(|s| s.name == "topLevelAction")
+        .expect("symbol");
+    assert_eq!(format!("{:?}", sym.kind).to_lowercase(), "function");
+}
+
+/// Verify SymbolEntry.kind is "class" for classes
+#[test]
+fn symbol_kind_is_class_for_class() {
+    let (idx, _uri) = index_single("/KindFilter2.kt", "package example\nclass MyClass");
+    let locs = idx.definition_locations("MyClass");
+    assert!(!locs.is_empty());
+    let fd = idx.files.get(locs[0].uri.as_str()).expect("indexed");
+    let sym = fd
+        .symbols
+        .iter()
+        .find(|s| s.name == "MyClass")
+        .expect("found");
+    assert_eq!(format!("{:?}", sym.kind).to_lowercase(), "class");
+}
+
+/// Verify definition_locations still works (no merge regression)
+#[test]
+fn definition_locations_finds_top_level_function() {
+    let (idx, _uri) = index_single(
+        "/KindFilter3.kt",
+        "package example\nfun sample(): Unit = Unit\n",
+    );
+    let locs = idx.definition_locations("sample");
+    assert!(!locs.is_empty(), "definition_locations should find sample");
+}
