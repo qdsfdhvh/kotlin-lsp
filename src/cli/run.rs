@@ -308,7 +308,7 @@ pub(crate) fn smart_find(
 }
 
 /// Populate each CliResult's `kind` field from the Indexer's SymbolEntry.
-fn enrich_result_kinds(results: &mut [CliResult], indexer: &Indexer) {
+pub(crate) fn enrich_result_kinds(results: &mut [CliResult], indexer: &Indexer) {
     for r in results {
         if !r.kind.is_empty() {
             continue;
