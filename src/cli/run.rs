@@ -480,7 +480,7 @@ pub(crate) async fn run(args: CliArgs) {
                 if verbose {
                     eprintln!("Loading index for Phase 2 resolution...");
                 }
-                Some(build_index(&root, false).await)
+                Some(build_index(&root, true).await)
             } else {
                 None
             };
@@ -773,7 +773,7 @@ pub(crate) async fn run(args: CliArgs) {
             super::check::run_check(&expanded, json);
             if diagnose {
                 let root = resolve_root_for_file(args.root.as_deref(), &expanded[0]);
-                let index = build_index(&root, false).await;
+                let index = build_index(&root, true).await;
                 super::diagnose::run_diagnose(&expanded, &index, json);
             }
         }
@@ -786,7 +786,7 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             let root = resolve_root_for_file(args.root.as_deref(), &file);
             let json = args.fmt == OutputFmt::Json;
-            let index = build_index(&root, false).await;
+            let index = build_index(&root, true).await;
 
             let abs_file = std::path::absolute(&file).unwrap_or_else(|_| file.to_path_buf());
             let uri = Url::from_file_path(&abs_file).expect("valid file path");
@@ -1109,7 +1109,7 @@ pub(crate) async fn run(args: CliArgs) {
             // ── Build fresh index ───────────────────────────────────────────
             eprintln!("Building fresh index...");
             let build_start = std::time::Instant::now();
-            let index = build_index(&root, false).await;
+            let index = build_index(&root, true).await;
             let build_elapsed = build_start.elapsed();
             println!(
                 "Index build: {}.{:03}s ({} files, {} symbols)",
@@ -1178,7 +1178,7 @@ async fn run_index(root: &Path, verbose: bool) {
     if verbose {
         eprintln!("Indexing workspace: {}", root.display());
     }
-    let index = build_index(root, false).await;
+    let index = build_index(root, true).await;
     if verbose {
         eprintln!(
             "Done: {} files, {} symbols",
@@ -1200,7 +1200,7 @@ async fn run_find(
     let mut results = match effective_mode(mode, root, "find", verbose) {
         Mode::Fast => fast_find(name, root),
         _ => {
-            let index = build_index(root, false).await;
+            let index = build_index(root, true).await;
             smart_find(&index, name, root, filters)
         }
     };
@@ -1248,7 +1248,7 @@ async fn run_refs(
     let results = match effective_mode(mode, root, "refs", verbose) {
         Mode::Fast => fast_refs(name, root),
         _ => {
-            let index = build_index(root, false).await;
+            let index = build_index(root, true).await;
             smart_refs(&index, name, root)
         }
     };
@@ -1717,7 +1717,7 @@ async fn run_call_hierarchy(
 
 async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
     let root = resolve_root_for_file(None, file);
-    let index = build_index(&root, false).await;
+    let index = build_index(&root, true).await;
     let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
@@ -1903,7 +1903,7 @@ async fn run_type_hierarchy(
     json: bool,
 ) {
     let root = resolve_root(None);
-    let index = build_index(&root, false).await;
+    let index = build_index(&root, true).await;
 
     // Collect supertypes by scanning the definitions index.
     let mut super_list: Vec<(String, tower_lsp::lsp_types::Location)> = Vec::new();
