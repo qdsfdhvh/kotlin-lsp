@@ -59,7 +59,7 @@ pub(crate) use symbol_graph::SymbolGraph;
 mod cache;
 pub(crate) mod jar_indexer;
 mod symbol_index;
-pub(crate) use self::cache::{try_load_cache, workspace_cache_path};
+pub(crate) use self::cache::{cache_dir, try_load_cache, workspace_cache_path};
 
 mod discover;
 

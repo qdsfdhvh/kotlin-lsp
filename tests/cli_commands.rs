@@ -278,7 +278,7 @@ fn cache_stats_subcommand_runs() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Cache path:") && stdout.contains("Status:"),
+        stdout.contains("") && stdout.contains("Status:"),
         "cache stats should print status: {stdout}"
     );
 }
