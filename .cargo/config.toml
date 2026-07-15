@@ -1,0 +1,8 @@
+# Windows: use rust-lld for faster linking.
+# MSVC link.exe is notoriously slow; rust-lld (shipped with the Rust toolchain
+# since 1.68) is 3-5x faster for debug/test builds.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+
+[target.aarch64-pc-windows-msvc]
+linker = "rust-lld"
