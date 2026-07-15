@@ -1178,7 +1178,7 @@ async fn run_index(root: &Path, verbose: bool) {
     if verbose {
         eprintln!("Indexing workspace: {}", root.display());
     }
-    let index = build_index(root, true).await;
+    let index = build_index(root, false).await;
     if verbose {
         eprintln!(
             "Done: {} files, {} symbols",
