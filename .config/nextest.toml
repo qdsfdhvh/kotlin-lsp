@@ -1,0 +1,30 @@
+# nextest configuration for kotlin-lsp
+# Install: cargo install cargo-nextest --locked
+# Usage:   cargo nextest run                        # all tests
+#          cargo nextest run --bin kotlin-lsp        # unit tests only (fast)
+#          cargo nextest run -E 'test(cli_commands)' # integration tests only
+#
+# nextest runs each test in its own process for true isolation and parallelism.
+# On multi-core machines this is significantly faster than `cargo test`.
+
+[profile.default]
+# Retry flaky tests once before marking them failed
+retries = 1
+
+# Timeout per test (prevents hangs)
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+# Show failures as they happen (don't wait until the end)
+fail-fast = false
+
+# Failure output: show the last 40 lines of each failing test's stdout+stderr
+failure-output = "immediate-final"
+
+# Final status level
+status-level = "all"
+
+[profile.ci]
+# CI profile — stricter, no retries on unknown failures
+retries = 0
+fail-fast = false
+status-level = "fail"
