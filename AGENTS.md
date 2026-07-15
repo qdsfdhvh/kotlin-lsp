@@ -74,6 +74,7 @@ cargo clippy -- -D warnings
 
 9. **False-positive syntax error fix — test-first** — When fixing `check` false positives:
    - First write a `#[test] fn fp_*` regression test that parses the valid Kotlin and asserts `data.syntax_errors.is_empty()`
+10. **No daemon mode** — Keep CLI simple. No background processes, no Unix sockets, no IPC. Each invocation is self-contained. Performance wins come from cache optimisations, not daemons.
    - Verify the test fails before the fix (reproduces the issue)
    - Then add suppression logic in `collect_syntax_errors()` (in `src/parser.rs`)
    - Verify the test passes after the fix

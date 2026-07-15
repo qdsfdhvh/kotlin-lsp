@@ -905,13 +905,16 @@ impl Indexer {
         let files_parsed = result.stats.files_parsed;
         self.apply_workspace_result(&result);
         Arc::clone(&self).index_source_paths(root).await;
-        // Always save when a complete scan ran — this trims deleted-file entries from
-        // the on-disk cache even when files_parsed == 0 (all cache hits).  Skip only
-        // for partial / truncated scans where nothing new was parsed.
-        if files_parsed > 0 || result.complete_scan {
+        // Only persist cache when new files were parsed — warm restarts
+        // with 0 changes can skip the expensive zstd compress + disk write.
+        // Deleted-file entries will be cleaned up on the next full index.
+        if files_parsed > 0 {
             self.save_cache_to_disk();
         } else {
-            log::info!("Partial scan, nothing new parsed — skipping workspace cache save");
+            log::info!(
+                "No new files parsed (warm start) — skipping cache save ({} files in memory)",
+                self.files.len()
+            );
         }
         // _guard dropped here → indexing_in_progress cleared
     }
