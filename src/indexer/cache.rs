@@ -63,15 +63,31 @@ fn xdg_cache_base() -> PathBuf {
         })
 }
 
+pub(crate) fn cache_dir() -> PathBuf {
+    xdg_cache_base().join("kotlin-lsp")
+}
+
 fn status_cache_path() -> PathBuf {
     xdg_cache_base().join("kotlin-lsp").join("status.json")
 }
 
-/// Returns the cache file path for the given workspace root.
-///
-/// Uses a SHA-256 hash of the canonicalized root path as the directory name so
-/// equivalent roots always map to the same cache file regardless of symlinks.
+/// Project-local cache: {root}/.kotlin-lsp/cache/index.bin.
+/// Falls back to global XDG cache if project root is not writable
+/// or if KOTLIN_LSP_GLOBAL_CACHE is set.
 pub(crate) fn workspace_cache_path(root: &Path) -> PathBuf {
+    if std::env::var("KOTLIN_LSP_GLOBAL_CACHE").is_ok() {
+        return global_cache_path(root);
+    }
+    let project_local = root.join(".kotlin-lsp").join("cache").join("index.bin");
+    if let Some(parent) = project_local.parent() {
+        if std::fs::create_dir_all(parent).is_ok() {
+            return project_local;
+        }
+    }
+    global_cache_path(root)
+}
+
+fn global_cache_path(root: &Path) -> PathBuf {
     let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let root_hash = {
         use sha2::{Digest, Sha256};

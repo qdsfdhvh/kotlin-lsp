@@ -495,22 +495,84 @@ pub(crate) async fn run(args: CliArgs) {
             super::doctor::run_doctor(args.root.as_deref(), verbose, json);
         }
         Subcommand::Cache { sub } => {
-            if sub == "stats" {
-                let root = resolve_root(args.root.as_deref());
-                let cache_path = crate::indexer::workspace_cache_path(&root);
-                println!("Cache path: {}", cache_path.display());
-                if cache_path.exists() {
-                    if let Ok(meta) = std::fs::metadata(&cache_path) {
-                        let size = meta.len();
-                        println!("Size: {} bytes", size);
+            let root = resolve_root(args.root.as_deref());
+            let cache_dir = crate::indexer::cache_dir();
+            let ws_cache = crate::indexer::workspace_cache_path(&root);
+
+            match sub.as_str() {
+                "stats" => {
+                    // Count all workspace cache entries
+                    let mut entry_count = 0u64;
+                    let mut total_size = 0u64;
+                    if cache_dir.exists() {
+                        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+                            for entry in entries.flatten() {
+                                let index_bin = entry.path().join("index.bin");
+                                // Only count workspace entries (directories with index.bin)
+                                if entry.path().is_dir() && index_bin.exists() {
+                                    entry_count += 1;
+                                    if let Ok(meta) = std::fs::metadata(&index_bin) {
+                                        total_size += meta.len();
+                                    }
+                                }
+                            }
+                        }
                     }
-                    println!("Status: ✅ exists");
-                } else {
-                    println!("Status: ❌ (no cache found)");
+                    println!("Cache dir:   {}", cache_dir.display());
+                    println!("Entries:     {}", entry_count);
+                    if total_size > 0 {
+                        let kb = total_size / 1024;
+                        println!("Total size:  {} KB", kb);
+                    }
+                    println!("This workspace cache: {}", ws_cache.display());
+                    if ws_cache.exists() {
+                        if let Ok(meta) = std::fs::metadata(&ws_cache) {
+                            println!("  Size: {} bytes", meta.len());
+                        }
+                        println!("  Status: ✅ exists");
+                    } else {
+                        println!("  Status: ❌ (no cache)");
+                    }
                 }
-                return;
+                "clean" => {
+                    if cache_dir.exists() {
+                        let before = if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+                            entries.flatten().count()
+                        } else {
+                            0
+                        };
+                        std::fs::remove_dir_all(&cache_dir).ok();
+                        println!(
+                            "Removed {} cache entries from {}",
+                            before,
+                            cache_dir.display()
+                        );
+                    } else {
+                        println!("No cache found at {}", cache_dir.display());
+                    }
+                }
+                "list" => {
+                    if cache_dir.exists() {
+                        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+                            for entry in entries.flatten() {
+                                let index_bin = entry.path().join("index.bin");
+                                if !entry.path().is_dir() || !index_bin.exists() {
+                                    continue;
+                                }
+                                let name = entry.file_name();
+                                let size =
+                                    std::fs::metadata(&index_bin).map(|m| m.len()).unwrap_or(0);
+                                println!("  {}  ({} KB)", name.to_string_lossy(), size / 1024);
+                            }
+                        }
+                    } else {
+                        println!("No cache at {}", cache_dir.display());
+                    }
+                }
+                _ => {
+                    eprintln!("Usage: kotlin-lsp cache <stats|clean|list>");
+                }
             }
-            eprintln!("Unknown cache subcommand: {sub}. Use: stats");
         }
 
         Subcommand::NewFile {
