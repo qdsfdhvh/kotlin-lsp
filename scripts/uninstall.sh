@@ -7,6 +7,18 @@ RESET=$(tput sgr0 2>/dev/null || echo "")
 
 echo "${BOLD}kotlin-lsp uninstall${RESET}"
 echo ""
+echo "This will remove:"
+echo "  • kotlin-lsp binary"
+echo "  • Library sources (~/.kotlin-lsp)"
+echo "  • Global cache (~/.cache/kotlin-lsp)"
+echo "  • Current project cache (.kotlin-lsp)"
+echo ""
+read -p "Continue? [y/N] " confirm
+if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && [ "${1:-}" != "--force" ]; then
+    echo "Cancelled."
+    exit 0
+fi
+echo ""
 
 total=0
 
