@@ -1,3 +1,19 @@
+## 0.26.3 (2026-07-15)
+
+### Fix: inspect --expand panic on relative paths (#143)
+
+- FIXED: `inspect`, `call-hierarchy`, `code-action`, `refs` now resolve relative paths to absolute
+  before constructing a file URL, preventing `.expect("valid file path")` panics.
+- 6 CLI regression tests: `./`, `../`, bare filename, call-hierarchy, code-action, inspect --expand
+
+## 0.26.2 (2026-07-15)
+
+### Fix: library source cache can return stale signatures (#141)
+
+- FIXED: `artifact_dir_name` now includes the version (`{group}.{artifact}-{version}`),
+  preventing different versions of the same artifact from colliding in the source cache.
+- 5 regression tests: includes_version, different_versions, fallback, SNAPSHOT, -sources classifier
+
 ## 0.26.1 (2026-07-14)
 
 ### Fix: `find --kind fun` drops top-level functions (#139)
