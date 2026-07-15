@@ -501,54 +501,57 @@ pub(crate) async fn run(args: CliArgs) {
 
             match sub.as_str() {
                 "stats" => {
-                    // Count all workspace cache entries
-                    let mut entry_count = 0u64;
-                    let mut total_size = 0u64;
-                    if cache_dir.exists() {
-                        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
-                            for entry in entries.flatten() {
-                                let index_bin = entry.path().join("index.bin");
-                                // Only count workspace entries (directories with index.bin)
-                                if entry.path().is_dir() && index_bin.exists() {
-                                    entry_count += 1;
-                                    if let Ok(meta) = std::fs::metadata(&index_bin) {
-                                        total_size += meta.len();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    println!("Cache dir:   {}", cache_dir.display());
-                    println!("Entries:     {}", entry_count);
-                    if total_size > 0 {
-                        let kb = total_size / 1024;
-                        println!("Total size:  {} KB", kb);
-                    }
-                    println!("This workspace cache: {}", ws_cache.display());
+                    println!("Project cache: {}/.kotlin-lsp/cache/", root.display());
                     if ws_cache.exists() {
                         if let Ok(meta) = std::fs::metadata(&ws_cache) {
-                            println!("  Size: {} bytes", meta.len());
+                            let kb = meta.len() as f64 / 1024.0;
+                            if kb > 1024.0 {
+                                println!("  Size: {:.1} MB", kb / 1024.0);
+                            } else {
+                                println!("  Size: {:.0} KB", kb);
+                            }
                         }
-                        println!("  Status: ✅ exists");
+                        println!("  Status: ✅ fresh");
                     } else {
-                        println!("  Status: ❌ (no cache)");
+                        println!("  Status: ❌ (no cache — run `kotlin-lsp index` first)");
+                    }
+                    // Also show legacy global if present
+                    let global_dir = crate::indexer::cache_dir();
+                    if global_dir.exists() {
+                        let count = std::fs::read_dir(&global_dir)
+                            .map(|e| e.flatten().filter(|e| e.path().is_dir()).count())
+                            .unwrap_or(0);
+                        if count > 0 {
+                            println!(
+                                "Legacy global cache: {} ({} entries, run `cache clean` to remove)",
+                                global_dir.display(),
+                                count
+                            );
+                        }
                     }
                 }
                 "clean" => {
-                    if cache_dir.exists() {
-                        let before = if let Ok(entries) = std::fs::read_dir(&cache_dir) {
-                            entries.flatten().count()
-                        } else {
-                            0
-                        };
-                        std::fs::remove_dir_all(&cache_dir).ok();
+                    // Clean project-local cache
+                    let project_dir = root.join(".kotlin-lsp").join("cache");
+                    if project_dir.exists() {
+                        std::fs::remove_dir_all(&project_dir).ok();
+                        println!("Removed project cache: {}", project_dir.display());
+                    }
+                    // Clean legacy global cache (old format, may exist from earlier versions)
+                    let global_dir = crate::indexer::cache_dir();
+                    if global_dir.exists() {
+                        let entries = std::fs::read_dir(&global_dir)
+                            .map(|e| e.flatten().count())
+                            .unwrap_or(0);
+                        std::fs::remove_dir_all(&global_dir).ok();
                         println!(
-                            "Removed {} cache entries from {}",
-                            before,
-                            cache_dir.display()
+                            "Removed legacy global cache: {} ({} entries)",
+                            global_dir.display(),
+                            entries
                         );
-                    } else {
-                        println!("No cache found at {}", cache_dir.display());
+                    }
+                    if !project_dir.exists() && !global_dir.exists() {
+                        println!("No cache found.");
                     }
                 }
                 "list" => {

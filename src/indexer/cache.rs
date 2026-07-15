@@ -72,36 +72,12 @@ fn status_cache_path() -> PathBuf {
 }
 
 /// Project-local cache: {root}/.kotlin-lsp/cache/index.bin.
-/// Falls back to global XDG cache if project root is not writable
-/// or if KOTLIN_LSP_GLOBAL_CACHE is set.
 pub(crate) fn workspace_cache_path(root: &Path) -> PathBuf {
-    if std::env::var("KOTLIN_LSP_GLOBAL_CACHE").is_ok() {
-        return global_cache_path(root);
-    }
     let project_local = root.join(".kotlin-lsp").join("cache").join("index.bin");
     if let Some(parent) = project_local.parent() {
-        if std::fs::create_dir_all(parent).is_ok() {
-            return project_local;
-        }
+        std::fs::create_dir_all(parent).ok();
     }
-    global_cache_path(root)
-}
-
-fn global_cache_path(root: &Path) -> PathBuf {
-    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let root_hash = {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(canonical.to_string_lossy().as_bytes());
-        let digest = hasher.finalize();
-        let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&digest[..8]);
-        u64::from_be_bytes(bytes)
-    };
-    xdg_cache_base()
-        .join("kotlin-lsp")
-        .join(format!("{root_hash:016x}"))
-        .join("index.bin")
+    project_local
 }
 
 // ─── Status file ─────────────────────────────────────────────────────────────
