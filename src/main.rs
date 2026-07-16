@@ -37,7 +37,7 @@ fn main() {
 }
 
 async fn async_main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
         .target(env_logger::Target::Stderr) // keep stdout clean for LSP JSON-RPC
         .init();
 
