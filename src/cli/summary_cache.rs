@@ -97,17 +97,11 @@ pub(crate) fn build_cached_summary(
         }
     }
 
-    // Members: non-private symbols in the same file
-    let members: Vec<MemberCacheEntry> = all_symbols
-        .iter()
-        .filter(|s| s.name != name)
-        .filter(|s| s.visibility != crate::types::Visibility::Private)
-        .map(|s| MemberCacheEntry {
-            name: s.name.clone(),
-            kind: format!("{:?}", s.kind).to_lowercase(),
-            signature: s.detail.clone(),
-        })
-        .collect();
+    // Members: not tracked in cache (use `summarize --expand` for CST-based members).
+    // The cached summary returns an empty member list to avoid listing unrelated
+    // file-level symbols as members.
+    let members: Vec<MemberCacheEntry> = Vec::new();
+    let _ = all_symbols; // suppress unused warning
 
     CachedSummary {
         name: name.to_string(),
@@ -165,10 +159,9 @@ pub(crate) fn lookup_summary(cache: &SummaryCache, name: &str) -> Vec<CachedSumm
 // ── CLI commands ────────────────────────────────────────────────────────────
 
 /// Run `summary-cache stats` — print cache statistics.
-pub(crate) fn run_summary_cache_stats() {
+pub(crate) async fn run_summary_cache_stats() {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    let index = rt.block_on(crate::cli::run::build_index(&root, false));
+    let index = crate::cli::run::build_index(&root, false).await;
 
     let cache = build_summary_cache(&index);
 
@@ -203,10 +196,9 @@ pub(crate) fn run_summary_cache_stats() {
 }
 
 /// Run `summarize <name> --cached` — use cached summary instead of re-parsing.
-pub(crate) fn run_summarize_cached(name: &str, json: bool) {
+pub(crate) async fn run_summarize_cached(name: &str, json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    let index = rt.block_on(crate::cli::run::build_index(&root, false));
+    let index = crate::cli::run::build_index(&root, false).await;
 
     let cache = build_summary_cache(&index);
     let summaries = lookup_summary(&cache, name);
@@ -258,6 +250,8 @@ pub(crate) fn run_summarize_cached(name: &str, json: bool) {
                     }
                     println!();
                 }
+            } else {
+                println!("  Members: (use `summarize --expand` for full CST-based members)");
             }
             println!();
         }

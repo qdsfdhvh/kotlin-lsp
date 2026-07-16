@@ -1101,13 +1101,13 @@ pub(crate) async fn run(args: CliArgs) {
             cached,
         } => {
             if cached {
-                crate::cli::summary_cache::run_summarize_cached(&name, json);
+                crate::cli::summary_cache::run_summarize_cached(&name, json).await;
             } else {
                 crate::cli::summarize::run_summarize(&name, expand, json).await;
             }
         }
         Subcommand::SummaryCacheStats => {
-            crate::cli::summary_cache::run_summary_cache_stats();
+            crate::cli::summary_cache::run_summary_cache_stats().await;
         }
         Subcommand::FindTest { file, line, col } => {
             crate::cli::find_test::run_find_test(&file, line, col, json).await;
@@ -1212,7 +1212,7 @@ pub(crate) async fn run(args: CliArgs) {
             crate::cli::symbol_queries::run_docs(&query, json);
         }
         Subcommand::Search { query, limit } => {
-            crate::cli::search::run_search(&query, json, limit);
+            crate::cli::search::run_search(&query, json, limit).await;
         }
     }
 }

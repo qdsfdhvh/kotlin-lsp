@@ -1,3 +1,30 @@
+## 0.27.0 (2026-07-16)
+
+### feat: semantic search + AI summary cache + SuperKind distinction (#166 #167)
+
+**Semantic Search** (`kotlin-lsp search`)
+- TF-IDF semantic search with BM25-inspired scoring over symbol names, KDoc, signatures, and return types.
+- Tokenizes on camelCase, snake_case, and whitespace boundaries.
+- Prefix matching for incomplete query tokens.
+- English stemming: "refreshed" matches "refresh", "running" matches "run".
+- `--json` and `--limit N` flags.
+
+**AI Summary Cache** (`summarize --cached` + `summary-cache`)
+- Pre-computed structured summaries for all public symbols, built from indexed FileData.
+- `kotlin-lsp summarize <name> --cached` — fast symbol overview without re-parsing source.
+- `kotlin-lsp summary-cache` — cache statistics (total, docs, signatures, by kind).
+- Members field omitted in cached mode (use `--expand` for CST-based members).
+
+**SuperKind Distinction (extends vs implements)**
+- New `SuperKind` enum: `Extends`, `Implements`.
+- Java supertypes tagged at CST level: `extends` → Extends, `implements` → Implements.
+- Kotlin/Swift supertypes default to Extends (cannot distinguish without resolution).
+- `CACHE_VERSION` bumped to 16.
+
+**Cache Path Migration**
+- Project-local cache moved from `.kotlin-lsp/cache/` to `.cache/kotlin-lsp/`.
+- `.cache/` added to `.gitignore`; legacy `.kotlin-lsp/` cleanup preserved.
+
 ## 0.26.8 (2026-07-15)
 
 ### perf: local dev optimizations (#156)

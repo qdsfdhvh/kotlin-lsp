@@ -4,6 +4,54 @@
 //! from the workspace index. Tokenizes on camelCase, snake_case, and whitespace.
 //! No external ML dependencies — pure TF-IDF with BM25-inspired scoring.
 
+/// Simple suffix-stripping stemmer for English tokens.
+/// Handles common suffixes: -ed, -ing, -s, -es, -tion, -ment, -ly.
+fn stem(word: &str) -> String {
+    let w = word.to_lowercase();
+    if w.len() <= 3 {
+        return w;
+    }
+    // Strip double-letter + ed/ing (e.g., "running" → "run", "stopped" → "stop")
+    if w.ends_with("ing") && w.len() > 5 {
+        let base = &w[..w.len() - 3];
+        let chars: Vec<char> = base.chars().collect();
+        let n = chars.len();
+        if n >= 2 && chars[n - 1] == chars[n - 2] {
+            return base[..n - 1].to_string();
+        }
+        return base.to_string();
+    }
+    if w.ends_with("ed") && w.len() > 4 {
+        let base = &w[..w.len() - 2];
+        let chars: Vec<char> = base.chars().collect();
+        let n = chars.len();
+        if n >= 2 && chars[n - 1] == chars[n - 2] {
+            return base[..n - 1].to_string();
+        }
+        return base.to_string();
+    }
+    if w.ends_with('s') && !w.ends_with("ss") && w.len() > 3 {
+        let base = &w[..w.len() - 1];
+        if base.ends_with("e") && base.len() > 2 {
+            return base[..base.len() - 1].to_string(); // "tokens" → "token" (strip "es")
+        }
+        return base.to_string(); // "models" → "model"
+    }
+    if w.ends_with("tion") && w.len() > 5 {
+        return format!("{}e", &w[..w.len() - 4]); // "resolution" → "resolute"
+    }
+    if w.ends_with("ment") && w.len() > 5 {
+        return w[..w.len() - 4].to_string(); // "refreshment" → "refresh"
+    }
+    if w.ends_with("ly") && w.len() > 4 {
+        return w[..w.len() - 2].to_string(); // "quickly" → "quick"
+    }
+    // "ies" → "y" (e.g., "dependencies" → "dependency")
+    if w.ends_with("ies") && w.len() > 4 {
+        return format!("{}y", &w[..w.len() - 3]);
+    }
+    w
+}
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -211,16 +259,18 @@ struct SearchResult {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-pub(crate) fn run_search(query: &str, json: bool, max_results: usize) {
+pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    let index = rt.block_on(crate::cli::run::build_index(&root, false));
+    let index = crate::cli::run::build_index(&root, false).await;
 
     let mut tfidf = TfIdfIndex::new();
-    let query_tokens = tokenize_query(query);
+    let query_tokens: Vec<String> = tokenize_query(query)
+        .into_iter()
+        .map(|t| stem(&t))
+        .collect();
 
     // Also try to tokenize query as if it were a camelCase identifier
-    let mut all_query_tokens = query_tokens.clone();
+    let mut all_query_tokens: Vec<String> = query_tokens.clone();
     for qt in &query_tokens {
         let sub = tokenize_identifier(qt);
         for s in sub {
@@ -267,6 +317,12 @@ pub(crate) fn run_search(query: &str, json: bool, max_results: usize) {
                 tokens.extend(tokenize_identifier(ptype));
             }
 
+            // Stem all tokens for better matching (e.g., "refreshed" → "refresh")
+            tokens = tokens
+                .into_iter()
+                .map(|t| stem(&t))
+                .filter(|t| t.len() >= 2)
+                .collect();
             let doc_id = tfidf.docs.len();
             tfidf.docs.push(SearchDoc {
                 name: sym.name.clone(),
