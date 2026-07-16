@@ -1,4 +1,5 @@
 #![warn(unreachable_pub)]
+mod ai_summary;
 mod backend;
 mod cli;
 mod indexer;

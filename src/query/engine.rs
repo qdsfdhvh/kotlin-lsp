@@ -119,4 +119,96 @@ impl WorkspaceQueryEngine {
         names.dedup();
         names
     }
+
+    /// Build an AI-friendly summary for a symbol, combining identity,
+    /// signature, documentation, and all relationship edges.
+    pub(crate) fn build_summary(&self, name: &str) -> Option<crate::ai_summary::AISummary> {
+        let locs = self.definition_locations(name);
+        let loc = locs.first()?;
+
+        let fd = self.file_data(&loc.uri)?;
+        let sym = fd.symbols.iter().find(|s| s.name == name)?;
+
+        let graph = self.graph();
+
+        // Collect members for classes/interfaces
+        let class_kinds = ["class", "interface", "object", "enum", "struct"];
+        let members: Vec<crate::ai_summary::MemberInfo> =
+            if class_kinds.contains(&format!("{:?}", sym.kind).to_lowercase().as_str()) {
+                fd.symbols
+                    .iter()
+                    .filter(|s| {
+                        s.name != name
+                            && s.selection_range.start.line >= sym.selection_range.start.line
+                            && (s.selection_range.end < sym.selection_range.end
+                                || sym.selection_range.end.line == 0)
+                    })
+                    .map(|s| crate::ai_summary::MemberInfo {
+                        name: s.name.clone(),
+                        kind: format!("{:?}", s.kind).to_lowercase(),
+                        signature: Some(s.detail.clone()).filter(|d| !d.is_empty()),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+
+        let callers: Vec<String> = graph
+            .callers_of(name)
+            .into_iter()
+            .map(|(_, caller)| caller)
+            .collect();
+        let callees: Vec<String> = graph
+            .callees_of(name)
+            .into_iter()
+            .map(|(_, callee)| callee)
+            .collect();
+        let importers: Vec<String> = graph
+            .importers_of(name)
+            .into_iter()
+            .map(|(file, _)| file)
+            .collect();
+        let supertypes: Vec<String> = self
+            .supertypes_of(name)
+            .into_iter()
+            .map(|(sup, _)| sup)
+            .collect();
+        let subtypes: Vec<String> = self
+            .subtypes_of(name)
+            .into_iter()
+            .map(|loc| {
+                self.file_data(&loc.uri)
+                    .and_then(|fd| {
+                        fd.symbols
+                            .iter()
+                            .find(|s| s.selection_range == loc.range)
+                            .map(|s| s.name.clone())
+                    })
+                    .unwrap_or_else(|| loc.uri.to_string())
+            })
+            .collect();
+
+        Some(crate::ai_summary::AISummary {
+            name: name.to_string(),
+            kind: format!("{:?}", sym.kind).to_lowercase(),
+            package: fd.package.clone(),
+            file: loc
+                .uri
+                .to_file_path()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned(),
+            line: loc.range.start.line + 1,
+            visibility: Some(format!("{:?}", sym.visibility).to_lowercase()),
+            signature: Some(sym.detail.clone()).filter(|d| !d.is_empty()),
+            doc: sym.documentation.clone(),
+            deprecated: sym.deprecated,
+            members,
+            supertypes,
+            subtypes,
+            callers,
+            callees,
+            importers,
+        })
+    }
 }
