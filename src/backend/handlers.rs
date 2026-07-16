@@ -67,8 +67,11 @@ impl Backend {
         uri: &Url,
         line: u32,
     ) -> String {
-        let subst =
-            crate::indexer::resolution::build_subst_map(self.indexer.as_ref(), uri.as_str(), line);
+        let subst = crate::indexer::resolution::build_subst_map(
+            self.query_engine.index.as_ref(),
+            uri.as_str(),
+            line,
+        );
         if subst.is_empty() {
             return receiver_type.raw.clone();
         }
@@ -287,7 +290,7 @@ impl Backend {
 
     fn collect_workspace_symbols(&self, query: &WorkspaceSymbolQuery) -> Vec<SymbolInformation> {
         let mut results = Vec::with_capacity(16);
-        for entry in self.indexer.files.iter() {
+        for entry in self.query_engine.index.files.iter() {
             let Some(uri) = workspace_symbol_uri(entry.key()) else {
                 continue;
             };
