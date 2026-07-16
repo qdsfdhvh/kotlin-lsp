@@ -98,13 +98,76 @@ pub(crate) struct FileData {
 }
 ```
 
+## Edge Index System
+
+kotlin-lsp extracts typed relationship edges during CST parsing and stores them
+in pre-built DashMap indexes for O(1) lookup. No tree-sitter re-parse at query
+时间 — query engine reads directly from edge maps.
+
+### Edge types
+
+| Edge | Key → Value | CST node | CLI command |
+|------|------------|----------|-------------|
+| `call_edges` | callee_name → [(caller_file, caller_name)] | `call_expression` | `callers`, `callees` |
+| `import_edges` | imported_fqn → [(importing_file, local_name)] | `import_header` | `imports-of` |
+| `override_edges` | method_name → [(overriding_file, class)] | `function_declaration` with `override` modifier | `type-hierarchy` |
+| `annotation_edges` | annotation_name → [(file, symbol_name)] | `annotation` | `annotated` |
+
+### Data flow
+
+```
+CST parse (parser.rs)
+    │  extract_*_edges() walks CST nodes, returns Vec<(String, String)>
+    ▼
+FileData (types.rs)
+    │  edges stored as #[serde(default)] Vec fields
+    ▼
+apply.rs
+    │  merged into Indexer DashMaps by key
+    ▼
+SymbolGraph / WorkspaceQueryEngine
+    │  typed query API (callers_of, imports_of, annotations_of, ...)
+    ▼
+CLI / LSP
+```
+
+### Annotation edges (since 2026-07-16)
+
+CST structure:
+```
+function_declaration
+  modifiers
+    annotation
+      "@"
+      user_type
+        type_identifier  ← annotation name (e.g. "Composable")
+  simple_identifier     ← annotated symbol name (e.g. "MyScreen")
+```
+
+Extraction walks CST for `annotation` nodes, extracts the `type_identifier`
+child as annotation name, and walks up to the nearest declaration node to find
+`simple_identifier` as the annotated symbol.
+
+Supported parent declaration kinds:
+`function_declaration`, `class_declaration`, `object_declaration`,
+`property_declaration`, `class_method`, `type_alias`, `enum_class`,
+`interface_declaration`.
+
+Query API:
+```rust
+// WorkspaceQueryEngine
+let results: Vec<(String, String)> = engine.annotations_of("Composable");
+// → [("src/MyScreen.kt", "MyScreen"), ("src/Other.kt", "OtherScreen")]
+```
+
 ## Resolution Pipeline
 
 1. **CST parsing** — tree-sitter produces a concrete syntax tree
 2. **Symbol extraction** — walk the CST to find declarations
-3. **Cross-file resolution** — match symbol names across files via `definitions` map
-4. **Type substitution** — resolve generic type parameters for subclass contexts
-5. **Rg fallback** — `rg` (ripgrep) for cold-start / unindexed symbols
+3. **Edge extraction** — walk the CST for relationships (calls, imports, overrides, annotations)
+4. **Cross-file resolution** — match symbol names across files via `definitions` map
+5. **Type substitution** — resolve generic type parameters for subclass contexts
+6. **Rg fallback** — `rg` (ripgrep) for cold-start / unindexed symbols
 
 ## Concurrency
 

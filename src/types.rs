@@ -177,6 +177,11 @@ pub(crate) struct FileData {
     /// Used for fast callers/callees graph traversal without re-parsing source.
     #[serde(default = "Vec::new")]
     pub call_edges: Vec<(String, String)>,
+    /// Annotation edges extracted at parse time: (symbol_name, annotation_name) pairs.
+    /// e.g. ("MyScreen", "Composable"), ("repo", "Inject").
+    /// Used for fast annotation lookups without file-level text search.
+    #[serde(default = "Vec::new")]
+    pub annotation_edges: Vec<(String, String)>,
     pub rhs_types: Vec<(u32, String, String)>,
     /// Method-call RHS patterns for unannotated properties: `val x = receiver.method(args)`.
     /// Each entry is `(declaration_line, var_name, receiver_name, method_name)`.

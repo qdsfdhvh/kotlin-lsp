@@ -113,6 +113,8 @@ pub(crate) struct FileContributions {
     pub supertypes_map: HashMap<String, Vec<(String, String)>>,
     /// Call edges (callee → [(caller_file, caller_name)]).
     pub call_edges: HashMap<String, Vec<(String, String)>>,
+    /// Annotation edges: annotation_name → [(file, symbol_name)].
+    pub annotation_edges: HashMap<String, Vec<(String, String)>>,
     /// Import edges: fqn → [(file, local_name)].
     pub import_edges: HashMap<String, Vec<(String, String)>>,
     /// Override edges: method_name → [(file, class)].
@@ -169,6 +171,9 @@ pub(crate) struct Indexer {
     /// Call graph edges: callee_name → [(caller_file, caller_name)].
     /// Built during workspace indexing; used by callers/callees commands.
     pub(crate) call_edges: DashMap<String, Vec<(String, String)>>,
+    /// Annotation edges: annotation_name → [(file, annotated_symbol)].
+    /// Built during workspace indexing; used by `annotated` command.
+    pub(crate) annotation_edges: DashMap<String, Vec<(String, String)>>,
     /// Cached sorted list of all project class/symbol names for bare-word completion.
     /// Rebuilt after each file index; avoids iterating `definitions` on every keystroke.
     pub(crate) bare_name_cache: std::sync::RwLock<Vec<String>>,
@@ -292,6 +297,7 @@ impl Indexer {
             import_edges: DashMap::new(),
             override_edges: DashMap::new(),
             call_edges: DashMap::new(),
+            annotation_edges: DashMap::new(),
             bare_name_cache: std::sync::RwLock::new(Vec::new()),
             last_completion: std::sync::Mutex::new(None),
             root_generation: AtomicU64::new(0),
@@ -329,6 +335,7 @@ impl Indexer {
         self.import_edges.clear();
         self.override_edges.clear();
         self.call_edges.clear();
+        self.annotation_edges.clear();
         self.content_hashes.clear();
         self.completion_cache.clear();
         self.library_uris.clear();
