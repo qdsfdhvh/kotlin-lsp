@@ -466,6 +466,7 @@ struct ParsedCliFlags {
     diagnose: bool,
     name_arg: Option<String>,
     exclude_relationships: bool,
+    cached: bool,
 }
 
 fn parse_first_argument(args: &mut lexopt::Parser) -> Result<Option<std::ffi::OsString>, String> {
@@ -532,6 +533,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         type_supertypes: false,
         type_graph: false,
         expand: 0,
+        cached: false,
         exclude_imports: false,
         fuzzy_filter: false,
         visibility_filter: None,
@@ -588,6 +590,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
                 let value = args.value().map_err(|e| e.to_string())?;
                 parsed.expand = value.to_string_lossy().parse().unwrap_or(0);
             }
+            Some(lexopt::Arg::Long("cached")) => parsed.cached = true,
             Some(lexopt::Arg::Long("name")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
                 parsed.name_arg = Some(value.to_string_lossy().into_owned());
@@ -809,7 +812,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             }
             let expand = positionals.contains(&"--expand".to_string())
                 || positionals.contains(&"-E".to_string());
-            let cached = positionals.contains(&"--cached".to_string());
+            let cached = parsed.cached;
             Ok(Subcommand::Summarize {
                 name,
                 expand,
