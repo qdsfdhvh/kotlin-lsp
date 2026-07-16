@@ -160,7 +160,7 @@ fn super_names_for_class(file_data: &FileData, class_name: &str) -> Vec<String> 
         return file_data
             .supers
             .iter()
-            .map(|(_, name, _)| name.clone())
+            .map(|(_, name, _, _)| name.clone())
             .collect();
     }
 
@@ -173,13 +173,13 @@ fn super_names_for_class(file_data: &FileData, class_name: &str) -> Vec<String> 
         Some(line) => file_data
             .supers
             .iter()
-            .filter(|(super_line, _, _)| *super_line == line)
-            .map(|(_, name, _)| name.clone())
+            .filter(|(super_line, _, _, _)| *super_line == line)
+            .map(|(_, name, _, _)| name.clone())
             .collect(),
         None => file_data
             .supers
             .iter()
-            .map(|(_, name, _)| name.clone())
+            .map(|(_, name, _, _)| name.clone())
             .collect(),
     }
 }

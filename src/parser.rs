@@ -1627,7 +1627,12 @@ impl crate::types::FileData {
                 let name_line = node.name_line();
                 for child in node.children_of_kind(KIND_DELEGATION_SPEC) {
                     if let Some((name, type_args)) = child.super_from_delegation(bytes) {
-                        self.supers.push((name_line, name, type_args));
+                        self.supers.push((
+                            name_line,
+                            name,
+                            type_args,
+                            crate::types::SuperKind::Extends,
+                        ));
                     }
                 }
             }
@@ -1646,12 +1651,21 @@ impl crate::types::FileData {
             for child in node.children(&mut cur) {
                 if child.kind() == KIND_SUPERCLASS {
                     if let Some(name) = child.java_first_type_name(bytes) {
-                        self.supers
-                            .push((name_line, name, child.type_arg_strings(bytes)));
+                        self.supers.push((
+                            name_line,
+                            name,
+                            child.type_arg_strings(bytes),
+                            crate::types::SuperKind::Extends,
+                        ));
                     }
                 } else if child.kind() == KIND_SUPER_INTERFACES {
                     for (name, type_args) in child.java_type_list(bytes) {
-                        self.supers.push((name_line, name, type_args));
+                        self.supers.push((
+                            name_line,
+                            name,
+                            type_args,
+                            crate::types::SuperKind::Implements,
+                        ));
                     }
                 }
             }
@@ -1659,7 +1673,12 @@ impl crate::types::FileData {
             let name_line = node.name_line();
             if let Some(ext) = node.first_child_of_kind(KIND_EXTENDS_INTERFACES) {
                 for (name, type_args) in ext.java_type_list(bytes) {
-                    self.supers.push((name_line, name, type_args));
+                    self.supers.push((
+                        name_line,
+                        name,
+                        type_args,
+                        crate::types::SuperKind::Extends,
+                    ));
                 }
             }
         }
@@ -1679,14 +1698,23 @@ impl crate::types::FileData {
                 for spec in specs {
                     if let Some(ut) = spec.first_child_of_kind(KIND_USER_TYPE) {
                         if let Some(name) = ut.user_type_name(bytes) {
-                            self.supers
-                                .push((name_line, name, ut.type_arg_strings(bytes)));
+                            self.supers.push((
+                                name_line,
+                                name,
+                                ut.type_arg_strings(bytes),
+                                crate::types::SuperKind::Extends,
+                            ));
                         }
                         continue;
                     }
                     if let Some(type_identifier) = spec.first_child_of_kind(KIND_TYPE_IDENT) {
                         if let Some(name) = type_identifier.utf8_text_owned(bytes) {
-                            self.supers.push((name_line, name, Vec::new()));
+                            self.supers.push((
+                                name_line,
+                                name,
+                                Vec::new(),
+                                crate::types::SuperKind::Extends,
+                            ));
                         }
                     }
                 }

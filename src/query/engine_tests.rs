@@ -131,7 +131,11 @@ fn supertypes_of_returns_direct_supertypes() {
     let engine = empty_engine();
     engine.index.supertypes_index.insert(
         "Child".to_string(),
-        vec![("Parent".to_string(), "/model.kt".to_string())],
+        vec![(
+            "Parent".to_string(),
+            "/model.kt".to_string(),
+            crate::types::SuperKind::Extends,
+        )],
     );
 
     let supers = engine.supertypes_of("Child");

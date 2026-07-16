@@ -10,4 +10,6 @@ findings.md
 progress.md
 .pi/
 .tours/
+# Legacy cache — migrated to .cache/kotlin-lsp
+.cache/
 .kotlin-lsp/

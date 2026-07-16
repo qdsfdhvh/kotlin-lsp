@@ -59,6 +59,15 @@ pub(crate) struct CallerContext<'a> {
     pub cursor_line: Option<u32>,
 }
 
+/// Supertype relationship kind: extends (class) vs implements (interface).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub(crate) enum SuperKind {
+    /// Class inheritance (`class Foo : Bar(...)`).
+    #[default]
+    Extends,
+    /// Interface implementation (`class Foo : Bar` where Bar is an interface).
+    Implements,
+}
 /// Kotlin/Java visibility of a declared symbol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) enum Visibility {
@@ -168,7 +177,7 @@ pub(crate) struct FileData {
     /// - `supertype_name` is the base name without type arguments (e.g. `"FlowReducer"`)
     /// - `type_args` are the concrete type arguments (e.g. `["Event", "Effect", "State"]`)
     #[serde(default)]
-    pub supers: Vec<(u32, String, Vec<String>)>,
+    pub supers: Vec<(u32, String, Vec<String>, SuperKind)>,
     /// RHS-inferred types for unannotated properties, extracted from the CST at parse time.
     /// Each entry is `(declaration_line, var_name, inferred_type)`.
     /// Used as the primary type inference path for indexed files, avoiding fragile string
@@ -225,7 +234,7 @@ pub(crate) struct FileIndexResult {
     pub data: FileData,
     /// Supertype relationships discovered in this file.
     /// Format: (supertype_name, implementing_class_location)
-    pub supertypes: Vec<(String, tower_lsp::lsp_types::Location)>,
+    pub supertypes: Vec<(String, tower_lsp::lsp_types::Location, SuperKind)>,
     /// Content hash for cache invalidation.
     pub content_hash: u64,
     /// Parse error if tree-sitter failed.

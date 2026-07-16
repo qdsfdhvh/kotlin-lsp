@@ -983,8 +983,8 @@ fn build_generate_overrides_action(
     let super_names: Vec<String> = file_data
         .supers
         .iter()
-        .filter(|(l, _, _)| *l == class_start_line)
-        .map(|(_, name, _)| name.clone())
+        .filter(|(l, _, _, _)| *l == class_start_line)
+        .map(|(_, name, _, _)| name.clone())
         .collect();
 
     if super_names.is_empty() {

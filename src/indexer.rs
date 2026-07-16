@@ -110,7 +110,7 @@ pub(crate) struct FileContributions {
     pub packages: HashMap<String, Vec<String>>,
     pub subtypes: HashMap<String, Vec<Location>>,
     /// Forward supertype map: subtype_name → [(supertype_name, file)].
-    pub supertypes_map: HashMap<String, Vec<(String, String)>>,
+    pub supertypes_map: HashMap<String, Vec<(String, String, crate::types::SuperKind)>>,
     /// Call edges (callee → [(caller_file, caller_name)]).
     pub call_edges: HashMap<String, Vec<(String, String)>>,
     /// Annotation edges: annotation_name → [(file, symbol_name)].
@@ -161,7 +161,7 @@ pub(crate) struct Indexer {
     pub(crate) subtypes: DashMap<String, Vec<Location>>,
     /// Forward supertype index: subtype_name → [(supertype_name, file)].
     /// Built during workspace indexing for fast supertype lookups.
-    pub(crate) supertypes_index: DashMap<String, Vec<(String, String)>>,
+    pub(crate) supertypes_index: DashMap<String, Vec<(String, String, crate::types::SuperKind)>>,
     /// Import edges: imported_fqn → [(importing_file, local_name)].
     /// Built during workspace indexing for fast import analysis.
     pub(crate) import_edges: DashMap<String, Vec<(String, String)>>,

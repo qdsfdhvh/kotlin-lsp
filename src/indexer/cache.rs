@@ -21,7 +21,7 @@ use crate::types::{FileData, FileIndexResult};
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /// Bump when the serialized format changes; invalidates any older cache files.
-pub(crate) const CACHE_VERSION: u32 = 15;
+pub(crate) const CACHE_VERSION: u32 = 16;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -71,9 +71,9 @@ fn status_cache_path() -> PathBuf {
     xdg_cache_base().join("kotlin-lsp").join("status.json")
 }
 
-/// Project-local cache: {root}/.kotlin-lsp/cache/index.bin.
+/// Project-local cache: {root}/.cache/kotlin-lsp/index.bin.
 pub(crate) fn workspace_cache_path(root: &Path) -> PathBuf {
-    let project_local = root.join(".kotlin-lsp").join("cache").join("index.bin");
+    let project_local = root.join(".cache").join("kotlin-lsp").join("index.bin");
     if let Some(parent) = project_local.parent() {
         std::fs::create_dir_all(parent).ok();
     }
@@ -154,7 +154,7 @@ pub(crate) fn cache_entry_to_file_result(uri: &Url, entry: &FileCacheEntry) -> F
         SymbolKind::ENUM,
         SymbolKind::OBJECT,
     ];
-    let mut supertypes: Vec<(String, Location)> = Vec::new();
+    let mut supertypes: Vec<(String, Location, crate::types::SuperKind)> = Vec::new();
     for sym in &data.symbols {
         if !class_kinds.contains(&sym.kind) {
             continue;
@@ -164,8 +164,12 @@ pub(crate) fn cache_entry_to_file_result(uri: &Url, entry: &FileCacheEntry) -> F
             uri: uri.clone(),
             range: sym.selection_range,
         };
-        for (_, super_name, _) in data.supers.iter().filter(|(l, _, _)| *l == start_line) {
-            supertypes.push((super_name.clone(), class_loc.clone()));
+        for (_, super_name, _, _) in data.supers.iter().filter(|(l, _, _, _)| *l == start_line) {
+            supertypes.push((
+                super_name.clone(),
+                class_loc.clone(),
+                crate::types::SuperKind::Extends,
+            ));
         }
     }
     FileIndexResult {

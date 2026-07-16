@@ -280,8 +280,8 @@ super.doIt()
     let supers: Vec<String> = file
         .supers
         .iter()
-        .filter(|(l, _, _)| *l == start_line)
-        .map(|(_, n, _)| n.clone())
+        .filter(|(l, _, _, _)| *l == start_line)
+        .map(|(_, n, _, _)| n.clone())
         .collect();
     assert!(supers.contains(&"Bar".to_string()), "supers={supers:?}");
 

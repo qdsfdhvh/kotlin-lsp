@@ -229,6 +229,8 @@ pub(crate) enum Subcommand {
     Summarize {
         name: String,
         expand: bool,
+        /// Use cached summary instead of re-parsing source.
+        cached: bool,
     },
     /// Find test files/methods for a symbol.
     FindTest {
@@ -332,6 +334,14 @@ pub(crate) enum Subcommand {
         /// Exclude relationship graph from output (symbols only).
         exclude_relationships: bool,
     },
+    /// Semantic search: natural language query over symbol index.
+    Search {
+        query: String,
+        /// Max results to return.
+        limit: usize,
+    },
+    /// Show AI summary cache statistics.
+    SummaryCacheStats,
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -799,7 +809,12 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             }
             let expand = positionals.contains(&"--expand".to_string())
                 || positionals.contains(&"-E".to_string());
-            Ok(Subcommand::Summarize { name, expand })
+            let cached = positionals.contains(&"--cached".to_string());
+            Ok(Subcommand::Summarize {
+                name,
+                expand,
+                cached,
+            })
         }
         "find-test" => {
             let (file, line, col) = parse_file_line_col(positionals, "find-test")?;
@@ -1026,6 +1041,15 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 .ok_or("docs requires a QUERY argument")?;
             Ok(Subcommand::Docs { query })
         }
+        "search" => {
+            let query = positionals
+                .first()
+                .cloned()
+                .ok_or("search requires a QUERY argument")?;
+            let limit = parsed.limit.unwrap_or(20);
+            Ok(Subcommand::Search { query, limit })
+        }
+        "summary-cache" => Ok(Subcommand::SummaryCacheStats),
         "type-hierarchy" => {
             build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes, type_graph)
         }
@@ -1255,6 +1279,8 @@ fn is_subcommand(value: &str) -> bool {
             | "package-deps"
             | "docs"
             | "summarize"
+            | "search"
+            | "summary-cache"
             | "callers"
             | "callees"
             | "impact"
@@ -1338,6 +1364,8 @@ SUBCOMMANDS:
     tree <file>                        Dump tree-sitter parse tree (debug)
     format check <file/dir>...          Check formatting violations (like spotlessCheck)
     format apply <file/dir>...         Apply formatting in-place (like spotlessApply)
+    search <query>                    Semantic search with TF-IDF ranking over symbols
+    summary-cache                     Show AI summary cache statistics
 
 OPTIONS:
     --fast              Use rg/fd only; never load index (default when no cache)

@@ -96,7 +96,10 @@ impl WorkspaceQueryEngine {
         self.graph().callees_of(name)
     }
 
-    pub(crate) fn supertypes_of(&self, name: &str) -> Vec<(String, String)> {
+    pub(crate) fn supertypes_of(
+        &self,
+        name: &str,
+    ) -> Vec<(String, String, crate::types::SuperKind)> {
         self.index
             .supertypes_index
             .get(name)

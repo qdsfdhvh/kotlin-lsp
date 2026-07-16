@@ -49,7 +49,7 @@ async fn async_main() {
         println!("This will remove:");
         println!("  • Library sources (~/.kotlin-lsp/)");
         println!("  • Global cache (~/.cache/kotlin-lsp/)");
-        println!("  • Current project cache (.kotlin-lsp/cache/)");
+        println!("  • Current project cache (.cache/kotlin-lsp/)");
         println!();
         print!("Continue? [y/N] ");
         use std::io::Write;
@@ -62,7 +62,9 @@ async fn async_main() {
         }
         println!("Removing...");
         if let Ok(home) = std::env::var("HOME") {
-            let lib = std::path::PathBuf::from(&home).join(".kotlin-lsp");
+            let lib = std::path::PathBuf::from(&home)
+                .join(".cache")
+                .join("kotlin-lsp");
             if lib.exists() {
                 std::fs::remove_dir_all(&lib).ok();
                 println!("  ✅ {}", lib.display());
@@ -76,7 +78,7 @@ async fn async_main() {
             }
         }
         if let Ok(cwd) = std::env::current_dir() {
-            let pc = cwd.join(".kotlin-lsp");
+            let pc = cwd.join(".cache").join("kotlin-lsp");
             if pc.exists() {
                 std::fs::remove_dir_all(&pc).ok();
                 println!("  ✅ {}", pc.display());

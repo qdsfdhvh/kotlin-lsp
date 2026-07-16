@@ -31,6 +31,8 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Import analysis → kotlin-lsp imports-of
    ├─ Annotation query → kotlin-lsp annotated
    ├─ Signature search → kotlin-lsp docs
+   ├─ Semantic search → kotlin-lsp search "find where token is refreshed"
+   ├─ Cached summaries → kotlin-lsp summarize <name> --cached | summary-cache
    └─ Full project snapshot → kotlin-lsp snapshot / symbol-graph
 ```
 
@@ -71,6 +73,14 @@ kotlin-lsp callees <file> <line> <col> [depth]
 kotlin-lsp implementations <Name> [depth]
 kotlin-lsp subclasses <Name> [depth]
 kotlin-lsp type-hierarchy <Name>
+
+# Semantic search
+kotlin-lsp search "find where token is refreshed" [--limit N]
+kotlin-lsp search "login view model" --json
+
+# Cached summaries
+kotlin-lsp summarize <name> --cached
+kotlin-lsp summary-cache
 
 # Batch
 echo '[...]' | kotlin-lsp query --json

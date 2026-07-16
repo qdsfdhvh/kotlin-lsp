@@ -765,7 +765,7 @@ impl Indexer {
                 let supers: Vec<String> = tokio::task::spawn_blocking(move || {
                     idx_c
                         .index_content(&uri_c, &cont_c)
-                        .map(|d| d.supers.iter().map(|(_, n, _)| n.clone()).collect())
+                        .map(|d| d.supers.iter().map(|(_, n, _, _)| n.clone()).collect())
                         .unwrap_or_default()
                 })
                 .await

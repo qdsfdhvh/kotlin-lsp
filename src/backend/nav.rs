@@ -219,8 +219,8 @@ impl Backend {
                 let names: Vec<String> = file
                     .supers
                     .iter()
-                    .filter(|(l, _, _)| *l == loc.range.start.line)
-                    .map(|(_, n, _)| n.clone())
+                    .filter(|(l, _, _, _)| *l == loc.range.start.line)
+                    .map(|(_, n, _, _)| n.clone())
                     .collect();
                 if !names.is_empty() {
                     return names;
@@ -233,7 +233,7 @@ impl Backend {
             let names: Vec<String> = parse_by_extension(uri.path(), &content)
                 .supers
                 .into_iter()
-                .map(|(_, n, _)| n)
+                .map(|(_, n, _, _)| n)
                 .collect();
             if !names.is_empty() {
                 return names;

@@ -261,3 +261,27 @@ kotlin-lsp doctor [--verbose] [--json]
 ```
 
 Structured workspace health checks.
+
+### search — semantic search
+
+TF-IDF ranked semantic search over symbols. Indexes names, KDoc, signatures,
+and return types. No external ML deps.
+
+```bash
+kotlin-lsp search <query> [--limit N] [--json]
+```
+
+```bash
+kotlin-lsp search "find where token is refreshed" --limit 10
+kotlin-lsp search "login view model" --json
+```
+
+### summarize --cached / summary-cache
+
+Pre-computed AI-friendly symbol summaries. Agents load cached summaries without
+re-parsing source files.
+
+```bash
+kotlin-lsp summarize <name> --cached [--json]
+kotlin-lsp summary-cache
+```
