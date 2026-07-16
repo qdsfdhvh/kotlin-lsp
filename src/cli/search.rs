@@ -4,6 +4,17 @@
 //! from the workspace index. Tokenizes on camelCase, snake_case, and whitespace.
 //! No external ML dependencies — pure TF-IDF with BM25-inspired scoring.
 
+/// Common English stop words to exclude from search tokens.
+const STOP_WORDS: &[&str] = &[
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "in", "on", "at", "to", "for",
+    "of", "by", "with", "from", "and", "or", "not", "but", "if", "then", "else", "when", "it",
+    "its", "this", "that", "these", "those", "do", "does", "did", "has", "have", "had", "can",
+    "could", "will", "would", "shall", "should", "may", "might", "must", "i", "you", "he", "she",
+    "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "our", "their", "what",
+    "which", "who", "whom", "where", "how", "why", "all", "any", "both", "each", "few", "more",
+    "most", "no", "some", "such", "only", "own", "same", "so", "than", "too", "very", "just",
+    "about", "into", "over", "also", "new", "get", "got", "set",
+];
 /// Simple suffix-stripping stemmer for English tokens.
 /// Handles common suffixes: -ed, -ing, -s, -es, -tion, -ment, -ly.
 fn stem(word: &str) -> String {
@@ -12,7 +23,7 @@ fn stem(word: &str) -> String {
         return w;
     }
     // Strip double-letter + ed/ing (e.g., "running" → "run", "stopped" → "stop")
-    if w.ends_with("ing") && w.len() > 5 {
+    if w.ends_with("ing") && w.len() >= 6 && w.len() <= 9 {
         let base = &w[..w.len() - 3];
         let chars: Vec<char> = base.chars().collect();
         let n = chars.len();
@@ -30,17 +41,17 @@ fn stem(word: &str) -> String {
         }
         return base.to_string();
     }
-    if w.ends_with('s') && !w.ends_with("ss") && w.len() > 3 {
+    if w.ends_with('s') && !w.ends_with("ss") && w.len() >= 6 && w.len() <= 9 {
         let base = &w[..w.len() - 1];
         if base.ends_with("e") && base.len() > 2 {
             return base[..base.len() - 1].to_string(); // "tokens" → "token" (strip "es")
         }
         return base.to_string(); // "models" → "model"
     }
-    if w.ends_with("tion") && w.len() > 5 {
+    if w.ends_with("tion") && w.len() >= 6 && w.len() <= 9 {
         return format!("{}e", &w[..w.len() - 4]); // "resolution" → "resolute"
     }
-    if w.ends_with("ment") && w.len() > 5 {
+    if w.ends_with("ment") && w.len() >= 6 && w.len() <= 9 {
         return w[..w.len() - 4].to_string(); // "refreshment" → "refresh"
     }
     if w.ends_with("ly") && w.len() > 4 {
@@ -93,12 +104,13 @@ fn tokenize_identifier(s: &str) -> Vec<String> {
 
 /// Tokenize free text: split on whitespace, strip punctuation, lowercase.
 fn tokenize_query(text: &str) -> Vec<String> {
+    let stops: std::collections::HashSet<&str> = STOP_WORDS.iter().copied().collect();
     text.split_whitespace()
         .map(|w| {
             w.trim_matches(|c: char| c.is_ascii_punctuation() && c != '_')
                 .to_lowercase()
         })
-        .filter(|w| !w.is_empty())
+        .filter(|w| !w.is_empty() && !stops.contains(w.as_str()))
         .collect()
 }
 
@@ -318,11 +330,9 @@ pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
             }
 
             // Stem all tokens for better matching (e.g., "refreshed" → "refresh")
-            tokens = tokens
-                .into_iter()
-                .map(|t| stem(&t))
-                .filter(|t| t.len() >= 2)
-                .collect();
+            // Only stem query tokens, not document tokens.
+            // Document tokens (code identifiers) are exact and should
+            // match as-is; the query side stems user's free-text input.
             let doc_id = tfidf.docs.len();
             tfidf.docs.push(SearchDoc {
                 name: sym.name.clone(),
@@ -400,14 +410,14 @@ mod tests {
 
     #[test]
     fn test_tokenize_query() {
-        let tokens = tokenize_query("find where token is refreshed");
-        assert_eq!(tokens, vec!["find", "where", "token", "is", "refreshed"]);
+        let tokens = tokenize_query("find token refreshed");
+        assert_eq!(tokens, vec!["find", "token", "refreshed"]);
     }
 
     #[test]
     fn test_tokenize_query_with_punctuation() {
-        let tokens = tokenize_query("find: where? token... refreshed!");
-        assert_eq!(tokens, vec!["find", "where", "token", "refreshed"]);
+        let tokens = tokenize_query("find: where? token... refreshed");
+        assert_eq!(tokens, vec!["find", "token", "refreshed"]);
     }
 
     #[test]
