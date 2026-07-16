@@ -845,7 +845,7 @@ fn dedup_matches_lower_pidx_wins() {
 fn supers_names(data: &FileData) -> Vec<String> {
     data.supers
         .iter()
-        .map(|(_, name, _)| name.clone())
+        .map(|(_, name, _, _)| name.clone())
         .collect()
 }
 
@@ -901,7 +901,7 @@ fn swift_supers_with_generic_base() {
     let entry = data
         .supers
         .iter()
-        .find(|(_, name, _)| name == "Bar")
+        .find(|(_, name, _, _)| name == "Bar")
         .expect("missing Bar super");
     assert_eq!(
         entry.2,
@@ -916,7 +916,7 @@ fn swift_supers_multi_generic_args() {
     let entry = data
         .supers
         .iter()
-        .find(|(_, name, _)| name == "Base")
+        .find(|(_, name, _, _)| name == "Base")
         .expect("missing Base super");
     assert_eq!(
         entry.2,

@@ -137,16 +137,24 @@ fn supertypes_of_returns_supertype_info() {
     idx.supertypes_index.insert(
         "Dog".to_string(),
         vec![
-            ("Animal".to_string(), "/animals.kt".to_string()),
-            ("Walkable".to_string(), "/animals.kt".to_string()),
+            (
+                "Animal".to_string(),
+                "/animals.kt".to_string(),
+                crate::types::SuperKind::Extends,
+            ),
+            (
+                "Walkable".to_string(),
+                "/animals.kt".to_string(),
+                crate::types::SuperKind::Extends,
+            ),
         ],
     );
 
     let g = SymbolGraph::new(&idx);
     let supers = g.supertypes_of("Dog");
     assert_eq!(supers.len(), 2);
-    assert!(supers.iter().any(|s| s.name == "Animal"));
-    assert!(supers.iter().any(|s| s.name == "Walkable"));
+    assert!(supers.iter().any(|s| s.0 == "Animal"));
+    assert!(supers.iter().any(|s| s.0 == "Walkable"));
 }
 
 #[test]

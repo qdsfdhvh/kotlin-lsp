@@ -176,7 +176,7 @@ fn supertypes_index_populated() {
     );
     let entries = child_entries.unwrap();
     assert!(
-        entries.iter().any(|(sup, _)| sup == "Base"),
+        entries.iter().any(|(sup, _, _)| sup == "Base"),
         "Child should extend Base"
     );
 }

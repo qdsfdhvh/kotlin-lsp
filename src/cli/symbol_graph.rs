@@ -19,7 +19,7 @@ pub(crate) async fn run_symbol_graph(json: bool) {
 
     let mut inherit_edges: Vec<serde_json::Value> = Vec::new();
     for entry in index.supertypes_index.iter() {
-        for (super_name, _file) in entry.value().iter() {
+        for (super_name, _file, _) in entry.value().iter() {
             inherit_edges.push(serde_json::json!({
                 "subtype": entry.key(),
                 "supertype": super_name,

@@ -507,11 +507,11 @@ fn build_enclosing_class_subst_from_caller<I: IndexRead>(
     let type_args = calling_data
         .supers
         .iter()
-        .find(|(line, base, _)| {
+        .find(|(line, base, _, _)| {
             base == &container_name
                 && calling_class_line.is_none_or(|class_line| *line == class_line)
         })
-        .map(|(_, _, args)| args.clone())
+        .map(|(_, _, args, _)| args.clone())
         .unwrap_or_default();
     if type_args.is_empty() {
         return HashMap::new();
@@ -593,7 +593,7 @@ fn build_enclosing_class_subst_impl<I: IndexRead>(
     // Using the enclosing class's own type_params here would be wrong: for
     // `class Child : Base<Event, State>`, Child itself has no type params.
     let mut result = HashMap::new();
-    for (line, base_name, type_args) in data.supers.iter() {
+    for (line, base_name, type_args, _) in data.supers.iter() {
         if *line != class_line || type_args.is_empty() {
             continue;
         }
@@ -650,7 +650,7 @@ fn build_enclosing_class_subst_impl<I: IndexRead>(
             continue;
         };
         let prop_class_line = prop_sym.selection_start();
-        for (line, super_name, type_args) in prop_type_data.supers.iter() {
+        for (line, super_name, type_args, _) in prop_type_data.supers.iter() {
             if *line != prop_class_line || type_args.is_empty() {
                 continue;
             }

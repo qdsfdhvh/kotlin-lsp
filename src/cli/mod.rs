@@ -45,5 +45,7 @@ mod format_tests;
 
 #[cfg(test)]
 mod query_engine_tests;
+mod search;
+mod summary_cache;
 pub(crate) use args::CliArgs;
 pub(crate) use run::run;

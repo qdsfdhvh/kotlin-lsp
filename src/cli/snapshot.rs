@@ -157,7 +157,7 @@ fn collect_relationships(index: &crate::indexer::Indexer) -> Relationships {
 
     let mut extends = Vec::new();
     for entry in index.supertypes_index.iter() {
-        for (super_name, _f) in entry.value().iter() {
+        for (super_name, _f, _) in entry.value().iter() {
             extends.push([entry.key().clone(), super_name.clone()]);
         }
     }
@@ -257,7 +257,11 @@ mod tests {
         let idx = crate::indexer::Indexer::new();
         idx.supertypes_index.insert(
             "Dog".to_string(),
-            vec![("Animal".to_string(), "/a.kt".to_string())],
+            vec![(
+                "Animal".to_string(),
+                "/a.kt".to_string(),
+                crate::types::SuperKind::Extends,
+            )],
         );
 
         let rels = collect_relationships(&idx);

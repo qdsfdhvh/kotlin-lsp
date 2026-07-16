@@ -470,7 +470,7 @@ fn kotlin_supers(src: &str) -> Vec<String> {
     parse_kotlin(src)
         .supers
         .into_iter()
-        .map(|(_, n, _)| n)
+        .map(|(_, n, _, _)| n)
         .collect()
 }
 
@@ -512,7 +512,7 @@ fn supers_java_extends() {
     let s: Vec<String> = parse_java(src)
         .supers
         .into_iter()
-        .map(|(_, n, _)| n)
+        .map(|(_, n, _, _)| n)
         .collect();
     assert!(s.contains(&"BaseFlexikreditVM".to_string()), "got {s:?}");
 }
@@ -523,7 +523,7 @@ fn supers_java_implements() {
     let s: Vec<String> = parse_java(src)
         .supers
         .into_iter()
-        .map(|(_, n, _)| n)
+        .map(|(_, n, _, _)| n)
         .collect();
     assert!(s.contains(&"Base".to_string()), "got {s:?}");
     assert!(s.contains(&"Runnable".to_string()), "got {s:?}");
@@ -536,7 +536,7 @@ fn supers_java_generic_extends() {
         parse_java(src)
             .supers
             .into_iter()
-            .map(|(_, n, _)| n)
+            .map(|(_, n, _, _)| n)
             .collect()
     };
 
@@ -1847,7 +1847,7 @@ fn supers_swift_multiple_conformances() {
     let s: Vec<String> = crate::parser::parse_swift(src)
         .supers
         .into_iter()
-        .map(|(_, n, _)| n)
+        .map(|(_, n, _, _)| n)
         .collect();
     assert!(
         s.contains(&"UIViewController".to_string()),

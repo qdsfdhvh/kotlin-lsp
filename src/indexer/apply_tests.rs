@@ -81,7 +81,7 @@ class Child : Base
     let result = Indexer::parse_file(&u, src);
 
     assert!(
-        result.supertypes.iter().any(|(name, _)| name == "Base"),
+        result.supertypes.iter().any(|(name, _, _)| name == "Base"),
         "expected (\"Base\", _) in supertypes; got: {:?}",
         result.supertypes,
     );

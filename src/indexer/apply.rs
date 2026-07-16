@@ -98,7 +98,7 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
     }
 
     let mut subtypes: HashMap<String, Vec<Location>> = HashMap::new();
-    for (super_name, class_loc) in &result.supertypes {
+    for (super_name, class_loc, _) in &result.supertypes {
         subtypes
             .entry(super_name.clone())
             .or_default()
@@ -106,8 +106,9 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
     }
 
     // Build forward supertype map: subtype_name → [(supertype_name, file)]
-    let mut supertypes_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
-    for (super_name, class_loc) in &result.supertypes {
+    let mut supertypes_map: HashMap<String, Vec<(String, String, crate::types::SuperKind)>> =
+        HashMap::new();
+    for (super_name, class_loc, super_kind) in &result.supertypes {
         // Find the subtype name at this location
         if let Some(sub_name) = result
             .data
@@ -119,10 +120,11 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
             })
             .map(|s| s.name.clone())
         {
-            supertypes_map
-                .entry(sub_name)
-                .or_default()
-                .push((super_name.clone(), uri_str.clone()));
+            supertypes_map.entry(sub_name).or_default().push((
+                super_name.clone(),
+                uri_str.clone(),
+                *super_kind,
+            ));
         }
     }
     // Build call edge index: callee_name → [(caller_file, caller_name)]
@@ -305,7 +307,11 @@ impl LibraryBatch {
                 uri: uri.clone(),
                 range: sym.selection_range,
             };
-            for (_, super_name, _) in file_data.supers.iter().filter(|(l, _, _)| *l == start_line) {
+            for (_, super_name, _, _) in file_data
+                .supers
+                .iter()
+                .filter(|(l, _, _, _)| *l == start_line)
+            {
                 self.subtypes
                     .entry(super_name.clone())
                     .or_default()
@@ -360,7 +366,11 @@ impl Indexer {
         let hash = hash_str(content);
 
         // Extract supertype relationships for goToImplementation.
-        let mut supertypes = Vec::new();
+        let mut supertypes: Vec<(
+            String,
+            tower_lsp::lsp_types::Location,
+            crate::types::SuperKind,
+        )> = Vec::new();
         let class_kinds = [
             SymbolKind::CLASS,
             SymbolKind::INTERFACE,
@@ -378,8 +388,10 @@ impl Indexer {
                 uri: uri.clone(),
                 range: sym.selection_range,
             };
-            for (_, super_name, _) in data.supers.iter().filter(|(l, _, _)| *l == start_line) {
-                supertypes.push((super_name.clone(), class_loc.clone()));
+            for (_, super_name, _, super_kind) in
+                data.supers.iter().filter(|(l, _, _, _)| *l == start_line)
+            {
+                supertypes.push((super_name.clone(), class_loc.clone(), *super_kind));
             }
         }
 

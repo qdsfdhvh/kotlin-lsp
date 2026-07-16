@@ -53,18 +53,14 @@ impl<'a> SymbolGraph<'a> {
 
     /// Direct supertypes of `name` (classes/interfaces it extends/implements).
     #[allow(dead_code)]
-    pub(crate) fn supertypes_of(&self, name: &str) -> Vec<SupertypeInfo> {
+    pub(crate) fn supertypes_of(
+        &self,
+        name: &str,
+    ) -> Vec<(String, String, crate::types::SuperKind)> {
         self.index
             .supertypes_index
             .get(name)
-            .map(|v| {
-                v.iter()
-                    .map(|(sup_name, file)| SupertypeInfo {
-                        name: sup_name.clone(),
-                        file: file.clone(),
-                    })
-                    .collect()
-            })
+            .map(|v| v.iter().cloned().collect())
             .unwrap_or_default()
     }
 

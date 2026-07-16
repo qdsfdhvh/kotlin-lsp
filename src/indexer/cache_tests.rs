@@ -40,7 +40,12 @@ fn cache_entry_to_file_result_supertypes_extracted() {
         parameters: Vec::new(),
         documentation: None,
     });
-    data.supers.push((0, "IAnimal".into(), vec![]));
+    data.supers.push((
+        0,
+        "IAnimal".into(),
+        vec![],
+        crate::types::SuperKind::Extends,
+    ));
 
     let entry = FileCacheEntry {
         mtime_secs: 100,
@@ -50,7 +55,11 @@ fn cache_entry_to_file_result_supertypes_extracted() {
     };
 
     let result = cache_entry_to_file_result(&u, &entry);
-    let super_names: Vec<&str> = result.supertypes.iter().map(|(n, _)| n.as_str()).collect();
+    let super_names: Vec<&str> = result
+        .supertypes
+        .iter()
+        .map(|(n, _, _)| n.as_str())
+        .collect();
     assert!(
         super_names.contains(&"IAnimal"),
         "IAnimal missing from supertypes: {super_names:?}",

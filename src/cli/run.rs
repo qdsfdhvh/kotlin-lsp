@@ -1095,8 +1095,19 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::ModuleFiles { module } => {
             crate::cli::modules::run_module_files(&module, json);
         }
-        Subcommand::Summarize { name, expand } => {
-            crate::cli::summarize::run_summarize(&name, expand, json).await;
+        Subcommand::Summarize {
+            name,
+            expand,
+            cached,
+        } => {
+            if cached {
+                crate::cli::summary_cache::run_summarize_cached(&name, json);
+            } else {
+                crate::cli::summarize::run_summarize(&name, expand, json).await;
+            }
+        }
+        Subcommand::SummaryCacheStats => {
+            crate::cli::summary_cache::run_summary_cache_stats();
         }
         Subcommand::FindTest { file, line, col } => {
             crate::cli::find_test::run_find_test(&file, line, col, json).await;
@@ -1199,6 +1210,9 @@ pub(crate) async fn run(args: CliArgs) {
         }
         Subcommand::Docs { query } => {
             crate::cli::symbol_queries::run_docs(&query, json);
+        }
+        Subcommand::Search { query, limit } => {
+            crate::cli::search::run_search(&query, json, limit);
         }
     }
 }
@@ -1945,7 +1959,7 @@ async fn run_type_hierarchy(
             if let Some(data) = index.get_file(loc.uri.as_str()) {
                 for sym in &data.symbols {
                     if sym.selection_start() == loc.range.start.line {
-                        for (_, sn, _) in &data.supers {
+                        for (_, sn, _, _) in &data.supers {
                             super_list.push((sn.clone(), loc.clone()));
                         }
                         break;
@@ -1988,7 +2002,7 @@ async fn run_type_hierarchy(
         if supertypes {
             println!("### Supertypes (tree)");
             if let Some(entries) = index.supertypes_index.get(name) {
-                for (sup_name, _file) in entries.iter() {
+                for (sup_name, _file, _) in entries.iter() {
                     println!("  ├── {sup_name}");
                 }
             } else {
