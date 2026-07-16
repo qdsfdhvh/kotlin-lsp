@@ -231,3 +231,89 @@ fn file_data_returns_file_data_for_known_uri() {
     assert!(data.is_some());
     assert_eq!(data.unwrap().lines[0], "package com.example");
 }
+
+// ── definition_locations (includes JAR defs) ─────────────────────────────
+
+#[test]
+fn definition_locations_includes_jar_definitions() {
+    let engine = empty_engine();
+    let loc = location("file:///a.kt", 3, 0);
+    engine
+        .index
+        .definitions
+        .insert("MyClass".to_string(), vec![loc.clone()]);
+    engine
+        .index
+        .jar_definitions
+        .insert("MyClass".to_string(), vec![location("jar:///lib.kt", 1, 0)]);
+
+    let result = engine.definition_locations("MyClass");
+    assert_eq!(
+        result.len(),
+        2,
+        "must include both workspace and JAR definitions"
+    );
+    let uris: Vec<&str> = result.iter().map(|l| l.uri.as_str()).collect();
+    assert!(uris.contains(&"file:///a.kt"));
+    assert!(uris.contains(&"jar:///lib.kt"));
+}
+
+#[test]
+fn definition_locations_returns_empty_for_unknown() {
+    let engine = empty_engine();
+    let result = engine.definition_locations("NoSuchSymbol");
+    assert!(result.is_empty());
+}
+
+#[test]
+fn definition_locations_falls_back_to_jar_only() {
+    let engine = empty_engine();
+    engine.index.jar_definitions.insert(
+        "JavaClass".to_string(),
+        vec![location("jar:///rt.kt", 0, 0)],
+    );
+
+    let result = engine.definition_locations("JavaClass");
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].uri.as_str(), "jar:///rt.kt");
+}
+
+// ── file_by_uri_str ──────────────────────────────────────────────────────
+
+#[test]
+fn file_by_uri_str_returns_data_for_known_uri_str() {
+    let engine = engine_with_file("file:///foo.kt", vec!["val x = 1".to_string()]);
+    let fd = engine.file_by_uri_str("file:///foo.kt");
+    assert!(fd.is_some());
+    assert_eq!(fd.unwrap().lines[0], "val x = 1");
+}
+
+#[test]
+fn file_by_uri_str_returns_none_for_unknown_uri_str() {
+    let engine = empty_engine();
+    let fd = engine.file_by_uri_str("file:///nonexistent.kt");
+    assert!(fd.is_none());
+}
+
+// ── mem_lines_for ────────────────────────────────────────────────────────
+
+#[test]
+fn mem_lines_for_returns_lines_for_known_uri() {
+    let engine = engine_with_file(
+        "file:///lines.kt",
+        vec!["line1".to_string(), "line2".to_string()],
+    );
+    let lines = engine.mem_lines_for("file:///lines.kt");
+    assert!(lines.is_some());
+    let lines = lines.unwrap();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0], "line1");
+    assert_eq!(lines[1], "line2");
+}
+
+#[test]
+fn mem_lines_for_returns_none_for_unknown_uri() {
+    let engine = empty_engine();
+    let lines = engine.mem_lines_for("file:///ghost.kt");
+    assert!(lines.is_none());
+}

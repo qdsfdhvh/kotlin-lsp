@@ -35,12 +35,34 @@ impl WorkspaceQueryEngine {
         SymbolGraph::new(&self.index)
     }
 
+    /// All definition locations for `name`, including JAR-derived definitions.
+    pub(crate) fn definition_locations(&self, name: &str) -> Vec<Location> {
+        self.index.definition_locations(name)
+    }
+
+    /// Definition locations from workspace sources only (no JAR definitions).
     pub(crate) fn find_definitions(&self, name: &str) -> Vec<Location> {
         self.index
             .definitions
             .get(name)
             .map(|v| v.clone())
             .unwrap_or_default()
+    }
+
+    /// Qualified symbol lookup (e.g. `Foo.bar` with owner="Foo").
+    pub(crate) fn find_definition_qualified(
+        &self,
+        name: &str,
+        qualifier: Option<&str>,
+        from_uri: &Url,
+    ) -> Vec<Location> {
+        self.index
+            .find_definition_qualified(name, qualifier, from_uri)
+    }
+
+    /// In-memory lines for a URI (live or indexed snapshot).
+    pub(crate) fn mem_lines_for(&self, uri: &str) -> Option<std::sync::Arc<Vec<String>>> {
+        self.index.mem_lines_for(uri)
     }
 
     pub(crate) fn word_at(&self, uri: &Url, line: u32, col: u32) -> String {
@@ -58,6 +80,12 @@ impl WorkspaceQueryEngine {
 
     pub(crate) fn file_data(&self, uri: &Url) -> Option<Arc<FileData>> {
         self.index.files.get(uri.as_str()).map(|v| v.clone())
+    }
+
+    /// Fast access to files DashMap (for bulk iteration patterns that
+    /// don't have a clean query-engine equivalent yet).
+    pub(crate) fn file_by_uri_str(&self, uri_str: &str) -> Option<Arc<FileData>> {
+        self.index.files.get(uri_str).map(|v| v.clone())
     }
 
     pub(crate) fn callers_of(&self, name: &str) -> Vec<(String, String)> {

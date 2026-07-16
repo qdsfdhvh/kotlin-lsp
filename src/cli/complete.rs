@@ -1,16 +1,15 @@
 //! `complete` subcommand — show completion candidates at a file position.
 
 use std::path::Path;
-use std::sync::Arc;
 
 use tower_lsp::lsp_types::{Position, Url};
 
-use crate::indexer::Indexer;
+use crate::query::engine::WorkspaceQueryEngine;
 
 /// Return completion labels for `file:line:col`.
 /// Line and col are 1-based (human-friendly) and converted internally to 0-based.
 pub(crate) fn completions_at(
-    indexer: &Arc<Indexer>,
+    engine: &WorkspaceQueryEngine,
     file: &Path,
     line: u32,
     col: u32,
@@ -20,14 +19,14 @@ pub(crate) fn completions_at(
         return Vec::new();
     };
 
-    indexer.ensure_indexed(&uri);
+    engine.index.ensure_indexed(&uri);
 
     let position = Position {
         line: line.saturating_sub(1),
         character: col.saturating_sub(1),
     };
 
-    let (items, _) = indexer.completions(&uri, position, false);
+    let (items, _) = engine.index.completions(&uri, position, false);
     items
         .into_iter()
         .map(|item| {

@@ -5,13 +5,12 @@
 //! + caller + Koin module must change together.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use serde::Deserialize;
 use tower_lsp::lsp_types::{Position, Range, TextEdit, Url};
 
 use crate::cli::edit::{apply_file_edits, FileEdit};
-use crate::indexer::Indexer;
+use crate::query::engine::WorkspaceQueryEngine;
 use crate::resolver::{already_imported, fqns_for_name};
 use crate::{Language, LinesExt};
 
@@ -174,7 +173,7 @@ struct UnresolvedCandidate {
 /// / unresolvable identifiers separately.
 pub(crate) fn run_batch_imports(
     file: &Path,
-    idx: &Arc<Indexer>,
+    engine: &WorkspaceQueryEngine,
     dry_run: bool,
     apply: bool,
     json: bool,
@@ -193,9 +192,8 @@ pub(crate) fn run_batch_imports(
     let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
     let imports = lines.parse_imports();
 
-    let package_name = idx
-        .files
-        .get(uri.as_str())
+    let package_name = engine
+        .file_by_uri_str(uri.as_str())
         .and_then(|f| f.package.clone())
         .unwrap_or_default();
 
@@ -232,7 +230,7 @@ pub(crate) fn run_batch_imports(
                 continue;
             }
 
-            let fqns = fqns_for_name(idx, w);
+            let fqns = fqns_for_name(&engine.index, w);
             if fqns.is_empty() {
                 candidates.push(UnresolvedCandidate {
                     line: line_idx,
