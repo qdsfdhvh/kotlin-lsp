@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Pre-computed summary for a single symbol, optimized for LLM consumption.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct AISummary {
     // ── identity ──
     pub name: String,
@@ -32,31 +32,10 @@ pub(crate) struct AISummary {
     pub importers: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct MemberInfo {
     pub name: String,
     pub kind: String,
     pub signature: Option<String>,
 }
 
-impl Default for AISummary {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            kind: String::new(),
-            package: None,
-            file: String::new(),
-            line: 0,
-            visibility: None,
-            signature: None,
-            doc: None,
-            deprecated: false,
-            members: Vec::new(),
-            supertypes: Vec::new(),
-            subtypes: Vec::new(),
-            callers: Vec::new(),
-            callees: Vec::new(),
-            importers: Vec::new(),
-        }
-    }
-}
