@@ -151,6 +151,13 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
             .or_default()
             .push((uri_str.clone(), caller.clone()));
     }
+    let mut annotation_edges: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for (symbol_name, annotation_name) in &result.data.annotation_edges {
+        annotation_edges
+            .entry(annotation_name.clone())
+            .or_default()
+            .push((uri_str.clone(), symbol_name.clone()));
+    }
 
     FileContributions {
         definitions,
@@ -159,6 +166,7 @@ pub(crate) fn file_contributions(result: &FileIndexResult) -> FileContributions 
         subtypes,
         supertypes_map,
         call_edges,
+        annotation_edges,
         import_edges,
         override_edges,
         file_data: (uri_str.clone(), Arc::new(result.data.clone())),
@@ -379,6 +387,7 @@ impl Indexer {
         let mut data = data;
         let lang = crate::Language::from_path(uri.path());
         data.call_edges = crate::parser::extract_call_edges(content, lang);
+        data.annotation_edges = crate::parser::extract_annotation_edges(content);
 
         // Set parent_fq_name: for each non-class symbol, find enclosing class by range.
         let class_symbols: Vec<(String, tower_lsp::lsp_types::Range)> = data
@@ -796,6 +805,14 @@ impl Indexer {
         }
         for (callee, entries) in contrib.call_edges {
             let mut edge_entry = self.call_edges.entry(callee).or_default();
+            for entry in entries {
+                if !edge_entry.contains(&entry) {
+                    edge_entry.push(entry);
+                }
+            }
+        }
+        for (annotation_name, entries) in contrib.annotation_edges {
+            let mut edge_entry = self.annotation_edges.entry(annotation_name).or_default();
             for entry in entries {
                 if !edge_entry.contains(&entry) {
                     edge_entry.push(entry);

@@ -2819,3 +2819,55 @@ fn no_kdoc_yields_none() {
         .unwrap();
     assert_eq!(sym.documentation, None);
 }
+
+// ── annotation edge extraction tests ────────────────────────────────
+
+#[test]
+fn annotation_edges_extracts_composable() {
+    let edges = extract_annotation_edges("@Composable\nfun MyScreen() {}");
+    assert!(
+        edges.contains(&("MyScreen".into(), "Composable".into())),
+        "MyScreen should be annotated with @Composable"
+    );
+}
+
+#[test]
+fn annotation_edges_extracts_inject() {
+    let edges = extract_annotation_edges("@Inject\nlateinit var repo: Repo\n");
+    assert!(
+        edges.contains(&("repo".into(), "Inject".into())),
+        "repo should be annotated with @Inject"
+    );
+}
+
+#[test]
+fn annotation_edges_multiple_on_same_file() {
+    let edges = extract_annotation_edges(
+        "@Composable\nfun ScreenA() {}\n\n@Composable\nfun ScreenB() {}\n",
+    );
+    assert_eq!(edges.len(), 2);
+    assert!(edges.contains(&("ScreenA".into(), "Composable".into())));
+    assert!(edges.contains(&("ScreenB".into(), "Composable".into())));
+}
+
+#[test]
+fn annotation_edges_no_annotations() {
+    let edges = extract_annotation_edges("fun plainFunction() {}");
+    assert!(edges.is_empty());
+}
+
+#[test]
+fn annotation_edges_class_declaration() {
+    let edges = extract_annotation_edges("@Serializable\ndata class User(val name: String)\n");
+    assert!(edges.contains(&("User".into(), "Serializable".into())));
+}
+
+#[test]
+fn annotation_edges_property_declaration() {
+    let edges = extract_annotation_edges(
+        "class MyClass {\n    @Inject\n    lateinit var service: Service\n}\n",
+    );
+    assert!(edges
+        .iter()
+        .any(|(sym, ann)| sym == "service" && ann == "Inject"));
+}

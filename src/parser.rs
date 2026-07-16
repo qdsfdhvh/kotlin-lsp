@@ -2188,6 +2188,109 @@ fn find_caller_fn_name_from_call(node: &tree_sitter::Node, source: &str) -> Opti
     None
 }
 
+/// Extract annotation edges from source: (symbol_name, annotation_name) pairs.
+/// Walks the CST for `annotation` nodes, extracts the annotation type identifier
+/// and the name of the annotated symbol (function, class, property, etc.).
+pub(crate) fn extract_annotation_edges(source: &str) -> Vec<(String, String)> {
+    let ts_lang = tree_sitter_kotlin_sg::LANGUAGE.into();
+    let mut parser = tree_sitter::Parser::new();
+    parser.set_language(&ts_lang).ok();
+    let Some(tree) = parser.parse(source, None) else {
+        return vec![];
+    };
+
+    let root = tree.root_node();
+    let mut edges = Vec::new();
+    let mut stack: Vec<tree_sitter::Node> = vec![root];
+
+    while let Some(node) = stack.pop() {
+        if node.kind() == "annotation" {
+            // Extract annotation name from type_identifier child
+            let annotation_name = find_annotation_name(&node, source);
+            // Walk up to find the annotated symbol name
+            let symbol_name = find_annotated_symbol_name(&node, source);
+            if !annotation_name.is_empty() && !symbol_name.is_empty() {
+                edges.push((symbol_name, annotation_name));
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+
+    edges
+}
+
+/// Extract the annotation type name (e.g. "Composable" from @Composable).
+fn find_annotation_name<'a>(annotation_node: &tree_sitter::Node<'a>, source: &'a str) -> String {
+    fn collect_identifier<'a>(node: &tree_sitter::Node<'a>, src: &'a str) -> Option<String> {
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+        for child in &children {
+            if child.kind() == "type_identifier" {
+                return Some(child.utf8_text(src.as_bytes()).unwrap_or("").to_string());
+            }
+            if child.kind() == "user_type" {
+                if let Some(name) = collect_identifier(child, src) {
+                    return Some(name);
+                }
+            }
+        }
+        None
+    }
+    collect_identifier(annotation_node, source).unwrap_or_default()
+}
+
+/// Walk up from annotation node to find the name of the annotated symbol.
+fn find_annotated_symbol_name<'a>(
+    annotation_node: &tree_sitter::Node<'a>,
+    source: &'a str,
+) -> String {
+    fn find_named_child<'a>(node: &tree_sitter::Node<'a>, src: &'a str) -> Option<String> {
+        if let Ok(text) = node.utf8_text(src.as_bytes()) {
+            if node.kind() == "simple_identifier" || node.kind() == "type_identifier" {
+                return Some(text.to_string());
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            // Skip modifiers subtree — it contains the annotation itself
+            if child.kind() == "modifiers" {
+                continue;
+            }
+            if let Some(name) = find_named_child(&child, src) {
+                return Some(name);
+            }
+        }
+        None
+    }
+
+    let mut parent = annotation_node.parent();
+    while let Some(p) = parent {
+        let kind = p.kind();
+        if matches!(
+            kind,
+            "function_declaration"
+                | "class_declaration"
+                | "object_declaration"
+                | "property_declaration"
+                | "type_alias"
+                | "enum_class"
+                | "interface_declaration"
+        ) {
+            if let Some(name) = find_named_child(&p, source) {
+                return name;
+            }
+        }
+        if kind == "source_file" || kind == "class_body" {
+            break;
+        }
+        parent = p.parent();
+    }
+    String::new()
+}
+
 #[cfg(test)]
 #[path = "parser_tests.rs"]
 mod tests;

@@ -50,27 +50,29 @@ pub(crate) fn run_annotated(annotation: &str, json: bool) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let index = rt.block_on(crate::cli::run::build_index(&root, false));
 
+    // Use pre-built annotation edge index (O(1) lookup) instead of
+    // scanning all files' symbol details with string contains.
     let mut results: Vec<serde_json::Value> = Vec::new();
 
-    for file_entry in index.files.iter() {
-        let file_data = file_entry.value();
-        let path = std::path::Path::new(file_entry.key());
-        for sym in &file_data.symbols {
-            // Check if the symbol's detail/signature contains the annotation
-            if sym
-                .detail
-                .to_lowercase()
-                .contains(&annotation.to_lowercase())
-            {
-                results.push(serde_json::json!({
-                    "name": sym.name,
-                    "kind": format!("{:?}", sym.kind).to_lowercase(),
-                    "file": path.display().to_string(),
-                    "line": sym.selection_range.start.line + 1,
-                    "col": sym.selection_range.start.character + 1,
-                    "signature": sym.detail,
-                }));
-            }
+    if let Some(entries) = index.annotation_edges.get(annotation) {
+        for (file, symbol_name) in entries.iter() {
+            // Try to get symbol details from the file data
+            let line = index
+                .files
+                .get(file)
+                .and_then(|fd| {
+                    fd.symbols
+                        .iter()
+                        .find(|s| &s.name == symbol_name)
+                        .map(|s| s.selection_range.start.line + 1)
+                })
+                .unwrap_or(0);
+
+            results.push(serde_json::json!({
+                "name": symbol_name,
+                "file": file,
+                "line": line,
+            }));
         }
     }
 
@@ -80,10 +82,9 @@ pub(crate) fn run_annotated(annotation: &str, json: bool) {
         println!("{} symbols matching @{annotation}:", results.len());
         for r in &results {
             let name = r["name"].as_str().unwrap_or("?");
-            let kind = r["kind"].as_str().unwrap_or("?");
             let file = r["file"].as_str().unwrap_or("?");
             let line = r["line"].as_u64().unwrap_or(0);
-            println!("  {name} ({kind}) @ {file}:{line}");
+            println!("  {name} @ {file}:{line}");
         }
     }
 }
