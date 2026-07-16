@@ -1305,6 +1305,8 @@ SUBCOMMANDS:
     hover <file> <line> <col>          Show type/doc info at a position
     complete <file> <line> [col]       Show completion candidates
     context <file> <line> <col>        Definition + signature + refs summary
+    rename <file> <line> <col> <name>  Rename symbol across all files
+    refs-at <file> <line> <col>        Show references at a specific position
     check <file>...                    Check syntax errors without LSP
     call-hierarchy <file> <line> <col> Show callers/callees
     type-hierarchy <name>              Show subtypes or supertypes

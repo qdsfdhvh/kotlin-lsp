@@ -667,88 +667,17 @@ pub(crate) async fn run(args: CliArgs) {
             apply,
         } => {
             let json = args.fmt == OutputFmt::Json;
-            let index = crate::cli::run::build_index(
-                &resolve_root_for_file(args.root.as_deref(), &file),
-                false,
-            )
-            .await;
             let root = resolve_root_for_file(args.root.as_deref(), &file);
-            let uri = tower_lsp::lsp_types::Url::from_file_path(&file).expect("valid path");
+            let index = crate::cli::run::build_index(&root, false).await;
+            let engine = WorkspaceQueryEngine::new(index.clone());
+            let abs_file = std::path::absolute(&file).unwrap_or_else(|_| file.to_path_buf());
+            let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid path");
+            engine.index.ensure_indexed(&uri);
+
             let pos =
                 tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
-            let word = index.word_at(&uri, pos);
-            match word {
-                Some(w) if !w.is_empty() => {
-                    let content = std::fs::read_to_string(&file).unwrap_or_default();
-                    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-                    let edits = crate::backend::rename::rename_in_scope(
-                        &lines,
-                        &w,
-                        &new_name,
-                        (0, lines.len()),
-                        false,
-                    );
-                    if edits.is_empty() {
-                        eprintln!(
-                            "rename: no references found for '{w}' at {}:{}:{}",
-                            file.display(),
-                            line,
-                            col
-                        );
-                        std::process::exit(1);
-                    }
-                    let file_edit = crate::cli::edit::FileEdit {
-                        path: file.clone(),
-                        edits,
-                    };
-                    if apply {
-                        let summary =
-                            crate::cli::edit::apply_file_edits(&[file_edit], Some(&root), false);
-                        if json {
-                            println!("{}", serde_json::to_string(&summary).expect("json"));
-                        } else {
-                            println!("Renamed '{}' -> '{}' in {}", w, new_name, file.display());
-                            for f in &summary.files {
-                                match f {
-                                    crate::cli::edit::FileEditResult::Ok {
-                                        path,
-                                        edits_applied,
-                                        ..
-                                    } => {
-                                        println!("  {}: {} edits", path.display(), edits_applied);
-                                    }
-                                    crate::cli::edit::FileEditResult::Error { path, message } => {
-                                        eprintln!("  {}: error: {}", path.display(), message);
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                    } else {
-                        let summary =
-                            crate::cli::edit::apply_file_edits(&[file_edit], Some(&root), true);
-                        if json {
-                            println!("{}", serde_json::to_string(&summary).expect("json"));
-                        } else {
-                            println!(
-                                "Preview: rename '{}' -> '{}' in {}",
-                                w,
-                                new_name,
-                                file.display()
-                            );
-                            for f in &summary.files {
-                                if let crate::cli::edit::FileEditResult::Ok {
-                                    path,
-                                    edits_applied,
-                                    ..
-                                } = f
-                                {
-                                    println!("  {}: {} occurrences", path.display(), edits_applied);
-                                }
-                            }
-                        }
-                    }
-                }
+            let word = match engine.index.word_at(&uri, pos) {
+                Some(w) if !w.is_empty() => w,
                 _ => {
                     eprintln!(
                         "rename: no symbol found at {}:{}:{}",
@@ -757,6 +686,104 @@ pub(crate) async fn run(args: CliArgs) {
                         col
                     );
                     std::process::exit(1);
+                }
+            };
+
+            // Collision check
+            let existing = engine.definition_locations(&new_name);
+            if !existing.is_empty() {
+                eprintln!(
+                    "error: '{}' already declared at {}:{}",
+                    new_name,
+                    existing[0].uri.to_file_path().unwrap_or_default().display(),
+                    existing[0].range.start.line + 1
+                );
+                std::process::exit(1);
+            }
+
+            // Find all references across workspace
+            let refs = smart_refs(&engine, &word, &root);
+            if refs.is_empty() {
+                eprintln!("rename: no references found for '{word}'");
+                std::process::exit(1);
+            }
+
+            // Group edits by file
+            let mut files_map: std::collections::BTreeMap<
+                std::path::PathBuf,
+                Vec<tower_lsp::lsp_types::TextEdit>,
+            > = std::collections::BTreeMap::new();
+            for r in &refs {
+                let ref_path = std::path::PathBuf::from(&r.file);
+                let te = tower_lsp::lsp_types::TextEdit {
+                    range: tower_lsp::lsp_types::Range {
+                        start: tower_lsp::lsp_types::Position::new(
+                            r.line.saturating_sub(1),
+                            r.col.saturating_sub(1),
+                        ),
+                        end: tower_lsp::lsp_types::Position::new(
+                            r.line.saturating_sub(1),
+                            r.col.saturating_sub(1) + r.name.len() as u32,
+                        ),
+                    },
+                    new_text: new_name.clone(),
+                };
+                files_map.entry(ref_path).or_default().push(te);
+            }
+
+            if files_map.is_empty() {
+                eprintln!("rename: no files to edit for '{word}'");
+                std::process::exit(1);
+            }
+
+            let file_edits: Vec<crate::cli::edit::FileEdit> = files_map
+                .into_iter()
+                .map(|(path, edits)| crate::cli::edit::FileEdit { path, edits })
+                .collect();
+
+            if apply {
+                let summary = crate::cli::edit::apply_file_edits(&file_edits, Some(&root), false);
+                if json {
+                    println!("{}", serde_json::to_string(&summary).expect("json"));
+                } else {
+                    println!("Renamed '{}' -> '{}'", word, new_name);
+                    for f in &summary.files {
+                        match f {
+                            crate::cli::edit::FileEditResult::Ok {
+                                path,
+                                edits_applied,
+                                ..
+                            } => {
+                                println!("  {}: {} edits applied", path.display(), edits_applied);
+                            }
+                            crate::cli::edit::FileEditResult::Error { path, message } => {
+                                eprintln!("  {}: error: {}", path.display(), message);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            } else {
+                let summary = crate::cli::edit::apply_file_edits(&file_edits, Some(&root), true);
+                if json {
+                    println!("{}", serde_json::to_string(&summary).expect("json"));
+                } else {
+                    println!(
+                        "Preview: rename '{}' -> '{}' ({} files)",
+                        word,
+                        new_name,
+                        file_edits.len()
+                    );
+                    for f in &summary.files {
+                        if let crate::cli::edit::FileEditResult::Ok {
+                            path,
+                            edits_applied,
+                            ..
+                        } = f
+                        {
+                            println!("  {}: {} occurrences", path.display(), edits_applied);
+                        }
+                    }
                 }
             }
         }
