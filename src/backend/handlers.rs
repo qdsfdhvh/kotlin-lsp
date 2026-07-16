@@ -91,7 +91,7 @@ impl Backend {
             .first()?
             .clone();
         let info = enrich_at_location(
-            self.indexer.as_ref(),
+            self.query_engine.index.as_ref(),
             &location,
             &ctx.word,
             hover_substitution_context(uri, position.line),
@@ -120,7 +120,7 @@ impl Backend {
         line: u32,
     ) -> Option<String> {
         resolve_symbol_info(
-            self.indexer.as_ref(),
+            self.query_engine.index.as_ref(),
             word,
             qualifier,
             uri,
@@ -149,7 +149,7 @@ impl Backend {
         let uri = &params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
         let include_decl = params.context.include_declaration;
-        let (name, _) = self.indexer.word_and_qualifier_at(uri, position)?;
+        let (name, _) = self.query_engine.word_and_qualifier_at(uri, position)?;
         let (parent_class, declared_pkg) =
             resolve_references_scope(&self.indexer, uri, position.line, &name);
         let parent_class_str: Option<&str> = parent_class.as_deref();
@@ -203,7 +203,7 @@ impl Backend {
     }
 
     fn filter_library_reference_locations(&self, locations: &mut Vec<Location>) {
-        locations.retain(|location| !self.indexer.is_library_uri(&location.uri));
+        locations.retain(|location| !self.query_engine.is_library_uri(&location.uri));
     }
 
     fn add_current_file_reference_locations(
@@ -212,7 +212,7 @@ impl Backend {
         name: &str,
         locations: &mut Vec<Location>,
     ) {
-        let Some(lines) = self.indexer.mem_lines_for(uri.as_str()) else {
+        let Some(lines) = self.query_engine.mem_lines_for(uri.as_str()) else {
             return;
         };
         for (line_idx, line) in lines.iter().enumerate() {
@@ -229,13 +229,13 @@ impl Backend {
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = &params.text_document.uri;
-        let mut symbols = self.indexer.file_symbols(uri);
+        let mut symbols = self.query_engine.file_symbols(uri);
         // Disk fallback: if not indexed yet, parse on-demand and index.
         if symbols.is_empty() {
             if let Ok(path) = uri.to_file_path() {
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     self.indexer.index_content(uri, &content);
-                    symbols = self.indexer.file_symbols(uri);
+                    symbols = self.query_engine.file_symbols(uri);
                 }
             }
         }
@@ -335,7 +335,7 @@ impl Backend {
         // Use live_lines for the current line (updated synchronously on every
         // keystroke) so signatureHelp fires immediately when `(` is typed,
         // without waiting for the 120ms debounce that updates `files`.
-        let Some(lines_owned) = self.indexer.mem_lines_for(uri.as_str()) else {
+        let Some(lines_owned) = self.query_engine.mem_lines_for(uri.as_str()) else {
             return Ok(None);
         };
         let lines: &[String] = &lines_owned;
@@ -376,7 +376,7 @@ impl Backend {
         params: FoldingRangeParams,
     ) -> Result<Option<Vec<FoldingRange>>> {
         let uri = &params.text_document.uri;
-        let Some(lines) = self.indexer.mem_lines_for(uri.as_str()) else {
+        let Some(lines) = self.query_engine.mem_lines_for(uri.as_str()) else {
             return Ok(None);
         };
 
@@ -528,7 +528,7 @@ impl Backend {
         let path = uri.path();
 
         // Read the current file content from the indexer.
-        let Some(lines) = self.indexer.mem_lines_for(uri.as_str()) else {
+        let Some(lines) = self.query_engine.mem_lines_for(uri.as_str()) else {
             return Ok(None);
         };
         let input = lines.join("\n");
@@ -637,7 +637,7 @@ impl Backend {
         let range = params.range;
 
         // Read the current file content.
-        let Some(lines) = self.indexer.mem_lines_for(uri.as_str()) else {
+        let Some(lines) = self.query_engine.mem_lines_for(uri.as_str()) else {
             return Ok(None);
         };
         let input = lines.join("\n");
@@ -727,7 +727,7 @@ impl Backend {
         params: SelectionRangeParams,
     ) -> Result<Option<Vec<SelectionRange>>> {
         let uri = &params.text_document.uri;
-        let doc = match self.indexer.live_doc(uri) {
+        let doc = match self.query_engine.live_doc(uri) {
             Some(d) => d,
             None => return Ok(None),
         };
@@ -836,7 +836,7 @@ impl Backend {
     ) -> Result<Option<Vec<CallHierarchyItem>>> {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
-        let doc = match self.indexer.live_doc(uri) {
+        let doc = match self.query_engine.live_doc(uri) {
             Some(d) => d,
             None => return Ok(None),
         };
@@ -979,7 +979,7 @@ impl Backend {
         params: CallHierarchyOutgoingCallsParams,
     ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
         let uri = &params.item.uri;
-        let doc = match self.indexer.live_doc(uri) {
+        let doc = match self.query_engine.live_doc(uri) {
             Some(d) => d,
             None => return Ok(None),
         };
@@ -1034,7 +1034,7 @@ impl Backend {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
 
-        let Some((name, _)) = self.indexer.word_and_qualifier_at(uri, pos) else {
+        let Some((name, _)) = self.query_engine.word_and_qualifier_at(uri, pos) else {
             return Ok(None);
         };
 
@@ -1048,7 +1048,7 @@ impl Backend {
             .map(|location| location.range.start.line)
             .collect();
 
-        let Some(lines) = self.indexer.mem_lines_for(uri.as_str()) else {
+        let Some(lines) = self.query_engine.mem_lines_for(uri.as_str()) else {
             return Ok(None);
         };
 

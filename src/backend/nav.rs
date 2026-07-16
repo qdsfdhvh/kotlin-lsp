@@ -39,7 +39,7 @@ impl Backend {
 
         // Special case: `this` keyword — navigate to the enclosing class definition.
         if ctx.qualifier.is_none() && ctx.word == "this" {
-            if let Some(class_name) = self.indexer.enclosing_class_at(uri, position.line) {
+            if let Some(class_name) = self.query_engine.enclosing_class_at(uri, position.line) {
                 let locs = self
                     .indexer
                     .find_definition_qualified(&class_name, None, uri);
@@ -70,7 +70,9 @@ impl Backend {
         if ctx.qualifier.is_none() {
             if let Some(ref rt) = ctx.contextual {
                 let lookup = rt.leaf.as_str();
-                let locs = self.indexer.find_definition_qualified(lookup, None, uri);
+                let locs = self
+                    .query_engine
+                    .find_definition_qualified(lookup, None, uri);
                 if !locs.is_empty() {
                     return Ok(Some(locs_to_response(locs)));
                 }
@@ -126,7 +128,8 @@ impl Backend {
         let uri = &pp.text_document.uri;
         let position = pp.position;
 
-        let Some((word, _qualifier)) = self.indexer.word_and_qualifier_at(uri, position) else {
+        let Some((word, _qualifier)) = self.query_engine.word_and_qualifier_at(uri, position)
+        else {
             return Ok(None);
         };
 
@@ -165,7 +168,7 @@ impl Backend {
         let mut queue: Vec<String> = locs
             .iter()
             .filter_map(|loc| {
-                let data = self.indexer.get_file(loc.uri.as_str())?;
+                let data = self.query_engine.get_file(loc.uri.as_str())?;
                 data.symbols
                     .iter()
                     .find(|s| s.selection_range == loc.range)
@@ -178,19 +181,18 @@ impl Backend {
                 continue;
             }
             visited.push(name.clone());
-            if let Some(sub_locs) = self.indexer.subtypes.get(&name) {
-                for loc in sub_locs.iter() {
-                    if !locs
-                        .iter()
-                        .any(|l| l.uri == loc.uri && l.range == loc.range)
-                    {
-                        locs.push(loc.clone());
-                        if let Some(data) = self.indexer.get_file(loc.uri.as_str()) {
-                            if let Some(sym) =
-                                data.symbols.iter().find(|s| s.selection_range == loc.range)
-                            {
-                                queue.push(sym.name.clone());
-                            }
+            let sub_locs = self.query_engine.subtypes_of(&name);
+            for loc in sub_locs.iter() {
+                if !locs
+                    .iter()
+                    .any(|l| l.uri == loc.uri && l.range == loc.range)
+                {
+                    locs.push(loc.clone());
+                    if let Some(data) = self.query_engine.get_file(loc.uri.as_str()) {
+                        if let Some(sym) =
+                            data.symbols.iter().find(|s| s.selection_range == loc.range)
+                        {
+                            queue.push(sym.name.clone());
                         }
                     }
                 }
@@ -202,7 +204,7 @@ impl Backend {
 
     /// Collect the parent class names for the class enclosing `row` in `uri`.
     pub(super) fn super_names_at(&self, uri: &Url, row: u32) -> Vec<String> {
-        let class_name = match self.indexer.enclosing_class_at(uri, row) {
+        let class_name = match self.query_engine.enclosing_class_at(uri, row) {
             Some(n) => n,
             None => return vec![],
         };
@@ -213,7 +215,7 @@ impl Backend {
             .map(|v| v.clone())
             .unwrap_or_default();
         for loc in &locs {
-            if let Some(file) = self.indexer.get_file(loc.uri.as_str()) {
+            if let Some(file) = self.query_engine.get_file(loc.uri.as_str()) {
                 let names: Vec<String> = file
                     .supers
                     .iter()
@@ -226,7 +228,7 @@ impl Backend {
             }
         }
         // Fallback: parse live_lines for the open file itself.
-        if let Some(lines) = self.indexer.live_lines.get(uri.as_str()) {
+        if let Some(lines) = self.query_engine.index.live_lines.get(uri.as_str()) {
             let content = lines.join("\n");
             let names: Vec<String> = parse_by_extension(uri.path(), &content)
                 .supers
@@ -321,7 +323,7 @@ impl Backend {
 
         // 1. `this` → enclosing class definition.
         if ctx.qualifier.is_none() && ctx.word == "this" {
-            if let Some(class_name) = self.indexer.enclosing_class_at(uri, position.line) {
+            if let Some(class_name) = self.query_engine.enclosing_class_at(uri, position.line) {
                 let locs = self
                     .indexer
                     .find_definition_qualified(&class_name, None, uri);
@@ -336,7 +338,9 @@ impl Backend {
         if ctx.qualifier.is_none() {
             if let Some(ref rt) = ctx.contextual {
                 let lookup = rt.leaf.as_str();
-                let locs = self.indexer.find_definition_qualified(lookup, None, uri);
+                let locs = self
+                    .query_engine
+                    .find_definition_qualified(lookup, None, uri);
                 if !locs.is_empty() {
                     return Ok(Some(locs_to_response(locs)));
                 }
@@ -419,7 +423,7 @@ impl Backend {
             resolve_symbol_info, ResolveOptions, SubstitutionContext,
         };
         let info = resolve_symbol_info(
-            self.indexer.as_ref(),
+            self.query_engine.index.as_ref(),
             &ctx.word,
             ctx.qualifier.as_deref(),
             uri,
@@ -447,7 +451,7 @@ impl Backend {
     ) -> Option<String> {
         use crate::indexer::resolution::{enrich_at_location, ResolveOptions, SubstitutionContext};
         let info = enrich_at_location(
-            self.indexer.as_ref(),
+            self.query_engine.index.as_ref(),
             loc,
             word,
             SubstitutionContext::CrossFile {

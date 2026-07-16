@@ -119,4 +119,41 @@ impl WorkspaceQueryEngine {
         names.dedup();
         names
     }
+
+    pub(crate) fn completions(
+        &self,
+        uri: &Url,
+        position: tower_lsp::lsp_types::Position,
+        snippets: bool,
+    ) -> (Vec<tower_lsp::lsp_types::CompletionItem>, bool) {
+        self.index.completions(uri, position, snippets)
+    }
+
+    pub(crate) fn word_and_qualifier_at(
+        &self,
+        uri: &Url,
+        position: tower_lsp::lsp_types::Position,
+    ) -> Option<(String, Option<String>)> {
+        self.index.word_and_qualifier_at(uri, position)
+    }
+
+    pub(crate) fn is_library_uri(&self, uri: &Url) -> bool {
+        self.index.is_library_uri(uri)
+    }
+
+    pub(crate) fn file_symbols(&self, uri: &Url) -> Vec<crate::types::SymbolEntry> {
+        self.index.file_symbols(uri)
+    }
+
+    pub(crate) fn live_doc(&self, uri: &Url) -> Option<Arc<crate::indexer::LiveDoc>> {
+        self.index.live_doc(uri)
+    }
+
+    pub(crate) fn enclosing_class_at(&self, uri: &Url, line: u32) -> Option<String> {
+        self.index.enclosing_class_at(uri, line)
+    }
+
+    pub(crate) fn get_file(&self, uri_str: &str) -> Option<Arc<FileData>> {
+        self.index.get_file(uri_str)
+    }
 }
