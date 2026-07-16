@@ -47,3 +47,4 @@ mod format_tests;
 mod query_engine_tests;
 pub(crate) use args::CliArgs;
 pub(crate) use run::run;
+mod rename_tests;

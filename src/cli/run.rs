@@ -338,7 +338,7 @@ fn find_first_kt_uri(root: &Path) -> Option<tower_lsp::lsp_types::Url> {
 
 // ── Smart-mode refs ───────────────────────────────────────────────────────────
 
-fn smart_refs(engine: &WorkspaceQueryEngine, name: &str, root: &Path) -> Vec<CliResult> {
+pub(crate) fn smart_refs(engine: &WorkspaceQueryEngine, name: &str, root: &Path) -> Vec<CliResult> {
     let decl_locs = engine.definition_locations(name);
     let decl_files: Vec<String> = decl_locs
         .iter()
