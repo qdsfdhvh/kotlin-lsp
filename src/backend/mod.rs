@@ -13,6 +13,7 @@ use self::helpers::{
     syntax_diagnostics,
 };
 use crate::indexer::{IgnoreMatcher, Indexer};
+use crate::query::engine::WorkspaceQueryEngine;
 use crate::semantic_tokens;
 use crate::types::InlayHintConfig;
 
@@ -36,6 +37,8 @@ use self::progress::LspProgressReporter;
 pub(crate) struct Backend {
     pub(super) client: Client,
     pub(super) indexer: Arc<Indexer>,
+    /// Unified query engine wrapping indexer + symbol graph.
+    pub(super) query_engine: WorkspaceQueryEngine,
     /// Per-URI abort handle for the pending debounced reindex task.
     pub(super) pending_reindex: DashMap<String, AbortHandle>,
     /// True if the client advertised `snippetSupport: true` during initialize.
@@ -67,9 +70,11 @@ impl OpenedDocumentContext {
 
 impl Backend {
     pub(crate) fn new(client: Client) -> Self {
+        let indexer = Arc::new(Indexer::new());
         Self {
             client,
-            indexer: Arc::new(Indexer::new()),
+            query_engine: WorkspaceQueryEngine::new(indexer.clone()),
+            indexer,
             pending_reindex: DashMap::new(),
             snippet_support: Arc::new(AtomicBool::new(false)),
             inlay_hint_config: Arc::new(std::sync::RwLock::new(InlayHintConfig::default())),
