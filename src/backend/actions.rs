@@ -150,7 +150,7 @@ impl Backend {
         let position = pp.position;
         let snippets = self.snippet_support.load(Ordering::Relaxed);
 
-        let (mut items, hit_cap) = self.indexer.completions(uri, position, snippets);
+        let (mut items, hit_cap) = self.query_engine.completions(uri, position, snippets);
         let still_indexing = self.indexer.indexing_in_progress.load(Ordering::Acquire);
         if items.is_empty() && !still_indexing {
             return Ok(None);
@@ -178,7 +178,7 @@ impl Backend {
         let uri = &params.text_document.uri;
         let range = params.range;
 
-        let lines = self.indexer.mem_lines_for(uri.as_str());
+        let lines = self.query_engine.mem_lines_for(uri.as_str());
         let line_text: String = {
             let ln = range.start.line as usize;
             lines
