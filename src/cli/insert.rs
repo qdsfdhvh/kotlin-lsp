@@ -98,12 +98,10 @@ pub(crate) fn run_insert(
 
 // ─── semantic insert ──────────────────────────────────────────────────────────
 
-use std::sync::Arc;
-
 use tower_lsp::lsp_types::{Position, Range, TextEdit};
 
 use crate::cli::edit::{apply_file_edits, FileEdit};
-use crate::indexer::Indexer;
+use crate::query::engine::WorkspaceQueryEngine;
 use crate::LinesExt;
 
 /// Computes the n-space indent string for tree-sitter node-based indentation.
@@ -219,7 +217,7 @@ pub(crate) fn run_semantic_insert(
     kind: &str,
     owner: Option<&str>,
     content: &str,
-    idx: &Arc<Indexer>,
+    engine: &WorkspaceQueryEngine,
     dry_run: bool,
     apply: bool,
     json: bool,
@@ -310,8 +308,7 @@ pub(crate) fn run_semantic_insert(
             };
 
             let override_content = if let Some(method_name) = name_arg {
-                // Look up method signature from index to generate override boilerplate.
-                generate_override(method_name, idx, &indent_val)
+                generate_override(method_name, engine, &indent_val)
             } else {
                 // Use --content as-is for custom overrides.
                 if content.is_empty() {
@@ -382,7 +379,7 @@ pub(crate) fn run_semantic_insert(
 }
 
 /// Generate an override keyword + method stub for a given method name.
-fn generate_override(method_name: &str, _idx: &Arc<Indexer>, _indent: &str) -> String {
+fn generate_override(method_name: &str, _engine: &WorkspaceQueryEngine, _indent: &str) -> String {
     // For now, generate a reasonable boilerplate.
     // Future: look up the actual signature from supertypes/interfaces.
     format!("override fun {method_name}() {{\n    TODO(\"not implemented\")\n}}")
@@ -392,7 +389,8 @@ fn generate_override(method_name: &str, _idx: &Arc<Indexer>, _indent: &str) -> S
 #[cfg(test)]
 #[doc(hidden)]
 pub(crate) fn generate_override_test(method_name: &str, indent: &str) -> String {
-    generate_override(method_name, &Arc::new(Indexer::new()), indent)
+    let engine = WorkspaceQueryEngine::new(std::sync::Arc::new(crate::indexer::Indexer::new()));
+    generate_override(method_name, &engine, indent)
 }
 
 #[cfg(test)]

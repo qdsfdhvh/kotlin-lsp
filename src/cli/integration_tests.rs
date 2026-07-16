@@ -511,7 +511,8 @@ fn enrich_result_kinds_fills_kind_for_top_level_function() {
         modifiers: None,
     }];
 
-    crate::cli::run::enrich_result_kinds(&mut results, &idx);
+    let engine = crate::query::engine::WorkspaceQueryEngine::new(idx.clone());
+    crate::cli::run::enrich_result_kinds(&mut results, &engine);
     assert_eq!(
         results[0].kind, "function",
         "kind must be filled from SymbolEntry"
@@ -545,7 +546,8 @@ fn enrich_result_kinds_does_not_overwrite_existing_kind() {
         modifiers: None,
     }];
 
-    crate::cli::run::enrich_result_kinds(&mut results, &idx);
+    let engine = crate::query::engine::WorkspaceQueryEngine::new(idx.clone());
+    crate::cli::run::enrich_result_kinds(&mut results, &engine);
     assert_eq!(
         results[0].kind, "custom-special-kind",
         "existing kind must not be overwritten"
@@ -570,7 +572,8 @@ fn enrich_result_kinds_handles_file_not_in_index() {
         modifiers: None,
     }];
     // must not panic
-    crate::cli::run::enrich_result_kinds(&mut results, &idx);
+    let engine = crate::query::engine::WorkspaceQueryEngine::new(idx.clone());
+    crate::cli::run::enrich_result_kinds(&mut results, &engine);
     assert!(
         results[0].kind.is_empty(),
         "kind stays empty for unknown file"

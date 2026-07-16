@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tower_lsp::lsp_types::{Location, Url};
 
 use crate::indexer::{Indexer, NoopReporter};
+use crate::query::engine::WorkspaceQueryEngine;
 use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
 
 use super::args::{CliArgs, Mode, OutputFmt, ResultFilters, Subcommand};
@@ -278,45 +279,43 @@ fn cli_workspace_source_roots(root: &Path) -> Vec<String> {
 // ── Smart-mode find ───────────────────────────────────────────────────────────
 
 pub(crate) fn smart_find(
-    indexer: &Arc<Indexer>,
+    engine: &WorkspaceQueryEngine,
     name: &str,
     root: &Path,
     filters: &ResultFilters,
 ) -> Vec<CliResult> {
-    // When an owner qualifier is available (e.g. from `Foo.Bar` or `--owner`),
-    // use qualified lookup for more precise results.
     let locs = if let Some(ref owner) = filters.owner {
         let fallback_uri = find_first_kt_uri(root);
         if let Some(uri) = &fallback_uri {
-            indexer.find_definition_qualified(name, Some(owner.as_str()), uri)
+            engine.find_definition_qualified(name, Some(owner.as_str()), uri)
         } else {
-            indexer.definition_locations(name)
+            engine.definition_locations(name)
         }
     } else {
-        indexer.definition_locations(name)
+        engine.definition_locations(name)
     };
     if !locs.is_empty() {
         let mut results = locs_to_results(locs, name, "");
-        enrich_result_kinds(&mut results, indexer);
+        enrich_result_kinds(&mut results, engine);
         return results;
     }
     let source_roots = cli_workspace_source_roots(root);
     let locs = rg_find_definition(name, Some(root), &source_roots, None);
     let mut results = locs_to_results(locs, name, "");
-    enrich_result_kinds(&mut results, indexer);
+    enrich_result_kinds(&mut results, engine);
     results
 }
 
-/// Populate each CliResult's `kind` field from the Indexer's SymbolEntry.
-pub(crate) fn enrich_result_kinds(results: &mut [CliResult], indexer: &Indexer) {
+/// Populate each CliResult's `kind` field from the Query Engine's SymbolEntry.
+pub(crate) fn enrich_result_kinds(results: &mut [CliResult], engine: &WorkspaceQueryEngine) {
     for r in results {
         if !r.kind.is_empty() {
             continue;
         }
         if let Ok(uri) = tower_lsp::lsp_types::Url::from_file_path(std::path::Path::new(&r.file)) {
             let uri_str = uri.as_str();
-            if let Some(file_data) = indexer.files.get(uri_str) {
-                if let Some(sym) = file_data
+            if let Some(fd) = engine.file_by_uri_str(uri_str) {
+                if let Some(sym) = fd
                     .symbols
                     .iter()
                     .find(|s| s.name == r.name && s.selection_range.start.line + 1 == r.line)
@@ -339,8 +338,8 @@ fn find_first_kt_uri(root: &Path) -> Option<tower_lsp::lsp_types::Url> {
 
 // ── Smart-mode refs ───────────────────────────────────────────────────────────
 
-fn smart_refs(indexer: &Arc<Indexer>, name: &str, root: &Path) -> Vec<CliResult> {
-    let decl_locs = indexer.definition_locations(name);
+fn smart_refs(engine: &WorkspaceQueryEngine, name: &str, root: &Path) -> Vec<CliResult> {
+    let decl_locs = engine.definition_locations(name);
     let decl_files: Vec<String> = decl_locs
         .iter()
         .filter_map(|l| l.uri.to_file_path().ok())
@@ -618,7 +617,8 @@ pub(crate) async fn run(args: CliArgs) {
                     false,
                 )
                 .await;
-                super::batch::run_batch_imports(&file, &index, dry_run, apply, json, out);
+                let engine = WorkspaceQueryEngine::new(index);
+                super::batch::run_batch_imports(&file, &engine, dry_run, apply, json, out);
             } else {
                 super::batch::run_batch(&file, dry_run);
             }
@@ -643,12 +643,13 @@ pub(crate) async fn run(args: CliArgs) {
                     false,
                 )
                 .await;
+                let engine = WorkspaceQueryEngine::new(index);
                 super::insert::run_semantic_insert(
                     &file,
                     k,
                     owner.as_deref(),
                     &content,
-                    &index,
+                    &engine,
                     dry_run,
                     apply,
                     json,
@@ -1027,7 +1028,8 @@ pub(crate) async fn run(args: CliArgs) {
                 false,
             )
             .await;
-            run_inspect(&file, &index, json, expand).await;
+            let engine = WorkspaceQueryEngine::new(index);
+            run_inspect(&file, &engine, json, expand).await;
         }
         Subcommand::RefsAt { file, line, col } => {
             run_refs_at(&file, line, col, json).await;
@@ -1201,7 +1203,8 @@ async fn run_find(
         Mode::Fast => fast_find(name, root),
         _ => {
             let index = build_index(root, false).await;
-            smart_find(&index, name, root, filters)
+            let engine = WorkspaceQueryEngine::new(index);
+            smart_find(&engine, name, root, filters)
         }
     };
     // Apply fuzzy matching if requested
@@ -1249,7 +1252,8 @@ async fn run_refs(
         Mode::Fast => fast_refs(name, root),
         _ => {
             let index = build_index(root, false).await;
-            smart_refs(&index, name, root)
+            let engine = WorkspaceQueryEngine::new(index);
+            smart_refs(&engine, name, root)
         }
     };
     let results = apply_filters(results, root, filters);
@@ -1417,7 +1421,8 @@ async fn run_hover(
         std::process::exit(1);
     }
     let index = build_index(root, false).await;
-    let Some(text) = hover_at(&index, file, line, col) else {
+    let engine = WorkspaceQueryEngine::new(index);
+    let Some(text) = hover_at(&engine, file, line, col) else {
         eprintln!("No symbol found at {}:{}:{}", file.display(), line, col);
         std::process::exit(1);
     };
@@ -1446,7 +1451,8 @@ async fn run_complete(
         }
     }
     let index = build_index(root, no_stdlib).await;
-    let rows = completions_at(&index, file, line, col);
+    let engine = WorkspaceQueryEngine::new(index);
+    let rows = completions_at(&engine, file, line, col);
     if rows.is_empty() {
         eprintln!("No completions at {}:{}:{}", file.display(), line, col);
         std::process::exit(1);
@@ -1831,10 +1837,10 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
     }
 }
 
-async fn run_inspect(file: &Path, index: &Arc<Indexer>, json: bool, _expand: usize) {
+async fn run_inspect(file: &Path, engine: &WorkspaceQueryEngine, json: bool, _expand: usize) {
     let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
-    let data = index.get_file(uri.as_str());
+    let data = engine.file_by_uri_str(uri.as_str());
     let package: String = data
         .as_ref()
         .and_then(|d| d.package.clone())
