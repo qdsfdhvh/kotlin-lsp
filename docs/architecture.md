@@ -2,9 +2,9 @@
 
 ## Overview
 
-`kotlin-lsp` is a no-JVM language server for Kotlin, Java, and Swift. It provides
+`kotlin-lsp` is a no-JVM symbol engine for Kotlin, Java, and Swift — CLI-first,
 LSP protocol features (goto-definition, hover, completion, diagnostics, etc.)
-and a standalone CLI for agent/tooling integration.
+with an LSP transport for editor compatibility.
 
 ## Hexagonal Architecture
 

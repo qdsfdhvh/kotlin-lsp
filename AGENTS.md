@@ -101,14 +101,14 @@ cargo clippy -- -D warnings
 | Cache stats | `kotlin-lsp cache stats` |
 | Benchmark | `kotlin-lsp benchmark` |
 | Filter by kind | `--kind class,fun,interface` |
-| Callers tree | `kotlin-lsp callers <FILE> <LINE> <COL> [DEPTH]` |
-| Callees tree | `kotlin-lsp callees <FILE> <LINE> <COL> [DEPTH]` |
+| Call hierarchy | `kotlin-lsp call hierarchy <FILE> <LINE> <COL>` |
+| Call hierarchy (outgoing) | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --outgoing` |
 | Impact analysis | `kotlin-lsp impact <FILE> <LINE> <COL>` |
 | Symbol overview | `kotlin-lsp summarize <NAME>` |
 | Find tests | `kotlin-lsp find-test <FILE> <LINE> <COL>` |
 | KMP expect/actual | `kotlin-lsp expect-actual <NAME>` |
-| Module deps | `kotlin-lsp modules / module-deps / module-files` |
-| Android resources | `kotlin-lsp android-activities / android-composables` |
+| Module deps | `kotlin-lsp module list / module deps / module files / module packages` |
+| Android resources | `kotlin-lsp android activities / android composables` |
 | Format check | `kotlin-lsp format check <FILE>...` |
 | Format apply | `kotlin-lsp format apply <FILE>...` |
 | File inspect | `kotlin-lsp inspect <FILE>` |
