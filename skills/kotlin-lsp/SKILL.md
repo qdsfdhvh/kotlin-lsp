@@ -24,8 +24,8 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ One-stop info (def + sig + doc) → kotlin-lsp context
    ├─ Syntax check → kotlin-lsp check
    ├─ Format check → kotlin-lsp format check
-   ├─ Caller/callee tree → kotlin-lsp callers / callees
-   ├─ Implementation tree → kotlin-lsp implementations
+   ├─ Caller/callee tree → kotlin-lsp call hierarchy
+   ├─ Implementation tree → kotlin-lsp type hierarchy
    ├─ Search by name → kotlin-lsp find <name>
    ├─ Batch queries → echo '[...]' | kotlin-lsp query --json
    ├─ Import analysis → kotlin-lsp imports-of
@@ -36,7 +36,7 @@ Query is about Kotlin/Java/Swift symbols?
    └─ Full project snapshot → kotlin-lsp snapshot / symbol-graph
 ```
 
-Detailed command flags and examples → [references/commands.md](references/commands.md)
+Full command reference → [docs/commands.md](docs/commands.md)
 
 ## How it saves tokens
 
@@ -66,13 +66,10 @@ kotlin-lsp hover <file> <line> <col>
 kotlin-lsp context <file> <line> <col>
 
 # Call graph (tree output)
-kotlin-lsp callers <file> <line> <col> [depth]
-kotlin-lsp callees <file> <line> <col> [depth]
+kotlin-lsp call hierarchy <file> <line> <col>
 
 # Inheritance
-kotlin-lsp implementations <Name> [depth]
-kotlin-lsp subclasses <Name> [depth]
-kotlin-lsp type-hierarchy <Name>
+kotlin-lsp type hierarchy <Name> [--subtypes|--supertypes]
 
 # Semantic search
 kotlin-lsp search "find where token is refreshed" [--limit N]
@@ -102,7 +99,7 @@ kotlin-lsp rename <file> <line> <col> <newName>
 kotlin-lsp doctor [--json]
 ```
 
-Full command catalog → [references/commands.md](references/commands.md)
+Full command catalog → [docs/commands.md](docs/commands.md)
 
 ## Performance modes
 
@@ -112,7 +109,7 @@ Full command catalog → [references/commands.md](references/commands.md)
 | `--fast` | Always `rg`/`fd`; instant |
 | `--smart` | Require pre-built index |
 
-Indexing setup → [references/indexing.md](references/indexing.md)
+Indexing setup → [docs/features.md](docs/features.md)
 
 ## Anti-patterns
 
@@ -120,5 +117,3 @@ Indexing setup → [references/indexing.md](references/indexing.md)
 - **Don't** read the entire file for a signature; use `hover`.
 - **Don't** omit `--limit` on `refs` for common names like `String` or `Result`.
 - **Don't** invoke `kotlin-lsp` recursively inside an LSP context.
-
-- [Release Process](references/releasing.md) — how to bump version and publish releases.

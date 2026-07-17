@@ -83,6 +83,9 @@ cargo clippy -- -D warnings
 
 ## CLI Reference
 
+See **[docs/commands.md](docs/commands.md)** for the full command reference.
+Quick reference:
+
 | Need | Command |
 |------|---------|
 | Find definition | `kotlin-lsp find <NAME>` |
@@ -92,8 +95,8 @@ cargo clippy -- -D warnings
 | One-stop context | `kotlin-lsp context <FILE> <LINE> <COL>` |
 | Syntax errors | `kotlin-lsp check <FILE>...` |
 | Code actions | `kotlin-lsp code-action <FILE> <LINE> <COL>` |
-| Call hierarchy | `kotlin-lsp call-hierarchy <FILE> <LINE> <COL>` |
-| Type hierarchy | `kotlin-lsp type-hierarchy <NAME>` |
+| Call hierarchy | `kotlin-lsp call hierarchy <FILE> <LINE> <COL>` |
+| Type hierarchy | `kotlin-lsp type hierarchy <NAME>` |
 | Organize imports | `kotlin-lsp organize-imports <FILE>...` |
 | Batch imports | `kotlin-lsp batch-imports <FILE>` |
 | Index JAR sources | `kotlin-lsp index-jars [ROOT]` |
@@ -101,14 +104,14 @@ cargo clippy -- -D warnings
 | Cache stats | `kotlin-lsp cache stats` |
 | Benchmark | `kotlin-lsp benchmark` |
 | Filter by kind | `--kind class,fun,interface` |
-| Call hierarchy | `kotlin-lsp call hierarchy <FILE> <LINE> <COL>` |
-| Call hierarchy (outgoing) | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --outgoing` |
+| Callers tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --incoming` |
+| Callees tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --outgoing` |
 | Impact analysis | `kotlin-lsp impact <FILE> <LINE> <COL>` |
 | Symbol overview | `kotlin-lsp summarize <NAME>` |
 | Find tests | `kotlin-lsp find-test <FILE> <LINE> <COL>` |
 | KMP expect/actual | `kotlin-lsp expect-actual <NAME>` |
-| Module deps | `kotlin-lsp module list / module deps / module files / module packages` |
-| Android resources | `kotlin-lsp android activities / android composables` |
+| Module deps | `kotlin-lsp module list / deps / files / packages` |
+| Android resources | `kotlin-lsp android activities / composables` |
 | Format check | `kotlin-lsp format check <FILE>...` |
 | Format apply | `kotlin-lsp format apply <FILE>...` |
 | File inspect | `kotlin-lsp inspect <FILE>` |
