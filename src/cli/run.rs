@@ -9,7 +9,7 @@ use crate::indexer::{Indexer, NoopReporter};
 use crate::query::engine::WorkspaceQueryEngine;
 use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
 
-use super::args::{CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand};
+use super::args::{AndroidSub, CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand};
 use super::complete::completions_at;
 use super::hover::hover_at;
 use super::output::{print_results, CliResult, PrintOpts};
@@ -1190,13 +1190,15 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::ExpectActual { name } => {
             crate::cli::expect_actual::run_expect_actual(&name, json).await;
         }
-        Subcommand::AndroidActivities { root: _ } => {
-            let r = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-            crate::cli::android::run_android_activities(&r, json);
-        }
-        Subcommand::AndroidComposables { file } => {
-            crate::cli::android::run_android_composables(&file, json);
-        }
+        Subcommand::Android { sub } => match sub {
+            AndroidSub::Activities => {
+                let r = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
+                crate::cli::android::run_android_activities(&r, json);
+            }
+            AndroidSub::Composables { file } => {
+                crate::cli::android::run_android_composables(&file, json);
+            }
+        },
         Subcommand::CallHierarchy {
             file,
             line,

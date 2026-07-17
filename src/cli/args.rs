@@ -231,14 +231,9 @@ pub(crate) enum Subcommand {
     ExpectActual {
         name: String,
     },
-    /// List Android activities from manifest.
-    #[allow(dead_code)]
-    AndroidActivities {
-        root: Option<PathBuf>,
-    },
-    /// Find @Composable functions in a file.
-    AndroidComposables {
-        file: PathBuf,
+    /// Android introspection: list activities, find composables.
+    Android {
+        sub: AndroidSub,
     },
     /// Batch type injection for a file — resolve all referenced type signatures.
     Inject {
@@ -342,6 +337,13 @@ pub(crate) enum ModuleSub {
     Deps { module: String, direction: String },
     Files { module: String },
     Packages { package: String },
+}
+
+/// Sub-command within the `android` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum AndroidSub {
+    Activities,
+    Composables { file: PathBuf },
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -894,14 +896,46 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             }
             Ok(Subcommand::ExpectActual { name })
         }
-        "android-activities" => Ok(Subcommand::AndroidActivities { root: None }),
+        "android-activities" => {
+            eprintln!("[WARN] 'android-activities' is deprecated; use 'android activities'");
+            Ok(Subcommand::Android {
+                sub: AndroidSub::Activities,
+            })
+        }
         "android-composables" => {
+            eprintln!(
+                "[WARN] 'android-composables' is deprecated; use 'android composables <file>'"
+            );
             let file = positionals
                 .first()
                 .cloned()
                 .map(PathBuf::from)
-                .ok_or("android-composables requires a FILE argument".to_string())?;
-            Ok(Subcommand::AndroidComposables { file })
+                .ok_or("android composables requires a FILE argument".to_string())?;
+            Ok(Subcommand::Android {
+                sub: AndroidSub::Composables { file },
+            })
+        }
+        "android" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "" | "activities" => Ok(Subcommand::Android {
+                    sub: AndroidSub::Activities,
+                }),
+                "composables" => {
+                    let file = positionals
+                        .get(1)
+                        .cloned()
+                        .map(PathBuf::from)
+                        .ok_or("android composables requires a FILE argument".to_string())?;
+                    Ok(Subcommand::Android {
+                        sub: AndroidSub::Composables { file },
+                    })
+                }
+                other => Err(format!(
+                    "unknown android subcommand '{}'. Available: activities, composables",
+                    other
+                )),
+            }
         }
         "workspace" => Ok(Subcommand::Workspace),
         "symbol-graph" => Ok(Subcommand::SymbolGraph),
@@ -1361,6 +1395,7 @@ fn is_subcommand(value: &str) -> bool {
             | "modules"
             | "module-deps"
             | "module-files"
+            | "android"
             | "android-activities"
             | "android-composables"
             | "inspect"
