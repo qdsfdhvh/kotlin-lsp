@@ -9,7 +9,9 @@ use crate::indexer::{Indexer, NoopReporter};
 use crate::query::engine::WorkspaceQueryEngine;
 use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
 
-use super::args::{CliArgs, Mode, OutputFmt, ResultFilters, Subcommand};
+use super::args::{
+    AndroidSub, CallSub, CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand, TypeSub,
+};
 use super::complete::completions_at;
 use super::hover::hover_at;
 use super::output::{print_results, CliResult, PrintOpts};
@@ -1139,32 +1141,33 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             run_context(&file, line, col, json, expand).await;
         }
-        Subcommand::Callers {
-            file,
-            line,
-            col,
-            depth,
-        } => {
-            crate::cli::call_graph::run_callers(&file, line, col, depth, json).await;
-        }
-        Subcommand::Callees {
-            file,
-            line,
-            col,
-            depth,
-        } => {
-            crate::cli::call_graph::run_callees(&file, line, col, depth, json).await;
-        }
+        Subcommand::Call { sub } => match sub {
+            CallSub::Hierarchy {
+                file,
+                line,
+                col,
+                incoming,
+                outgoing,
+                depth: _depth,
+            } => {
+                run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
+            }
+        },
         Subcommand::Impact { file, line, col } => {
             crate::cli::impact::run_impact(&file, line, col, json).await;
         }
-        Subcommand::Modules => crate::cli::modules::run_modules(json),
-        Subcommand::ModuleDeps { module, direction } => {
-            crate::cli::modules::run_module_deps(&module, &direction, json);
-        }
-        Subcommand::ModuleFiles { module } => {
-            crate::cli::modules::run_module_files(&module, json);
-        }
+        Subcommand::Module { sub } => match sub {
+            ModuleSub::List => crate::cli::modules::run_modules(json),
+            ModuleSub::Deps { module, direction } => {
+                crate::cli::modules::run_module_deps(&module, &direction, json);
+            }
+            ModuleSub::Files { module } => {
+                crate::cli::modules::run_module_files(&module, json);
+            }
+            ModuleSub::Packages { package } => {
+                crate::cli::symbol_queries::run_package_deps(&package, json);
+            }
+        },
         Subcommand::Summarize {
             name,
             expand,
@@ -1185,22 +1188,15 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::ExpectActual { name } => {
             crate::cli::expect_actual::run_expect_actual(&name, json).await;
         }
-        Subcommand::AndroidActivities { root: _ } => {
-            let r = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-            crate::cli::android::run_android_activities(&r, json);
-        }
-        Subcommand::AndroidComposables { file } => {
-            crate::cli::android::run_android_composables(&file, json);
-        }
-        Subcommand::CallHierarchy {
-            file,
-            line,
-            col,
-            incoming,
-            outgoing,
-        } => {
-            run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
-        }
+        Subcommand::Android { sub } => match sub {
+            AndroidSub::Activities => {
+                let r = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
+                crate::cli::android::run_android_activities(&r, json);
+            }
+            AndroidSub::Composables { file } => {
+                crate::cli::android::run_android_composables(&file, json);
+            }
+        },
         Subcommand::SymbolGraph => {
             crate::cli::symbol_graph::run_symbol_graph(json).await;
         }
@@ -1254,29 +1250,22 @@ pub(crate) async fn run(args: CliArgs) {
             }
         }
 
-        Subcommand::TypeHierarchy {
-            name,
-            subtypes,
-            supertypes,
-            graph,
-            depth,
-        } => {
-            run_type_hierarchy(&name, subtypes, supertypes, graph, depth, json).await;
-        }
-        Subcommand::Implementations { name, depth } => {
-            crate::cli::inheritance::run_implementations(&name, depth, json).await;
-        }
-        Subcommand::Subclasses { name, depth } => {
-            crate::cli::inheritance::run_subclasses(&name, depth, json).await;
-        }
+        Subcommand::Type { sub } => match sub {
+            TypeSub::Hierarchy {
+                name,
+                subtypes,
+                supertypes,
+                graph,
+                depth,
+            } => {
+                run_type_hierarchy(&name, subtypes, supertypes, graph, depth, json).await;
+            }
+        },
         Subcommand::ImportsOf { name } => {
             crate::cli::symbol_queries::run_imports_of(&name, json);
         }
         Subcommand::Annotated { annotation } => {
             crate::cli::symbol_queries::run_annotated(&annotation, json);
-        }
-        Subcommand::PackageDeps { package } => {
-            crate::cli::symbol_queries::run_package_deps(&package, json);
         }
         Subcommand::Docs { query } => {
             crate::cli::symbol_queries::run_docs(&query, json);

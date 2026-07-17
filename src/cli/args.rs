@@ -152,31 +152,12 @@ pub(crate) enum Subcommand {
         expand: usize,
     },
     /// Call hierarchy: find callers (--incoming) or callees (--outgoing).
-    CallHierarchy {
-        file: PathBuf,
-        line: u32,
-        col: u32,
-        incoming: bool,
-        outgoing: bool,
+    Call {
+        sub: CallSub,
     },
     /// Type hierarchy: find subtypes or supertypes.
-    /// Use --depth N for recursive tree output with --graph.
-    TypeHierarchy {
-        name: String,
-        subtypes: bool,
-        supertypes: bool,
-        graph: bool,
-        depth: u32,
-    },
-    /// Find all implementations of an interface/abstract class.
-    Implementations {
-        name: String,
-        depth: u32,
-    },
-    /// Find all subclasses of a class.
-    Subclasses {
-        name: String,
-        depth: u32,
+    Type {
+        sub: TypeSub,
     },
     /// Find files that import a given symbol.
     ImportsOf {
@@ -186,27 +167,9 @@ pub(crate) enum Subcommand {
     Annotated {
         annotation: String,
     },
-    /// Show package-level dependencies.
-    PackageDeps {
-        package: String,
-    },
     /// Full-text search over symbol signatures/KDoc.
     Docs {
         query: String,
-    },
-    /// Call graph: find who calls this function (tree output).
-    Callers {
-        file: PathBuf,
-        line: u32,
-        col: u32,
-        depth: u32,
-    },
-    /// Call graph: find functions called by this function (tree output).
-    Callees {
-        file: PathBuf,
-        line: u32,
-        col: u32,
-        depth: u32,
     },
     /// Impact analysis: risk score, refs, callers for a symbol.
     Impact {
@@ -214,16 +177,9 @@ pub(crate) enum Subcommand {
         line: u32,
         col: u32,
     },
-    /// List all detected Gradle modules.
-    Modules,
-    /// Show dependencies for a module.
-    ModuleDeps {
-        module: String,
-        direction: String,
-    },
-    /// List source files in a module.
-    ModuleFiles {
-        module: String,
+    /// Module introspection: list, deps, files, packages.
+    Module {
+        sub: ModuleSub,
     },
     /// Summarize a symbol: kind, signature, members, KDoc.
     Summarize {
@@ -242,14 +198,9 @@ pub(crate) enum Subcommand {
     ExpectActual {
         name: String,
     },
-    /// List Android activities from manifest.
-    #[allow(dead_code)]
-    AndroidActivities {
-        root: Option<PathBuf>,
-    },
-    /// Find @Composable functions in a file.
-    AndroidComposables {
-        file: PathBuf,
+    /// Android introspection: list activities, find composables.
+    Android {
+        sub: AndroidSub,
     },
     /// Batch type injection for a file — resolve all referenced type signatures.
     Inject {
@@ -344,6 +295,47 @@ pub(crate) enum Subcommand {
     SummaryCacheStats,
     /// Show Gradle dependencies parsed from build.gradle.kts / libs.versions.toml.
     GradleDeps,
+}
+
+/// Sub-command within the `module` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum ModuleSub {
+    List,
+    Deps { module: String, direction: String },
+    Files { module: String },
+    Packages { package: String },
+}
+
+/// Sub-command within the `android` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum AndroidSub {
+    Activities,
+    Composables { file: PathBuf },
+}
+
+/// Sub-command within the `type` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum TypeSub {
+    Hierarchy {
+        name: String,
+        subtypes: bool,
+        supertypes: bool,
+        graph: bool,
+        depth: u32,
+    },
+}
+
+/// Sub-command within the `call` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum CallSub {
+    Hierarchy {
+        file: PathBuf,
+        line: u32,
+        col: u32,
+        incoming: bool,
+        outgoing: bool,
+        depth: u32,
+    },
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -768,39 +760,55 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             )?),
         }),
         "callers" => {
+            eprintln!("[WARN] 'callers' is deprecated; use 'call hierarchy --incoming'");
             let depth = positionals
                 .first()
                 .and_then(|s| s.parse::<u32>().ok())
                 .filter(|d| *d > 0)
                 .unwrap_or(1);
             let (file, line, col) = parse_file_line_col(positionals, "callers")?;
-            Ok(Subcommand::Callers {
-                file,
-                line,
-                col,
-                depth,
+            Ok(Subcommand::Call {
+                sub: CallSub::Hierarchy {
+                    file,
+                    line,
+                    col,
+                    incoming: true,
+                    outgoing: false,
+                    depth,
+                },
             })
         }
         "callees" => {
+            eprintln!("[WARN] 'callees' is deprecated; use 'call hierarchy --outgoing'");
             let depth = positionals
                 .first()
                 .and_then(|s| s.parse::<u32>().ok())
                 .filter(|d| *d > 0)
                 .unwrap_or(1);
             let (file, line, col) = parse_file_line_col(positionals, "callees")?;
-            Ok(Subcommand::Callees {
-                file,
-                line,
-                col,
-                depth,
+            Ok(Subcommand::Call {
+                sub: CallSub::Hierarchy {
+                    file,
+                    line,
+                    col,
+                    incoming: false,
+                    outgoing: true,
+                    depth,
+                },
             })
         }
         "impact" => {
             let (file, line, col) = parse_file_line_col(positionals, "impact")?;
             Ok(Subcommand::Impact { file, line, col })
         }
-        "modules" => Ok(Subcommand::Modules),
+        "modules" => {
+            eprintln!("[WARN] 'modules' is deprecated; use 'module list'");
+            Ok(Subcommand::Module {
+                sub: ModuleSub::List,
+            })
+        }
         "module-deps" => {
+            eprintln!("[WARN] 'module-deps' is deprecated; use 'module deps <name>'");
             let module = positionals.first().cloned().unwrap_or_default();
             if module.is_empty() || module == "help" {
                 return Err("module-deps requires a module name".to_string());
@@ -809,14 +817,59 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 .get(1)
                 .cloned()
                 .unwrap_or_else(|| "both".to_string());
-            Ok(Subcommand::ModuleDeps { module, direction })
+            Ok(Subcommand::Module {
+                sub: ModuleSub::Deps { module, direction },
+            })
         }
         "module-files" => {
+            eprintln!("[WARN] 'module-files' is deprecated; use 'module files <name>'");
             let module = positionals.first().cloned().unwrap_or_default();
             if module.is_empty() || module == "help" {
                 return Err("module-files requires a module name".to_string());
             }
-            Ok(Subcommand::ModuleFiles { module })
+            Ok(Subcommand::Module {
+                sub: ModuleSub::Files { module },
+            })
+        }
+        "module" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "" | "list" => Ok(Subcommand::Module {
+                    sub: ModuleSub::List,
+                }),
+                "deps" => {
+                    let module = positionals.get(1).cloned().unwrap_or_default();
+                    if module.is_empty() {
+                        return Err("module deps requires a module name".to_string());
+                    }
+                    let direction = positionals
+                        .get(2)
+                        .cloned()
+                        .unwrap_or_else(|| "both".to_string());
+                    Ok(Subcommand::Module {
+                        sub: ModuleSub::Deps { module, direction },
+                    })
+                }
+                "files" => {
+                    let module = positionals.get(1).cloned().unwrap_or_default();
+                    if module.is_empty() {
+                        return Err("module files requires a module name".to_string());
+                    }
+                    Ok(Subcommand::Module {
+                        sub: ModuleSub::Files { module },
+                    })
+                }
+                "packages" => {
+                    let package = positionals.get(1).cloned().unwrap_or_default();
+                    Ok(Subcommand::Module {
+                        sub: ModuleSub::Packages { package },
+                    })
+                }
+                other => Err(format!(
+                    "unknown module subcommand '{}'. Available: list, deps, files, packages",
+                    other
+                )),
+            }
         }
         "summarize" => {
             let name = positionals.first().cloned().unwrap_or_default();
@@ -843,14 +896,46 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             }
             Ok(Subcommand::ExpectActual { name })
         }
-        "android-activities" => Ok(Subcommand::AndroidActivities { root: None }),
+        "android-activities" => {
+            eprintln!("[WARN] 'android-activities' is deprecated; use 'android activities'");
+            Ok(Subcommand::Android {
+                sub: AndroidSub::Activities,
+            })
+        }
         "android-composables" => {
+            eprintln!(
+                "[WARN] 'android-composables' is deprecated; use 'android composables <file>'"
+            );
             let file = positionals
                 .first()
                 .cloned()
                 .map(PathBuf::from)
-                .ok_or("android-composables requires a FILE argument".to_string())?;
-            Ok(Subcommand::AndroidComposables { file })
+                .ok_or("android composables requires a FILE argument".to_string())?;
+            Ok(Subcommand::Android {
+                sub: AndroidSub::Composables { file },
+            })
+        }
+        "android" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "" | "activities" => Ok(Subcommand::Android {
+                    sub: AndroidSub::Activities,
+                }),
+                "composables" => {
+                    let file = positionals
+                        .get(1)
+                        .cloned()
+                        .map(PathBuf::from)
+                        .ok_or("android composables requires a FILE argument".to_string())?;
+                    Ok(Subcommand::Android {
+                        sub: AndroidSub::Composables { file },
+                    })
+                }
+                other => Err(format!(
+                    "unknown android subcommand '{}'. Available: activities, composables",
+                    other
+                )),
+            }
         }
         "workspace" => Ok(Subcommand::Workspace),
         "symbol-graph" => Ok(Subcommand::SymbolGraph),
@@ -1004,33 +1089,88 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             })
         }
         "call-hierarchy" => {
-            // call-hierarchy FILE LINE COL [--incoming] [--outgoing]
-            // Flags are currently not parsed via ParsedCliFlags; default to both.
+            eprintln!("[WARN] 'call-hierarchy' is deprecated; use 'call hierarchy'");
             let (file, line, col) = parse_file_line_col(positionals, "call-hierarchy")?;
-            // For now, show both: use the verbose flag approach.
-            Ok(Subcommand::CallHierarchy {
-                file,
-                line,
-                col,
-                incoming: true,
-                outgoing: true,
+            Ok(Subcommand::Call {
+                sub: CallSub::Hierarchy {
+                    file,
+                    line,
+                    col,
+                    incoming: true,
+                    outgoing: true,
+                    depth: 1,
+                },
             })
         }
+        "call" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "hierarchy" => {
+                    let remaining = positionals[1..].to_vec();
+                    let (file, line, col) = parse_file_line_col(remaining, "call hierarchy")?;
+                    Ok(Subcommand::Call {
+                        sub: CallSub::Hierarchy {
+                            file,
+                            line,
+                            col,
+                            incoming: true,
+                            outgoing: true,
+                            depth: 1,
+                        },
+                    })
+                }
+                other => Err(format!(
+                    "unknown call subcommand '{}'. Available: hierarchy",
+                    other
+                )),
+            }
+        }
         "implementations" => {
+            eprintln!("[WARN] 'implementations' is deprecated; use 'type hierarchy --subtypes'");
             let name = positionals
                 .first()
                 .cloned()
                 .ok_or("implementations requires a NAME argument")?;
             let depth = positionals.get(1).and_then(|d| d.parse().ok()).unwrap_or(1);
-            Ok(Subcommand::Implementations { name, depth })
+            Ok(Subcommand::Type {
+                sub: TypeSub::Hierarchy {
+                    name,
+                    subtypes: true,
+                    supertypes: false,
+                    graph: false,
+                    depth,
+                },
+            })
         }
         "subclasses" => {
+            eprintln!("[WARN] 'subclasses' is deprecated; use 'type hierarchy --subtypes'");
             let name = positionals
                 .first()
                 .cloned()
                 .ok_or("subclasses requires a NAME argument")?;
             let depth = positionals.get(1).and_then(|d| d.parse().ok()).unwrap_or(1);
-            Ok(Subcommand::Subclasses { name, depth })
+            Ok(Subcommand::Type {
+                sub: TypeSub::Hierarchy {
+                    name,
+                    subtypes: true,
+                    supertypes: false,
+                    graph: false,
+                    depth,
+                },
+            })
+        }
+        "type" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "hierarchy" => {
+                    let remaining = positionals[1..].to_vec();
+                    build_type_subcommand(remaining, type_subtypes, type_supertypes, type_graph)
+                }
+                other => Err(format!(
+                    "unknown type subcommand '{}'. Available: hierarchy",
+                    other
+                )),
+            }
         }
         "imports-of" => {
             let name = positionals
@@ -1047,8 +1187,11 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             Ok(Subcommand::Annotated { annotation })
         }
         "package-deps" => {
+            eprintln!("[WARN] 'package-deps' is deprecated; use 'module packages <name>'");
             let package = positionals.first().cloned().unwrap_or_default();
-            Ok(Subcommand::PackageDeps { package })
+            Ok(Subcommand::Module {
+                sub: ModuleSub::Packages { package },
+            })
         }
         "docs" => {
             let query = positionals
@@ -1067,7 +1210,8 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }
         "summary-cache" => Ok(Subcommand::SummaryCacheStats),
         "type-hierarchy" => {
-            build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes, type_graph)
+            eprintln!("[WARN] 'type-hierarchy' is deprecated; use 'type hierarchy'");
+            build_type_subcommand(positionals, type_subtypes, type_supertypes, type_graph)
         }
         "format" => {
             if positionals.is_empty() {
@@ -1225,27 +1369,28 @@ fn parse_file_line_col(
     Ok((file, line, col))
 }
 
-fn build_type_hierarchy_subcommand(
+fn build_type_subcommand(
     positionals: Vec<String>,
     type_subtypes: bool,
     type_supertypes: bool,
     type_graph: bool,
 ) -> Result<Subcommand, String> {
     let mut name: Option<String> = None;
-
     for arg in &positionals {
         if name.is_none() {
             name = Some(arg.clone());
         }
     }
-    let name = name.ok_or("type-hierarchy requires a NAME argument")?;
+    let name = name.ok_or("type hierarchy requires a NAME argument")?;
     let subtypes = type_subtypes || !type_supertypes;
-    Ok(Subcommand::TypeHierarchy {
-        name,
-        subtypes,
-        supertypes: type_supertypes,
-        graph: type_graph,
-        depth: 1,
+    Ok(Subcommand::Type {
+        sub: TypeSub::Hierarchy {
+            name,
+            subtypes,
+            supertypes: type_supertypes,
+            graph: type_graph,
+            depth: 1,
+        },
     })
 }
 
@@ -1283,7 +1428,9 @@ fn is_subcommand(value: &str) -> bool {
             | "batch"
             | "organize-imports"
             | "context"
+            | "call"
             | "call-hierarchy"
+            | "type"
             | "type-hierarchy"
             | "benchmark"
             | "skills"
@@ -1303,9 +1450,11 @@ fn is_subcommand(value: &str) -> bool {
             | "impact"
             | "find-test"
             | "expect-actual"
+            | "module"
             | "modules"
             | "module-deps"
             | "module-files"
+            | "android"
             | "android-activities"
             | "android-composables"
             | "inspect"

@@ -337,12 +337,15 @@ fn benchmark_subcommand_is_reachable() {
 fn type_hierarchy_defaults_to_subtypes() {
     let args = parse(&["type-hierarchy", "Base"]).unwrap().unwrap();
     match args.subcommand {
-        Subcommand::TypeHierarchy {
-            name,
-            subtypes,
-            supertypes,
-            graph: _graph,
-            ..
+        Subcommand::Type {
+            sub:
+                TypeSub::Hierarchy {
+                    name,
+                    subtypes,
+                    supertypes,
+                    graph: _graph,
+                    ..
+                },
         } => {
             assert_eq!(name, "Base");
             assert!(subtypes);
@@ -358,12 +361,15 @@ fn type_hierarchy_supertypes_flag_is_reachable() {
         .unwrap()
         .unwrap();
     match args.subcommand {
-        Subcommand::TypeHierarchy {
-            name,
-            subtypes,
-            supertypes,
-            graph: _graph,
-            ..
+        Subcommand::Type {
+            sub:
+                TypeSub::Hierarchy {
+                    name,
+                    subtypes,
+                    supertypes,
+                    graph: _graph,
+                    ..
+                },
         } => {
             assert_eq!(name, "Child");
             assert!(!subtypes);
@@ -379,12 +385,15 @@ fn type_hierarchy_can_request_both_directions() {
         .unwrap()
         .unwrap();
     match args.subcommand {
-        Subcommand::TypeHierarchy {
-            name,
-            subtypes,
-            supertypes,
-            graph: _graph,
-            ..
+        Subcommand::Type {
+            sub:
+                TypeSub::Hierarchy {
+                    name,
+                    subtypes,
+                    supertypes,
+                    graph: _graph,
+                    ..
+                },
         } => {
             assert_eq!(name, "Node");
             assert!(subtypes);
