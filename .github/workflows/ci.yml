@@ -13,7 +13,6 @@ on:
       - '**/*.md'
       - 'docs/**'
       - 'skills/**'
-      - 'contrib/**'
   workflow_dispatch:
 
 # A new push to the same PR (or branch) cancels any in-flight run for it.
