@@ -9,7 +9,7 @@ use crate::indexer::{Indexer, NoopReporter};
 use crate::query::engine::WorkspaceQueryEngine;
 use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
 
-use super::args::{CliArgs, Mode, OutputFmt, ResultFilters, Subcommand};
+use super::args::{CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand};
 use super::complete::completions_at;
 use super::hover::hover_at;
 use super::output::{print_results, CliResult, PrintOpts};
@@ -1158,13 +1158,18 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Impact { file, line, col } => {
             crate::cli::impact::run_impact(&file, line, col, json).await;
         }
-        Subcommand::Modules => crate::cli::modules::run_modules(json),
-        Subcommand::ModuleDeps { module, direction } => {
-            crate::cli::modules::run_module_deps(&module, &direction, json);
-        }
-        Subcommand::ModuleFiles { module } => {
-            crate::cli::modules::run_module_files(&module, json);
-        }
+        Subcommand::Module { sub } => match sub {
+            ModuleSub::List => crate::cli::modules::run_modules(json),
+            ModuleSub::Deps { module, direction } => {
+                crate::cli::modules::run_module_deps(&module, &direction, json);
+            }
+            ModuleSub::Files { module } => {
+                crate::cli::modules::run_module_files(&module, json);
+            }
+            ModuleSub::Packages { package } => {
+                crate::cli::symbol_queries::run_package_deps(&package, json);
+            }
+        },
         Subcommand::Summarize {
             name,
             expand,
@@ -1274,9 +1279,6 @@ pub(crate) async fn run(args: CliArgs) {
         }
         Subcommand::Annotated { annotation } => {
             crate::cli::symbol_queries::run_annotated(&annotation, json);
-        }
-        Subcommand::PackageDeps { package } => {
-            crate::cli::symbol_queries::run_package_deps(&package, json);
         }
         Subcommand::Docs { query } => {
             crate::cli::symbol_queries::run_docs(&query, json);

@@ -186,10 +186,6 @@ pub(crate) enum Subcommand {
     Annotated {
         annotation: String,
     },
-    /// Show package-level dependencies.
-    PackageDeps {
-        package: String,
-    },
     /// Full-text search over symbol signatures/KDoc.
     Docs {
         query: String,
@@ -214,16 +210,9 @@ pub(crate) enum Subcommand {
         line: u32,
         col: u32,
     },
-    /// List all detected Gradle modules.
-    Modules,
-    /// Show dependencies for a module.
-    ModuleDeps {
-        module: String,
-        direction: String,
-    },
-    /// List source files in a module.
-    ModuleFiles {
-        module: String,
+    /// Module introspection: list, deps, files, packages.
+    Module {
+        sub: ModuleSub,
     },
     /// Summarize a symbol: kind, signature, members, KDoc.
     Summarize {
@@ -344,6 +333,15 @@ pub(crate) enum Subcommand {
     SummaryCacheStats,
     /// Show Gradle dependencies parsed from build.gradle.kts / libs.versions.toml.
     GradleDeps,
+}
+
+/// Sub-command within the `module` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum ModuleSub {
+    List,
+    Deps { module: String, direction: String },
+    Files { module: String },
+    Packages { package: String },
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -799,8 +797,14 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let (file, line, col) = parse_file_line_col(positionals, "impact")?;
             Ok(Subcommand::Impact { file, line, col })
         }
-        "modules" => Ok(Subcommand::Modules),
+        "modules" => {
+            eprintln!("[WARN] 'modules' is deprecated; use 'module list'");
+            Ok(Subcommand::Module {
+                sub: ModuleSub::List,
+            })
+        }
         "module-deps" => {
+            eprintln!("[WARN] 'module-deps' is deprecated; use 'module deps <name>'");
             let module = positionals.first().cloned().unwrap_or_default();
             if module.is_empty() || module == "help" {
                 return Err("module-deps requires a module name".to_string());
@@ -809,14 +813,61 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 .get(1)
                 .cloned()
                 .unwrap_or_else(|| "both".to_string());
-            Ok(Subcommand::ModuleDeps { module, direction })
+            Ok(Subcommand::Module {
+                sub: ModuleSub::Deps { module, direction },
+            })
         }
         "module-files" => {
+            eprintln!("[WARN] 'module-files' is deprecated; use 'module files <name>'");
             let module = positionals.first().cloned().unwrap_or_default();
             if module.is_empty() || module == "help" {
                 return Err("module-files requires a module name".to_string());
             }
-            Ok(Subcommand::ModuleFiles { module })
+            Ok(Subcommand::Module {
+                sub: ModuleSub::Files { module },
+            })
+        }
+        "module" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "" | "list" => Ok(Subcommand::Module {
+                    sub: ModuleSub::List,
+                }),
+                "deps" => {
+                    let module = positionals.get(1).cloned().unwrap_or_default();
+                    if module.is_empty() {
+                        return Err("module deps requires a module name".to_string());
+                    }
+                    let direction = positionals
+                        .get(2)
+                        .cloned()
+                        .unwrap_or_else(|| "both".to_string());
+                    Ok(Subcommand::Module {
+                        sub: ModuleSub::Deps { module, direction },
+                    })
+                }
+                "files" => {
+                    let module = positionals.get(1).cloned().unwrap_or_default();
+                    if module.is_empty() {
+                        return Err("module files requires a module name".to_string());
+                    }
+                    Ok(Subcommand::Module {
+                        sub: ModuleSub::Files { module },
+                    })
+                }
+                "packages" => {
+                    let package = positionals.get(1).cloned().unwrap_or_default();
+                    Ok(Subcommand::Module {
+                        sub: ModuleSub::Packages { package },
+                    })
+                }
+                other => {
+                    return Err(format!(
+                        "unknown module subcommand '{}'. Available: list, deps, files, packages",
+                        other
+                    ));
+                }
+            }
         }
         "summarize" => {
             let name = positionals.first().cloned().unwrap_or_default();
@@ -1047,8 +1098,11 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             Ok(Subcommand::Annotated { annotation })
         }
         "package-deps" => {
+            eprintln!("[WARN] 'package-deps' is deprecated; use 'module packages <name>'");
             let package = positionals.first().cloned().unwrap_or_default();
-            Ok(Subcommand::PackageDeps { package })
+            Ok(Subcommand::Module {
+                sub: ModuleSub::Packages { package },
+            })
         }
         "docs" => {
             let query = positionals
@@ -1303,6 +1357,7 @@ fn is_subcommand(value: &str) -> bool {
             | "impact"
             | "find-test"
             | "expect-actual"
+            | "module"
             | "modules"
             | "module-deps"
             | "module-files"
