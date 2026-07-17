@@ -7,6 +7,7 @@ use super::{ExternalDep, GradleDeps, ProjectDep};
 
 // ── TOML version catalog ────────────────────────────────────────────────
 
+#[allow(dead_code)] // used in tests
 pub(crate) fn parse_version_catalog(path: &Path) -> Result<HashMap<String, String>, String> {
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
