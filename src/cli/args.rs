@@ -310,7 +310,12 @@ pub(crate) enum ModuleSub {
 #[derive(Debug, Clone)]
 pub(crate) enum AndroidSub {
     Activities,
-    Composables { file: PathBuf },
+    Composables {
+        file: PathBuf,
+        call_graph: bool,
+        state: bool,
+        preview: bool,
+    },
 }
 
 /// Sub-command within the `type` parent command.
@@ -912,7 +917,12 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 .map(PathBuf::from)
                 .ok_or("android composables requires a FILE argument".to_string())?;
             Ok(Subcommand::Android {
-                sub: AndroidSub::Composables { file },
+                sub: AndroidSub::Composables {
+                    file,
+                    call_graph: false,
+                    state: false,
+                    preview: false,
+                },
             })
         }
         "android" => {
@@ -928,7 +938,12 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                         .map(PathBuf::from)
                         .ok_or("android composables requires a FILE argument".to_string())?;
                     Ok(Subcommand::Android {
-                        sub: AndroidSub::Composables { file },
+                        sub: AndroidSub::Composables {
+                            file,
+                            call_graph: false,
+                            state: false,
+                            preview: false,
+                        },
                     })
                 }
                 other => Err(format!(

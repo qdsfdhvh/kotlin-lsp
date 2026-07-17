@@ -40,14 +40,21 @@ pub(crate) fn run_android_activities(root: &Path, json: bool) {
         println!("{}", serde_json::to_string_pretty(&activities).unwrap());
     } else {
         for a in &activities {
-            println!("  {} ({})", a.name, if a.exported { "exported" } else { "not" });
+            println!(
+                "  {} ({})",
+                a.name,
+                if a.exported { "exported" } else { "not" }
+            );
         }
     }
 }
 
 pub(crate) fn run_android_composables(
-    file: &Path, json: bool,
-    call_graph: bool, state: bool, preview: bool,
+    file: &Path,
+    json: bool,
+    call_graph: bool,
+    state: bool,
+    preview: bool,
 ) {
     let composables = find_composables(file, call_graph, state, preview);
     if json {
@@ -56,13 +63,23 @@ pub(crate) fn run_android_composables(
         for c in &composables {
             print!("  {} ({}) @ line {}", c.name, c.params.join(", "), c.line);
             if let Some(ref p) = c.preview {
-                if let Some(ref n) = p.name { print!(" [name={n}]"); }
-                if let Some(w) = p.width_dp { print!(" [w={w}dp]"); }
-                if let Some(h) = p.height_dp { print!(" [h={h}dp]"); }
+                if let Some(ref n) = p.name {
+                    print!(" [name={n}]");
+                }
+                if let Some(w) = p.width_dp {
+                    print!(" [w={w}dp]");
+                }
+                if let Some(h) = p.height_dp {
+                    print!(" [h={h}dp]");
+                }
             }
             println!();
-            if !c.calls.is_empty() { println!("    → calls: {}", c.calls.join(", ")); }
-            if !c.state_vars.is_empty() { println!("    → state: {}", c.state_vars.join(", ")); }
+            if !c.calls.is_empty() {
+                println!("    → calls: {}", c.calls.join(", "));
+            }
+            if !c.state_vars.is_empty() {
+                println!("    → state: {}", c.state_vars.join(", "));
+            }
         }
     }
 }
@@ -101,13 +118,20 @@ fn parse_manifest(xml: &str) -> Vec<ActivityInfo> {
             cur = extract_attr(t, "android:name");
             exp = !t.contains("android:exported=\"false\"");
         } else if in_act && (t.starts_with("</activity>") || t.contains("/>")) {
-            acts.push(ActivityInfo { name: cur.clone(), exported: exp, intent_filters: filters.clone() });
+            acts.push(ActivityInfo {
+                name: cur.clone(),
+                exported: exp,
+                intent_filters: filters.clone(),
+            });
             in_act = false;
         } else if in_act && t.contains("<intent-filter") {
             in_filt = true;
         } else if in_act && t.starts_with("</intent-filter>") {
             in_filt = false;
-            if !action.is_empty() { filters.push(action.clone()); action.clear(); }
+            if !action.is_empty() {
+                filters.push(action.clone());
+                action.clear();
+            }
         } else if in_filt && t.contains("<action ") {
             action = extract_attr(t, "android:name");
         }
@@ -119,18 +143,29 @@ fn extract_attr(line: &str, attr: &str) -> String {
     let p = format!("{}=\"", attr);
     if let Some(s) = line.find(&p) {
         let r = &line[s + p.len()..];
-        if let Some(e) = r.find('"') { return r[..e].to_string(); }
+        if let Some(e) = r.find('"') {
+            return r[..e].to_string();
+        }
     }
     String::new()
 }
 
 // ── Composable analysis — inline tree-sitter walk, no cross-fn Node refs ──
 
-fn find_composables(file: &Path, call_graph: bool, state: bool, preview: bool) -> Vec<ComposableInfo> {
-    let Ok(src) = std::fs::read_to_string(file) else { return vec![]; };
+fn find_composables(
+    file: &Path,
+    call_graph: bool,
+    state: bool,
+    preview: bool,
+) -> Vec<ComposableInfo> {
+    let Ok(src) = std::fs::read_to_string(file) else {
+        return vec![];
+    };
     let mut p = tree_sitter::Parser::new();
     p.set_language(&tree_sitter_kotlin_sg::LANGUAGE.into()).ok();
-    let Some(tree) = p.parse(&src, None) else { return vec![]; };
+    let Some(tree) = p.parse(&src, None) else {
+        return vec![];
+    };
     let root = tree.root_node();
 
     // Step 1: find all @Composable functions — collect name + node
@@ -143,7 +178,9 @@ fn find_composables(file: &Path, call_graph: bool, state: bool, preview: bool) -
                 fns.push((name, n));
             }
             let mut c = n.walk();
-            for ch in n.children(&mut c) { stack.push(ch); }
+            for ch in n.children(&mut c) {
+                stack.push(ch);
+            }
         }
     }
 
@@ -159,7 +196,10 @@ fn find_composables(file: &Path, call_graph: bool, state: bool, preview: bool) -
         let mut prev: Option<PreviewInfo> = None;
 
         // Find function body
-        let body = find_child(&node, "function_body");
+        let mut fc = node.walk();
+        let body = node
+            .children(&mut fc)
+            .find(|ch| ch.kind() == "function_body");
 
         if call_graph {
             if let Some(b) = body {
@@ -168,12 +208,17 @@ fn find_composables(file: &Path, call_graph: bool, state: bool, preview: bool) -
                 while let Some(nn) = stack.pop() {
                     if nn.kind() == "call_expression" {
                         let callee = first_child_ident(&nn, &src);
-                        if !callee.is_empty() && names.contains(&callee) && seen.insert(callee.clone()) {
+                        if !callee.is_empty()
+                            && names.contains(&callee)
+                            && seen.insert(callee.clone())
+                        {
                             calls.push(callee);
                         }
                     }
                     let mut c = nn.walk();
-                    for ch in nn.children(&mut c) { stack.push(ch); }
+                    for ch in nn.children(&mut c) {
+                        stack.push(ch);
+                    }
                 }
                 calls.sort();
             }
@@ -183,11 +228,21 @@ fn find_composables(file: &Path, call_graph: bool, state: bool, preview: bool) -
             // Detect: var/val x by remember|mutableStateOf|derivedStateOf
             let fn_text = node_text(&node, &src);
             for line_text in fn_text.lines() {
-                if line_text.contains("by ") && (line_text.contains("mutableStateOf") || line_text.contains("remember") || line_text.contains("derivedStateOf")) {
+                if line_text.contains("by ")
+                    && (line_text.contains("mutableStateOf")
+                        || line_text.contains("remember")
+                        || line_text.contains("derivedStateOf"))
+                {
                     // Extract var name: "var|val NAME by ..."
                     let trimmed = line_text.trim();
-                    if let Some(rest) = trimmed.strip_prefix("var ").or_else(|| trimmed.strip_prefix("val ")) {
-                        if let Some(ident) = rest.split(|c: char| c == ':' || c == '=' || c == ' ').next() {
+                    if let Some(rest) = trimmed
+                        .strip_prefix("var ")
+                        .or_else(|| trimmed.strip_prefix("val "))
+                    {
+                        if let Some(ident) = rest
+                            .split(|c: char| c == ':' || c == '=' || c == ' ')
+                            .next()
+                        {
                             if !ident.is_empty() && !ident.starts_with("by") {
                                 state_vars.push(ident.to_string());
                             }
@@ -211,17 +266,30 @@ fn find_composables(file: &Path, call_graph: bool, state: bool, preview: bool) -
             }
         }
 
-        result.push(ComposableInfo { name, line, params, calls, state_vars, preview: prev });
+        result.push(ComposableInfo {
+            name,
+            line,
+            params,
+            calls,
+            state_vars,
+            preview: prev,
+        });
     }
     result
 }
 
 fn parse_preview_params(src: &str, start_byte: usize, end_byte: usize) -> PreviewInfo {
     let text = &src[start_byte..end_byte];
-    let mut info = PreviewInfo { name: None, width_dp: None, height_dp: None };
+    let mut info = PreviewInfo {
+        name: None,
+        width_dp: None,
+        height_dp: None,
+    };
     for part in text.split(|c: char| c == ',' || c == '(' || c == ')') {
         let kv: Vec<&str> = part.splitn(2, '=').collect();
-        if kv.len() != 2 { continue; }
+        if kv.len() != 2 {
+            continue;
+        }
         match kv[0].trim() {
             "name" => info.name = Some(kv[1].trim().trim_matches('"').to_string()),
             "widthDp" => info.width_dp = kv[1].trim().parse().ok(),
@@ -251,15 +319,11 @@ fn first_child_ident(node: &tree_sitter::Node, src: &str) -> String {
     String::new()
 }
 
-fn find_child<'a>(node: &tree_sitter::Node<'a>, kind: &str) -> Option<tree_sitter::Node<'a>> {
-    let mut c = node.walk();
-    node.children(&mut c).find(|ch| ch.kind() == kind)
-}
-
 fn extract_params_text(node: &tree_sitter::Node, src: &str) -> Vec<String> {
     for ch in node_children(node) {
         if ch.kind() == "function_value_parameters" {
-            return ch.children(&mut ch.walk())
+            return ch
+                .children(&mut ch.walk())
                 .filter(|c| c.kind() == "simple_identifier")
                 .map(|c| c.utf8_text(src.as_bytes()).unwrap_or("").to_string())
                 .collect();
@@ -291,19 +355,18 @@ mod tests {
         let code = "@Composable\nfun Greeting(name: String) { Text(\"Hello\") }";
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("test.kt"), code).unwrap();
-        let composables =
-            find_composables(&dir.path().join("test.kt"), false, false, false);
+        let composables = find_composables(&dir.path().join("test.kt"), false, false, false);
         assert_eq!(composables.len(), 1);
         assert_eq!(composables[0].name, "Greeting");
     }
 
     #[test]
     fn call_graph_detects_internal_calls() {
-        let code = "@Composable fun A() { B(); }\n@Composable fun B() { C(); }\n@Composable fun C() {}";
+        let code =
+            "@Composable fun A() { B(); }\n@Composable fun B() { C(); }\n@Composable fun C() {}";
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("test.kt"), code).unwrap();
-        let composables =
-            find_composables(&dir.path().join("test.kt"), true, false, false);
+        let composables = find_composables(&dir.path().join("test.kt"), true, false, false);
         let a = composables.iter().find(|c| c.name == "A").unwrap();
         assert!(a.calls.contains(&"B".to_string()), "A should call B");
         let b = composables.iter().find(|c| c.name == "B").unwrap();
@@ -312,11 +375,10 @@ mod tests {
 
     #[test]
     fn state_detection() {
-        let code = "import androidx.compose.runtime.*\n@Composable fun Counter() { var count by remember { mutableStateOf(0) } }";
+        let code = "import androidx.compose.runtime.*\n@Composable\nfun Counter() {\n    var count by remember { mutableStateOf(0) }\n}";
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("test.kt"), code).unwrap();
-        let composables =
-            find_composables(&dir.path().join("test.kt"), false, true, false);
+        let composables = find_composables(&dir.path().join("test.kt"), false, true, false);
         assert_eq!(composables.len(), 1);
         assert!(composables[0].state_vars.contains(&"count".to_string()));
     }
@@ -326,8 +388,7 @@ mod tests {
         let code = "import androidx.compose.ui.tooling.preview.Preview\n@Preview(name = \"Light\")\n@Composable fun P() {}";
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("test.kt"), code).unwrap();
-        let composables =
-            find_composables(&dir.path().join("test.kt"), false, false, true);
+        let composables = find_composables(&dir.path().join("test.kt"), false, false, true);
         let p = composables[0].preview.as_ref().unwrap();
         assert_eq!(p.name.as_deref(), Some("Light"));
     }
