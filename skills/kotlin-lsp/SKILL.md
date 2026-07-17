@@ -26,7 +26,7 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Format check → kotlin-lsp format check
    ├─ Caller/callee tree → kotlin-lsp callers / callees
    ├─ Implementation tree → kotlin-lsp implementations
-   ├─ Fuzzy search → kotlin-lsp find --fuzzy
+   ├─ Search by name → kotlin-lsp find <name>
    ├─ Batch queries → echo '[...]' | kotlin-lsp query --json
    ├─ Import analysis → kotlin-lsp imports-of
    ├─ Annotation query → kotlin-lsp annotated
@@ -56,7 +56,7 @@ Output defaults:
 ```bash
 # Find declarations
 kotlin-lsp find <Name> [--limit N] [--module <frag>] [--kind class,fun]
-kotlin-lsp find --fuzzy "login repo"
+kotlin-lsp search "login repo" [--limit N] [--json]
 
 # Find references
 kotlin-lsp refs <Name> [--limit N] [--exclude-imports]
