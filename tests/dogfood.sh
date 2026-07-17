@@ -9,6 +9,10 @@ if [ ! -x "$BIN" ]; then
     rustup run stable cargo build --release --quiet || cargo build --release --quiet
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECTS_CACHE="$SCRIPT_DIR/dogfood/projects"
+mkdir -p "$PROJECTS_CACHE"
+
 TMPDIR="/tmp/kotlin-lsp-dogfood"
 CACHE="$TMPDIR/cache"
 rm -rf "$TMPDIR" && mkdir -p "$CACHE"
@@ -67,12 +71,20 @@ test_project() {
     echo ""
     echo "${ATTR_BOLD}━━━ $name ━━━${ATTR_RESET}"
 
-    # ── clone ──
-    echo -n "  clone... "
-    if git clone --depth 1 --quiet "$url" "$dir" 2>/dev/null; then
-        echo "$(find "$dir" -name '*.kt' | wc -l | tr -d ' ') files"
+    # ── clone (use persistent cache if available) ──
+    local cached="$PROJECTS_CACHE/$name"
+    if [ -d "$cached/.git" ]; then
+        echo -n "  clone... "
+        echo "$(find "$cached" -name '*.kt' | wc -l | tr -d ' ') files (cached)"
+        dir="$cached"
     else
-        fail "$name: clone"; return
+        echo -n "  clone... "
+        if git clone --depth 1 --quiet "$url" "$cached" 2>/dev/null; then
+            echo "$(find "$cached" -name '*.kt' | wc -l | tr -d ' ') files"
+            dir="$cached"
+        else
+            fail "$name: clone"; return
+        fi
     fi
 
     # ── index ──

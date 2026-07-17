@@ -198,6 +198,9 @@ pub(crate) struct Indexer {
     /// JAR-derived definition locations, keyed by short symbol name.
     pub(crate) jar_definitions: DashMap<String, Vec<Location>>,
     /// Max files cap for the pending reindex. Preserves the intent of the last caller:
+    /// Lazily-parsed Gradle dependency info. `None` means not parsed yet;
+    /// `Some(None)` means parsed but not a Gradle project. Set once per workspace.
+    pub(crate) gradle_deps: RwLock<Option<Option<Arc<crate::gradle::GradleDeps>>>>,
     /// a full (unbounded) reindex queued during a bounded scan keeps its unlimited cap.
     pub(crate) pending_reindex_max: std::sync::atomic::AtomicUsize,
     /// Number of parse tasks completed in current indexing run (for progress tracking).
@@ -318,6 +321,7 @@ impl Indexer {
             library_cache_path: RwLock::new(None),
             importable_fqns: std::sync::RwLock::new(std::collections::HashMap::new()),
             live_trees: DashMap::new(),
+            gradle_deps: RwLock::new(None),
         }
     }
 
@@ -410,6 +414,51 @@ impl Indexer {
             }
         }
         total
+    }
+
+    /// Ensure Gradle dependencies are parsed and source JARs indexed.
+    /// Called lazily on first symbol resolution miss when `--gradle` is active.
+    /// Thread-safe: only the first caller parses; subsequent callers see the cached result.
+    pub(crate) fn ensure_gradle_indexed(&self, root_dir: &Path) {
+        // Fast path: already checked
+        {
+            let deps = self.gradle_deps.read().expect("gradle_deps lock");
+            if deps.is_some() {
+                return;
+            }
+        }
+
+        // Parse Gradle config
+        let parsed = crate::gradle::parse_project(root_dir);
+
+        let mut deps = self.gradle_deps.write().expect("gradle_deps lock");
+        if deps.is_some() {
+            return; // Another thread beat us
+        }
+
+        if let Some(gradle_deps) = parsed {
+            use self::jar_indexer::index_sources_jar;
+            // Index source JARs for each external dep
+            for dep in &gradle_deps.external {
+                if dep.group.is_empty() || dep.artifact.is_empty() || dep.version.is_empty() {
+                    continue;
+                }
+                if let Some(jar_path) =
+                    crate::gradle::cache::find_source_jar(&dep.group, &dep.artifact, &dep.version)
+                {
+                    if let Ok(symbols) = index_sources_jar(&jar_path) {
+                        use self::jar_indexer::symbols_to_filedata;
+                        let (_fd, defs) = symbols_to_filedata(&jar_path, &symbols);
+                        for (name, loc) in defs {
+                            self.jar_definitions.entry(name).or_default().push(loc);
+                        }
+                    }
+                }
+            }
+            *deps = Some(Some(std::sync::Arc::new(gradle_deps)));
+        } else {
+            *deps = Some(None); // Not a Gradle project
+        }
     }
 
     pub(crate) fn is_library_uri(&self, uri: &Url) -> bool {

@@ -342,6 +342,8 @@ pub(crate) enum Subcommand {
     },
     /// Show AI summary cache statistics.
     SummaryCacheStats,
+    /// Show Gradle dependencies parsed from build.gradle.kts / libs.versions.toml.
+    GradleDeps,
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -384,6 +386,10 @@ pub(crate) struct CliArgs {
     /// format for find/refs text output. Default is grouped (rg-style) so the
     /// path isn't repeated per match.
     pub flat: bool,
+    /// `--gradle`: enable Gradle dependency resolution.
+    /// When set, the indexer will parse build.gradle.kts / libs.versions.toml
+    /// and index source JARs for external dependencies.
+    pub gradle: bool,
 }
 
 impl CliArgs {
@@ -410,6 +416,7 @@ impl CliArgs {
         let verbose = parsed.verbose;
         let absolute = parsed.absolute;
         let flat = parsed.flat;
+        let gradle = parsed.gradle;
         let subcommand = build_subcommand(&subcommand, parsed)?;
         Ok(Some(Self {
             subcommand,
@@ -419,6 +426,7 @@ impl CliArgs {
             verbose,
             absolute,
             flat,
+            gradle,
         }))
     }
 }
@@ -467,6 +475,7 @@ struct ParsedCliFlags {
     name_arg: Option<String>,
     exclude_relationships: bool,
     cached: bool,
+    gradle: bool,
 }
 
 fn parse_first_argument(args: &mut lexopt::Parser) -> Result<Option<std::ffi::OsString>, String> {
@@ -533,7 +542,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         type_supertypes: false,
         type_graph: false,
         expand: 0,
-        cached: false,
+
         exclude_imports: false,
         fuzzy_filter: false,
         visibility_filter: None,
@@ -542,6 +551,8 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         diagnose: false,
         exclude_relationships: false,
         name_arg: None,
+        cached: false,
+        gradle: false,
     };
 
     loop {
@@ -630,6 +641,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Long("exclude-relationships")) => {
                 parsed.exclude_relationships = true;
             }
+            Some(lexopt::Arg::Long("gradle")) => parsed.gradle = true,
             Some(lexopt::Arg::Long("diagnose")) => {
                 parsed.diagnose = true;
             }
@@ -737,6 +749,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let root = positionals.first().map(PathBuf::from);
             Ok(Subcommand::IndexJars { root })
         }
+        "gradle-deps" => Ok(Subcommand::GradleDeps),
         "benchmark" => Ok(Subcommand::Benchmark),
         "tokens" => Ok(Subcommand::Tokens {
             file: PathBuf::from(first_positional(
@@ -1284,6 +1297,7 @@ fn is_subcommand(value: &str) -> bool {
             | "summarize"
             | "search"
             | "summary-cache"
+            | "gradle-deps"
             | "callers"
             | "callees"
             | "impact"

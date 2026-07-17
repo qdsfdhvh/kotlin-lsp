@@ -148,7 +148,11 @@ fn cache_exists(root: &Path) -> bool {
 /// 2. `~/.kotlin-lsp/sources` — the default `extract-sources` output dir
 ///    (skipped when `no_stdlib` is true)
 pub(crate) async fn build_index(root: &Path, no_stdlib: bool) -> Arc<Indexer> {
-    build_index_inner(root, collect_cli_source_paths(root, no_stdlib)).await
+    build_index_inner(root, collect_cli_source_paths(root, no_stdlib), false).await
+}
+
+pub(crate) async fn build_index_with_gradle(root: &Path, no_stdlib: bool) -> Arc<Indexer> {
+    build_index_inner(root, collect_cli_source_paths(root, no_stdlib), true).await
 }
 
 /// Build a full workspace index with explicitly provided source paths.
@@ -163,10 +167,14 @@ pub(crate) async fn build_index_with_sources(
         .into_iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    build_index_inner(root, strs).await
+    build_index_inner(root, strs, false).await
 }
 
-async fn build_index_inner(root: &Path, source_paths: Vec<String>) -> Arc<Indexer> {
+async fn build_index_inner(
+    root: &Path,
+    source_paths: Vec<String>,
+    use_gradle: bool,
+) -> Arc<Indexer> {
     let idx = Arc::new(Indexer::new());
     if !source_paths.is_empty() {
         *idx.source_paths_raw.write().expect("source_paths lock") = source_paths;
@@ -185,6 +193,10 @@ async fn build_index_inner(root: &Path, source_paths: Vec<String>) -> Arc<Indexe
     Arc::clone(&idx)
         .index_workspace_full(root, Arc::new(NoopReporter))
         .await;
+    // If --gradle is enabled, parse Gradle configs and index source JARs.
+    if use_gradle {
+        idx.ensure_gradle_indexed(root);
+    }
     idx
 }
 
@@ -405,6 +417,62 @@ pub(crate) async fn run(args: CliArgs) {
                 );
             }
         }
+        Subcommand::GradleDeps => {
+            let root = resolve_root(args.root.as_deref());
+            let index = build_index_with_gradle(&root, false).await;
+            let deps = index.gradle_deps.read().expect("gradle_deps lock");
+            match deps.as_ref().and_then(|d| d.as_ref()) {
+                Some(gradle_deps) => {
+                    if json {
+                        let output = serde_json::json!({
+                            "project_root": gradle_deps.project_root.display().to_string(),
+                            "external": gradle_deps.external.iter().map(|d| serde_json::json!({
+                                "alias": d.alias,
+                                "group": d.group,
+                                "artifact": d.artifact,
+                                "version": d.version
+                            })).collect::<Vec<_>>(),
+                            "projects": gradle_deps.projects.iter().map(|p| serde_json::json!({
+                                "alias": p.alias,
+                                "module_path": p.module_path
+                            })).collect::<Vec<_>>()
+                        });
+                        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                    } else {
+                        println!("Project: {}", gradle_deps.project_root.display());
+                        if !gradle_deps.external.is_empty() {
+                            println!("\nExternal dependencies ({}):", gradle_deps.external.len());
+                            for dep in &gradle_deps.external {
+                                if dep.group.is_empty() {
+                                    println!("  {} (unresolved)", dep.alias);
+                                } else {
+                                    println!(
+                                        "  {} = {}:{}:{}",
+                                        dep.alias, dep.group, dep.artifact, dep.version
+                                    );
+                                }
+                            }
+                        }
+                        if !gradle_deps.projects.is_empty() {
+                            println!("\nProject dependencies ({}):", gradle_deps.projects.len());
+                            for proj in &gradle_deps.projects {
+                                println!("  {} -> {}", proj.alias, proj.module_path);
+                            }
+                        }
+                    }
+                }
+                None => {
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::json!({"error": "Not a Gradle project or no deps found"})
+                        );
+                    } else {
+                        println!("Not a Gradle project or no dependencies found.");
+                    }
+                }
+            }
+        }
         Subcommand::Find { name, filters } => {
             let root = resolve_root(args.root.as_deref());
             let filters = resolve_effective_relative(filters, absolute);
@@ -612,11 +680,12 @@ pub(crate) async fn run(args: CliArgs) {
             if imports {
                 let json = args.fmt == OutputFmt::Json;
                 let out = output.as_deref();
-                let index = crate::cli::run::build_index(
-                    &resolve_root_for_file(args.root.as_deref(), &file),
-                    false,
-                )
-                .await;
+                let root = resolve_root_for_file(args.root.as_deref(), &file);
+                let index = if args.gradle {
+                    crate::cli::run::build_index_with_gradle(&root, false).await
+                } else {
+                    crate::cli::run::build_index(&root, false).await
+                };
                 let engine = WorkspaceQueryEngine::new(index);
                 super::batch::run_batch_imports(&file, &engine, dry_run, apply, json, out);
             } else {
@@ -638,11 +707,12 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             if let Some(ref k) = kind {
                 let json = args.fmt == OutputFmt::Json;
-                let index = crate::cli::run::build_index(
-                    &resolve_root_for_file(args.root.as_deref(), &file),
-                    false,
-                )
-                .await;
+                let root = resolve_root_for_file(args.root.as_deref(), &file);
+                let index = if args.gradle {
+                    crate::cli::run::build_index_with_gradle(&root, false).await
+                } else {
+                    crate::cli::run::build_index(&root, false).await
+                };
                 let engine = WorkspaceQueryEngine::new(index);
                 super::insert::run_semantic_insert(
                     &file,

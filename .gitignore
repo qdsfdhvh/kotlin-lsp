@@ -13,3 +13,4 @@ progress.md
 # Legacy cache — migrated to .cache/kotlin-lsp
 .cache/
 .kotlin-lsp/
+tests/dogfood/projects/
