@@ -151,8 +151,8 @@ kotlin-lsp hover src/Foo.kt 42 10        # hover info at line 42, col 10
 kotlin-lsp complete src/Foo.kt 42 --dot  # completions after last '.' on line 42
 kotlin-lsp context src/Foo.kt 42 10      # one-stop: def + sig + doc + refs
 kotlin-lsp check src/Foo.kt              # syntax + import + deprecation diagnostics
-kotlin-lsp call-hierarchy src/Foo.kt 42 10  # incoming + outgoing call chain
-kotlin-lsp type-hierarchy Activity       # super/subtype tree
+kotlin-lsp call hierarchy src/Foo.kt 42 10  # incoming + outgoing call chain
+kotlin-lsp type hierarchy Activity       # super/subtype tree
 kotlin-lsp organize-imports src/Foo.kt   # sort, dedup, remove unused
 kotlin-lsp inject src/Foo.kt             # batch-resolve all type signatures
 kotlin-lsp code-action src/Foo.kt 42 10  # list applicable code actions
@@ -206,27 +206,9 @@ kotlin-lsp index-jars             # one-time: index library symbols
 
 ### CLI capabilities (primary surface)
 
-| Command | What it does |
-|---------|-------------|
-| `find` | Declaration search — qualified name, `--owner`, `--kind`, `--module`, `--source-set`, `--limit` |
-| `refs` | All references — same filters, plus `--explain` for provenance |
-| `hover` | Signature, visibility, KDoc, deprecated warning, data class props |
-| `complete` | Dot-completion, auto-import, scored ranking, stdlib |
-| `context` | One-stop: definition + signature + doc + reference count, `--expand` for chains |
-| `check` | Syntax errors, unused/duplicate imports, deprecation warnings, redundant vals |
-| `call-hierarchy` | Incoming (rg) + outgoing (CST walk) call chain |
-| `type-hierarchy` | Supertype/subtype tree (BFS) |
-| `organize-imports` | Sort, dedup, remove unused — CLI + LSP |
-| `inject` | Batch-resolve all type signatures in a file |
-| `code-action` | List/apply code actions from the command line |
-| `batch-imports` | Scan file for import candidates |
-| `new-file` | Generate file from template |
-| `cache stats` | Index cache diagnostics |
-| `benchmark` | Performance benchmarks |
-| `sources` | List auto-discovered source roots, `--explain` for provenance |
-| `extract-sources` | Unpack `*-sources.jar` from Gradle cache |
-| `index-jars` | Index library symbols from extracted sources |
+See **[docs/commands.md](docs/commands.md)** for the full command reference.
 
+### LSP capabilities (compatibility transport)
 ### LSP capabilities (compatibility transport)
 
 All CLI commands are also available as LSP handlers when the binary is launched
@@ -238,7 +220,7 @@ visual-only editor affordances that are maintained for compatibility.
 | `textDocument/definition` | `kotlin-lsp find` | |
 | `textDocument/typeDefinition` | &mdash; | Resolves `val x: Foo` → `Foo` |
 | `textDocument/declaration` | `kotlin-lsp find` | Delegates to definition |
-| `textDocument/implementation` | `kotlin-lsp type-hierarchy` | Transitive subtype lookup |
+| `textDocument/implementation` | `kotlin-lsp type hierarchy` | Transitive subtype lookup |
 | `textDocument/hover` | `kotlin-lsp hover` | |
 | `textDocument/completion` | `kotlin-lsp complete` | |
 | `textDocument/references` | `kotlin-lsp refs` | |
@@ -247,7 +229,7 @@ visual-only editor affordances that are maintained for compatibility.
 | `textDocument/rename` | &mdash; | Project-wide rename |
 | `textDocument/formatting` | &mdash; | Kotlin: ktfmt (default, native); ktlint via `--format-tool ktlint`. Java: google-java-format. Swift: swift-format |
 | `textDocument/rangeFormatting` | &mdash; | Clips format to requested range |
-| `textDocument/callHierarchy` | `kotlin-lsp call-hierarchy` | |
+| `textDocument/callHierarchy` | `kotlin-lsp call hierarchy` | |
 | `textDocument/inlayHint` | &mdash; | Configurable inline type hints |
 | `textDocument/signatureHelp` | &mdash; | Editor popup (use `hover` or `context` in CLI) |
 | `textDocument/semanticTokens` | `kotlin-lsp tokens` | Syntax highlighting — editor only |
@@ -265,18 +247,3 @@ visual-only editor affordances that are maintained for compatibility.
 | **Swift** | `class`, `struct`, `enum`, `protocol`, `func`, `let`, `var`, `typealias`, `extension`, `init`, enum cases |
 
 ---
-
-## Editor setup
-
-`kotlin-lsp` speaks LSP over stdio. Configure your editor to launch the
-`kotlin-lsp` binary (no arguments). See [contrib/](contrib/) for example configs:
-
-| Editor | File |
-|--------|------|
-| **Neovim** | `contrib/nvim-kotlin-lsp.lua` |
-| **Zed** | `contrib/zed-kotlin-lsp.json` |
-| **Helix** | `contrib/helix-kotlin-lsp.toml` |
-| **VS Code** | (manual `settings.json`) |
-
-Once connected, LSP features work immediately — `rg` fallback handles symbols
-while the index builds in the background.
