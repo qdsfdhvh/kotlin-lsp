@@ -41,7 +41,6 @@ and place the binary on your `PATH`.
 `kotlin-lsp` works standalone — no editor, no daemon.
 
 - **[docs/commands.md](docs/commands.md)** — full command reference, examples, flags
-- **[docs/lsp.md](docs/lsp.md)** — LSP handler ↔ CLI mapping
 
 ---
 
