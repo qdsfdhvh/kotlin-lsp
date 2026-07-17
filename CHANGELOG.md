@@ -1,4 +1,41 @@
-## 0.27.0 (2026-07-16)
+## 0.28.0 (2026-07-17)
+
+### feat(gradle): shallow dependency parsing without daemon
+
+- New `src/gradle/` module: TOML-based `libs.versions.toml` + tree-sitter `build.gradle.kts` parsing.
+- `--gradle` flag enables on-demand source JAR indexing for external dependencies.
+- `kotlin-lsp gradle-deps` subcommand to inspect parsed dependencies.
+- Gradle cache source JAR discovery (`~/.gradle/caches/modules-2/files-2.1/`).
+
+### refactor(cli): group overlapping subcommands into parent commands
+
+New grouped commands. Old names still work with deprecation warnings.
+
+| New | Old (deprecated) |
+|-----|-------------------|
+| `kotlin-lsp call hierarchy <file> <line> <col>` | `callers`, `callees`, `call-hierarchy` |
+| `kotlin-lsp type hierarchy <name>` | `implementations`, `subclasses`, `type-hierarchy` |
+| `kotlin-lsp module [list\|deps\|files\|packages]` | `modules`, `module-deps`, `module-files`, `package-deps` |
+| `kotlin-lsp android [activities\|composables]` | `android-activities`, `android-composables` |
+
+### fix(skill): correct find --fuzzy → search in bundled SKILL.md (#172)
+
+### fix(search): add stop words + fix stemming false positives (#168)
+
+### docs: documentation overhaul
+
+- README rewritten (55 lines, zero duplication).
+- New `docs/commands.md` — authoritative command reference.
+- Removed `docs/editors.md`, `docs/lsp.md` — agent-first tooling.
+- Updated `docs/comparison-with-official.md`, `docs/architecture.md`.
+- AGENTS.md CLI table updated for new grouped commands.
+- SKILL.md fully rewritten with new command names and links.
+
+### chore: housekeeping
+
+- Removed `contrib/` — legacy IDE extensions and Python wrappers.
+- Updated LICENSE copyright.
+- Removed dead code from `call_graph.rs`, `inheritance.rs`.
 
 ### feat: semantic search + AI summary cache + SuperKind distinction (#166 #167)
 
