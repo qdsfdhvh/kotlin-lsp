@@ -9,7 +9,9 @@ use crate::indexer::{Indexer, NoopReporter};
 use crate::query::engine::WorkspaceQueryEngine;
 use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
 
-use super::args::{AndroidSub, CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand};
+use super::args::{
+    AndroidSub, CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand, TypeSub,
+};
 use super::complete::completions_at;
 use super::hover::hover_at;
 use super::output::{print_results, CliResult, PrintOpts};
@@ -1261,21 +1263,17 @@ pub(crate) async fn run(args: CliArgs) {
             }
         }
 
-        Subcommand::TypeHierarchy {
-            name,
-            subtypes,
-            supertypes,
-            graph,
-            depth,
-        } => {
-            run_type_hierarchy(&name, subtypes, supertypes, graph, depth, json).await;
-        }
-        Subcommand::Implementations { name, depth } => {
-            crate::cli::inheritance::run_implementations(&name, depth, json).await;
-        }
-        Subcommand::Subclasses { name, depth } => {
-            crate::cli::inheritance::run_subclasses(&name, depth, json).await;
-        }
+        Subcommand::Type { sub } => match sub {
+            TypeSub::Hierarchy {
+                name,
+                subtypes,
+                supertypes,
+                graph,
+                depth,
+            } => {
+                run_type_hierarchy(&name, subtypes, supertypes, graph, depth, json).await;
+            }
+        },
         Subcommand::ImportsOf { name } => {
             crate::cli::symbol_queries::run_imports_of(&name, json);
         }

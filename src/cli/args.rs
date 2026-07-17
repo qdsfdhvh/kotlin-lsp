@@ -160,23 +160,8 @@ pub(crate) enum Subcommand {
         outgoing: bool,
     },
     /// Type hierarchy: find subtypes or supertypes.
-    /// Use --depth N for recursive tree output with --graph.
-    TypeHierarchy {
-        name: String,
-        subtypes: bool,
-        supertypes: bool,
-        graph: bool,
-        depth: u32,
-    },
-    /// Find all implementations of an interface/abstract class.
-    Implementations {
-        name: String,
-        depth: u32,
-    },
-    /// Find all subclasses of a class.
-    Subclasses {
-        name: String,
-        depth: u32,
+    Type {
+        sub: TypeSub,
     },
     /// Find files that import a given symbol.
     ImportsOf {
@@ -344,6 +329,18 @@ pub(crate) enum ModuleSub {
 pub(crate) enum AndroidSub {
     Activities,
     Composables { file: PathBuf },
+}
+
+/// Sub-command within the `type` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum TypeSub {
+    Hierarchy {
+        name: String,
+        subtypes: bool,
+        supertypes: bool,
+        graph: bool,
+        depth: u32,
+    },
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -1102,20 +1099,51 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             })
         }
         "implementations" => {
+            eprintln!("[WARN] 'implementations' is deprecated; use 'type hierarchy --subtypes'");
             let name = positionals
                 .first()
                 .cloned()
                 .ok_or("implementations requires a NAME argument")?;
             let depth = positionals.get(1).and_then(|d| d.parse().ok()).unwrap_or(1);
-            Ok(Subcommand::Implementations { name, depth })
+            Ok(Subcommand::Type {
+                sub: TypeSub::Hierarchy {
+                    name,
+                    subtypes: true,
+                    supertypes: false,
+                    graph: false,
+                    depth,
+                },
+            })
         }
         "subclasses" => {
+            eprintln!("[WARN] 'subclasses' is deprecated; use 'type hierarchy --subtypes'");
             let name = positionals
                 .first()
                 .cloned()
                 .ok_or("subclasses requires a NAME argument")?;
             let depth = positionals.get(1).and_then(|d| d.parse().ok()).unwrap_or(1);
-            Ok(Subcommand::Subclasses { name, depth })
+            Ok(Subcommand::Type {
+                sub: TypeSub::Hierarchy {
+                    name,
+                    subtypes: true,
+                    supertypes: false,
+                    graph: false,
+                    depth,
+                },
+            })
+        }
+        "type" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "hierarchy" => {
+                    let remaining = positionals[1..].to_vec();
+                    build_type_subcommand(remaining, type_subtypes, type_supertypes, type_graph)
+                }
+                other => Err(format!(
+                    "unknown type subcommand '{}'. Available: hierarchy",
+                    other
+                )),
+            }
         }
         "imports-of" => {
             let name = positionals
@@ -1155,7 +1183,8 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }
         "summary-cache" => Ok(Subcommand::SummaryCacheStats),
         "type-hierarchy" => {
-            build_type_hierarchy_subcommand(positionals, type_subtypes, type_supertypes, type_graph)
+            eprintln!("[WARN] 'type-hierarchy' is deprecated; use 'type hierarchy'");
+            build_type_subcommand(positionals, type_subtypes, type_supertypes, type_graph)
         }
         "format" => {
             if positionals.is_empty() {
@@ -1313,27 +1342,28 @@ fn parse_file_line_col(
     Ok((file, line, col))
 }
 
-fn build_type_hierarchy_subcommand(
+fn build_type_subcommand(
     positionals: Vec<String>,
     type_subtypes: bool,
     type_supertypes: bool,
     type_graph: bool,
 ) -> Result<Subcommand, String> {
     let mut name: Option<String> = None;
-
     for arg in &positionals {
         if name.is_none() {
             name = Some(arg.clone());
         }
     }
-    let name = name.ok_or("type-hierarchy requires a NAME argument")?;
+    let name = name.ok_or("type hierarchy requires a NAME argument")?;
     let subtypes = type_subtypes || !type_supertypes;
-    Ok(Subcommand::TypeHierarchy {
-        name,
-        subtypes,
-        supertypes: type_supertypes,
-        graph: type_graph,
-        depth: 1,
+    Ok(Subcommand::Type {
+        sub: TypeSub::Hierarchy {
+            name,
+            subtypes,
+            supertypes: type_supertypes,
+            graph: type_graph,
+            depth: 1,
+        },
     })
 }
 
@@ -1372,6 +1402,7 @@ fn is_subcommand(value: &str) -> bool {
             | "organize-imports"
             | "context"
             | "call-hierarchy"
+            | "type"
             | "type-hierarchy"
             | "benchmark"
             | "skills"
