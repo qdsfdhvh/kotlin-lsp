@@ -247,18 +247,3 @@ visual-only editor affordances that are maintained for compatibility.
 | **Swift** | `class`, `struct`, `enum`, `protocol`, `func`, `let`, `var`, `typealias`, `extension`, `init`, enum cases |
 
 ---
-
-## Editor setup
-
-`kotlin-lsp` speaks LSP over stdio. Configure your editor to launch the
-`kotlin-lsp` binary (no arguments). See [contrib/](contrib/) for example configs:
-
-| Editor | File |
-|--------|------|
-| **Neovim** | `contrib/nvim-kotlin-lsp.lua` |
-| **Zed** | `contrib/zed-kotlin-lsp.json` |
-| **Helix** | `contrib/helix-kotlin-lsp.toml` |
-| **VS Code** | (manual `settings.json`) |
-
-Once connected, LSP features work immediately — `rg` fallback handles symbols
-while the index builds in the background.
