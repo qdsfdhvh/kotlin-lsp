@@ -10,7 +10,7 @@ use crate::query::engine::WorkspaceQueryEngine;
 use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
 
 use super::args::{
-    AndroidSub, CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand, TypeSub,
+    AndroidSub, CallSub, CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand, TypeSub,
 };
 use super::complete::completions_at;
 use super::hover::hover_at;
@@ -1141,22 +1141,18 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             run_context(&file, line, col, json, expand).await;
         }
-        Subcommand::Callers {
-            file,
-            line,
-            col,
-            depth,
-        } => {
-            crate::cli::call_graph::run_callers(&file, line, col, depth, json).await;
-        }
-        Subcommand::Callees {
-            file,
-            line,
-            col,
-            depth,
-        } => {
-            crate::cli::call_graph::run_callees(&file, line, col, depth, json).await;
-        }
+        Subcommand::Call { sub } => match sub {
+            CallSub::Hierarchy {
+                file,
+                line,
+                col,
+                incoming,
+                outgoing,
+                depth,
+            } => {
+                run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
+            }
+        },
         Subcommand::Impact { file, line, col } => {
             crate::cli::impact::run_impact(&file, line, col, json).await;
         }
@@ -1201,15 +1197,6 @@ pub(crate) async fn run(args: CliArgs) {
                 crate::cli::android::run_android_composables(&file, json);
             }
         },
-        Subcommand::CallHierarchy {
-            file,
-            line,
-            col,
-            incoming,
-            outgoing,
-        } => {
-            run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
-        }
         Subcommand::SymbolGraph => {
             crate::cli::symbol_graph::run_symbol_graph(json).await;
         }

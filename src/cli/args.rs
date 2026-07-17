@@ -152,12 +152,8 @@ pub(crate) enum Subcommand {
         expand: usize,
     },
     /// Call hierarchy: find callers (--incoming) or callees (--outgoing).
-    CallHierarchy {
-        file: PathBuf,
-        line: u32,
-        col: u32,
-        incoming: bool,
-        outgoing: bool,
+    Call {
+        sub: CallSub,
     },
     /// Type hierarchy: find subtypes or supertypes.
     Type {
@@ -174,20 +170,6 @@ pub(crate) enum Subcommand {
     /// Full-text search over symbol signatures/KDoc.
     Docs {
         query: String,
-    },
-    /// Call graph: find who calls this function (tree output).
-    Callers {
-        file: PathBuf,
-        line: u32,
-        col: u32,
-        depth: u32,
-    },
-    /// Call graph: find functions called by this function (tree output).
-    Callees {
-        file: PathBuf,
-        line: u32,
-        col: u32,
-        depth: u32,
     },
     /// Impact analysis: risk score, refs, callers for a symbol.
     Impact {
@@ -339,6 +321,19 @@ pub(crate) enum TypeSub {
         subtypes: bool,
         supertypes: bool,
         graph: bool,
+        depth: u32,
+    },
+}
+
+/// Sub-command within the `call` parent command.
+#[derive(Debug, Clone)]
+pub(crate) enum CallSub {
+    Hierarchy {
+        file: PathBuf,
+        line: u32,
+        col: u32,
+        incoming: bool,
+        outgoing: bool,
         depth: u32,
     },
 }
@@ -765,31 +760,41 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             )?),
         }),
         "callers" => {
+            eprintln!("[WARN] 'callers' is deprecated; use 'call hierarchy --incoming'");
             let depth = positionals
                 .first()
                 .and_then(|s| s.parse::<u32>().ok())
                 .filter(|d| *d > 0)
                 .unwrap_or(1);
             let (file, line, col) = parse_file_line_col(positionals, "callers")?;
-            Ok(Subcommand::Callers {
-                file,
-                line,
-                col,
-                depth,
+            Ok(Subcommand::Call {
+                sub: CallSub::Hierarchy {
+                    file,
+                    line,
+                    col,
+                    incoming: true,
+                    outgoing: false,
+                    depth,
+                },
             })
         }
         "callees" => {
+            eprintln!("[WARN] 'callees' is deprecated; use 'call hierarchy --outgoing'");
             let depth = positionals
                 .first()
                 .and_then(|s| s.parse::<u32>().ok())
                 .filter(|d| *d > 0)
                 .unwrap_or(1);
             let (file, line, col) = parse_file_line_col(positionals, "callees")?;
-            Ok(Subcommand::Callees {
-                file,
-                line,
-                col,
-                depth,
+            Ok(Subcommand::Call {
+                sub: CallSub::Hierarchy {
+                    file,
+                    line,
+                    col,
+                    incoming: false,
+                    outgoing: true,
+                    depth,
+                },
             })
         }
         "impact" => {
@@ -1086,17 +1091,41 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             })
         }
         "call-hierarchy" => {
-            // call-hierarchy FILE LINE COL [--incoming] [--outgoing]
-            // Flags are currently not parsed via ParsedCliFlags; default to both.
+            eprintln!("[WARN] 'call-hierarchy' is deprecated; use 'call hierarchy'");
             let (file, line, col) = parse_file_line_col(positionals, "call-hierarchy")?;
-            // For now, show both: use the verbose flag approach.
-            Ok(Subcommand::CallHierarchy {
-                file,
-                line,
-                col,
-                incoming: true,
-                outgoing: true,
+            Ok(Subcommand::Call {
+                sub: CallSub::Hierarchy {
+                    file,
+                    line,
+                    col,
+                    incoming: true,
+                    outgoing: true,
+                    depth: 1,
+                },
             })
+        }
+        "call" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "hierarchy" => {
+                    let remaining = positionals[1..].to_vec();
+                    let (file, line, col) = parse_file_line_col(remaining, "call hierarchy")?;
+                    Ok(Subcommand::Call {
+                        sub: CallSub::Hierarchy {
+                            file,
+                            line,
+                            col,
+                            incoming: true,
+                            outgoing: true,
+                            depth: 1,
+                        },
+                    })
+                }
+                other => Err(format!(
+                    "unknown call subcommand '{}'. Available: hierarchy",
+                    other
+                )),
+            }
         }
         "implementations" => {
             eprintln!("[WARN] 'implementations' is deprecated; use 'type hierarchy --subtypes'");
@@ -1401,6 +1430,7 @@ fn is_subcommand(value: &str) -> bool {
             | "batch"
             | "organize-imports"
             | "context"
+            | "call"
             | "call-hierarchy"
             | "type"
             | "type-hierarchy"
