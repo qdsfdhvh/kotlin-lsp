@@ -36,7 +36,7 @@ Query is about Kotlin/Java/Swift symbols?
    └─ Full project snapshot → kotlin-lsp snapshot / symbol-graph
 ```
 
-Full command reference → https://github.com/qdsfdhvh/kotlin-lsp/blob/main/docs/commands.md
+Full command reference → references/commands.md
 
 ## How it saves tokens
 
@@ -152,7 +152,7 @@ kotlin-lsp doctor [--json]
 | Benchmark | `kotlin-lsp benchmark` |
 | Agent skills | `kotlin-lsp skills list \| read <name>` |
 
-Full command reference → https://github.com/qdsfdhvh/kotlin-lsp/blob/main/docs/commands.md
+Full command reference → references/commands.md
 
 ## Performance modes
 
