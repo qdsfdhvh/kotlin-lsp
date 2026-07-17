@@ -90,9 +90,9 @@ test_project() {
     # ── index ──
     echo -n "  index... "
     local out syms
-    out=$(cd "$dir" && XDG_CACHE_HOME="$CACHE" "$BIN" index 2>&1)
-    if echo "$out" | grep -q "Index ready"; then
-        syms=$(echo "$out" | grep "Index ready" | grep -oE '[0-9]+ symbols')
+    out=$(cd "$dir" && XDG_CACHE_HOME="$CACHE" "$BIN" index --verbose 2>&1)
+    if echo "$out" | grep -q "Done:"; then
+        syms=$(echo "$out" | grep "Done:" | grep -oE '[0-9]+ files, [0-9]+ symbols')
         echo "$syms"
     else
         echo "FAILED"; echo "$out" | tail -3
