@@ -240,7 +240,7 @@ fn find_composables(
                         .or_else(|| trimmed.strip_prefix("val "))
                     {
                         if let Some(ident) = rest
-                            .split(|c: char| c == ':' || c == '=' || c == ' ')
+                            .split(&[':', '=', ' '])
                             .next()
                         {
                             if !ident.is_empty() && !ident.starts_with("by") {
@@ -285,7 +285,7 @@ fn parse_preview_params(src: &str, start_byte: usize, end_byte: usize) -> Previe
         width_dp: None,
         height_dp: None,
     };
-    for part in text.split(|c: char| c == ',' || c == '(' || c == ')') {
+    for part in text.split(&[',', '(', ')']) {
         let kv: Vec<&str> = part.splitn(2, '=').collect();
         if kv.len() != 2 {
             continue;
