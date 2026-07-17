@@ -865,12 +865,10 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                         sub: ModuleSub::Packages { package },
                     })
                 }
-                other => {
-                    Err(format!(
-                        "unknown module subcommand '{}'. Available: list, deps, files, packages",
-                        other
-                    ))
-                }
+                other => Err(format!(
+                    "unknown module subcommand '{}'. Available: list, deps, files, packages",
+                    other
+                )),
             }
         }
         "summarize" => {
