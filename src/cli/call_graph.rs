@@ -1,20 +1,15 @@
-//! Call graph CLI commands: `callers` and `callees`.
+//! Call graph helpers — tree-building utilities preserved for potential reuse.
 //!
-//! Unlike the existing `call-hierarchy` command (which targets LSP protocol shapes),
-//! these commands return **tree**-structured output optimised for AI agents:
-//! depth-limited call chains instead of flat lists of locations.
+//! The `callers` and `callees` CLI commands were merged into `call hierarchy`
+//! (see Phase 42 CLI reorganization). These internal helpers were moved here
+//! and are kept for tests; the dead top-level functions were removed.
 
 use std::collections::HashSet;
-use std::path::Path;
 use std::sync::Arc;
 
-use tower_lsp::lsp_types::Url;
-
-use crate::indexer::Indexer;
-
-// ── Output types ────────────────────────────────────────────────────────────
-
+/// Internal type for callee tree building.
 #[derive(Debug, Clone, serde::Serialize)]
+#[allow(dead_code)]
 struct CallNode {
     name: String,
     kind: String,
@@ -25,119 +20,7 @@ struct CallNode {
     children: Vec<CallNode>,
 }
 
-// ── Entry points ────────────────────────────────────────────────────────────
-
-pub(crate) async fn run_callers(file: &Path, line: u32, col: u32, depth: u32, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, file);
-    let index = crate::cli::run::build_index(&root, false).await;
-    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
-    let uri = Url::from_file_path(&abs_file).expect("valid file path");
-
-    let word = extract_word_at_position(&index, &uri, line, col);
-    if word.is_empty() {
-        eprintln!("No symbol at cursor");
-        std::process::exit(1);
-    }
-
-    let line = normalize_line_1(line);
-    let root_node = CallNode {
-        name: word.clone(),
-        kind: "function".to_string(),
-        file: file.display().to_string(),
-        line,
-        col,
-        children: find_callers_tree(&word, &index, &root, depth, &mut HashSet::new()),
-    };
-
-    output_call_tree(&root_node, json);
-}
-
-pub(crate) async fn run_callees(file: &Path, line: u32, col: u32, depth: u32, json: bool) {
-    use crate::indexer::SymbolGraph;
-    let root = crate::cli::run::resolve_root_for_file(None, file);
-    let index = crate::cli::run::build_index(&root, false).await;
-    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
-    let uri = Url::from_file_path(&abs_file).expect("valid file path");
-
-    let word = extract_word_at_position(&index, &uri, line, col);
-    if word.is_empty() {
-        eprintln!("No symbol at cursor");
-        std::process::exit(1);
-    }
-
-    let graph = SymbolGraph::new(&index);
-    let line = normalize_line_1(line);
-    let root_node = CallNode {
-        name: word.clone(),
-        kind: "function".to_string(),
-        file: file.display().to_string(),
-        line,
-        col,
-        children: find_callees_from_graph(&word, &graph, &index, depth, &mut HashSet::new()),
-    };
-    output_call_tree(&root_node, json);
-}
-
-// ── Caller tree building (edge-index based) ─────────────────────────────────
-
-/// Find callers using the pre-built call edge index.
-/// The edge index maps callee_name → [(caller_file, caller_name)],
-/// built during workspace indexing. No ripgrep or tree-sitter re-parse needed.
-fn find_callers_tree(
-    name: &str,
-    index: &Arc<Indexer>,
-    _project_root: &Path,
-    depth: u32,
-    visited: &mut HashSet<String>,
-) -> Vec<CallNode> {
-    if depth == 0 || visited.contains(name) {
-        return vec![];
-    }
-    visited.insert(name.to_string());
-
-    let mut children = Vec::new();
-    if let Some(entries) = index.call_edges.get(name) {
-        let next_depth = if depth == 1 { 0 } else { depth - 1 };
-        for (caller_file, caller_name) in entries.iter() {
-            let child = CallNode {
-                name: caller_name.clone(),
-                kind: "function".to_string(),
-                file: caller_file.clone(),
-                line: 0,
-                col: 0,
-                children: find_callers_tree(caller_name, index, _project_root, next_depth, visited),
-            };
-            children.push(child);
-        }
-    }
-    children
-}
-
 #[allow(dead_code)]
-/// Extract the callee name from a `call_expression` node.
-/// Returns the simple identifier or the last segment of a navigation expression.
-fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
-    let mut cursor = call_expr.walk();
-    for child in call_expr.children(&mut cursor) {
-        match child.kind() {
-            "simple_identifier" | "identifier" => {
-                return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-            }
-            "navigation_expression" => {
-                let mut sub = child.walk();
-                let children: Vec<_> = child.children(&mut sub).collect();
-                if let Some(last) = children.last() {
-                    let raw = last.utf8_text(source.as_bytes()).unwrap_or("");
-                    return raw.trim_start_matches('.').to_string();
-                }
-            }
-            _ => {}
-        }
-    }
-    String::new()
-}
-
-/// Build a callee tree using the pre-built call edge index (graph-based, no re-parse).
 fn find_callees_from_graph(
     name: &str,
     graph: &crate::indexer::SymbolGraph,
@@ -179,6 +62,29 @@ fn find_callees_from_graph(
             }
         })
         .collect()
+}
+
+#[allow(dead_code)]
+/// Extract the callee name from a `call_expression` node.
+fn extract_callee_name(call_expr: &tree_sitter::Node, source: &str) -> String {
+    let mut cursor = call_expr.walk();
+    for child in call_expr.children(&mut cursor) {
+        match child.kind() {
+            "simple_identifier" | "identifier" => {
+                return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+            }
+            "navigation_expression" => {
+                let mut sub = child.walk();
+                let children: Vec<_> = child.children(&mut sub).collect();
+                if let Some(last) = children.last() {
+                    let raw = last.utf8_text(source.as_bytes()).unwrap_or("");
+                    return raw.trim_start_matches('.').to_string();
+                }
+            }
+            _ => {}
+        }
+    }
+    String::new()
 }
 
 #[allow(dead_code)]
@@ -240,29 +146,6 @@ fn collect_callee_names(decl: &tree_sitter::Node, source: &str) -> Vec<String> {
     names
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-fn extract_word_at_position(index: &Arc<Indexer>, uri: &Url, line: u32, col: u32) -> String {
-    let lines = index.mem_lines_for(uri.as_str());
-    lines
-        .as_ref()
-        .and_then(|l| {
-            let li = line.saturating_sub(1) as usize;
-            l.get(li).map(|ln| {
-                crate::StrExt::word_at_utf16_col(ln.as_str(), col.saturating_sub(1) as usize)
-            })
-        })
-        .unwrap_or_default()
-}
-
-/// Normalise a 1-based line to ensure it's non-zero (default to 1).
-fn normalize_line_1(line: u32) -> u32 {
-    if line == 0 {
-        1
-    } else {
-        line
-    }
-}
 #[allow(dead_code)]
 fn is_keyword(s: &str) -> bool {
     matches!(
@@ -298,40 +181,6 @@ fn is_keyword(s: &str) -> bool {
     )
 }
 
-// ── Output ──────────────────────────────────────────────────────────────────
-
-fn output_call_tree(root: &CallNode, json: bool) {
-    if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(root).expect("serialize JSON")
-        );
-    } else {
-        print_call_tree(root, 0);
-    }
-}
-
-fn print_call_tree(node: &CallNode, indent: usize) {
-    let prefix = "  ".repeat(indent);
-    println!(
-        "{prefix}- {name} ({kind}) @ {file}:{line}:{col}",
-        name = node.name,
-        kind = node.kind,
-        file = node.file,
-        line = node.line,
-        col = node.col,
-    );
-    for child in &node.children {
-        print_call_tree(child, indent + 1);
-    }
-}
-
-// ── Tests ───────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-#[path = "call_graph_tests.rs"]
-mod tests;
-
 #[allow(dead_code)]
 fn extract_function_name_and_pos(
     decl: &tree_sitter::Node,
@@ -350,3 +199,9 @@ fn extract_function_name_and_pos(
     }
     None
 }
+
+// ── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+#[path = "call_graph_tests.rs"]
+mod tests;

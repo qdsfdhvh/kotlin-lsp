@@ -1148,7 +1148,7 @@ pub(crate) async fn run(args: CliArgs) {
                 col,
                 incoming,
                 outgoing,
-                depth,
+                depth: _depth,
             } => {
                 run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
             }
