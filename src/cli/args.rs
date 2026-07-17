@@ -866,10 +866,10 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     })
                 }
                 other => {
-                    return Err(format!(
+                    Err(format!(
                         "unknown module subcommand '{}'. Available: list, deps, files, packages",
                         other
-                    ));
+                    ))
                 }
             }
         }
