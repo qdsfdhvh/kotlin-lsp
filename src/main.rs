@@ -1,6 +1,7 @@
 #![warn(unreachable_pub)]
 mod backend;
 mod cli;
+mod gradle;
 mod indexer;
 mod inlay_hints;
 mod lines_ext;
