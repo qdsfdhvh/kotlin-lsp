@@ -1,18 +1,4 @@
-//! Parser for Gradle configuration files — zero external deps beyond `toml`.
-//!
-//! Three file types are parsed:
-//!
-//! 1. **libs.versions.toml** — TOML; two library formats:
-//!    - Rich: `lib = { module = "g:a", version.ref = "v" }`
-//!    - Simple: `lib = "g:a:v"`
-//!
-//! 2. **build.gradle.kts** — Kotlin DSL; dependency references:
-//!    - `implementation(libs.xxx.yyy)` — catalog deps
-//!    - `implementation(projects.xxx)` — project deps
-//!    - `implementation("g:a:v")` — literal deps
-//!
-//! 3. **settings.gradle.kts** — Kotlin DSL; module includes:
-//!    - `include(":core:analytics")` — maps to `projects.core.analytics`
+//! Parser for Gradle configuration files.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -21,15 +7,12 @@ use super::{ExternalDep, GradleDeps, ProjectDep};
 
 // ── TOML version catalog ────────────────────────────────────────────────
 
-/// Parse `libs.versions.toml` and return the `[versions]` section as a
-/// name → value map. Used to resolve `version.ref` in library definitions.
+#[allow(dead_code)] // used in tests
 pub(crate) fn parse_version_catalog(path: &Path) -> Result<HashMap<String, String>, String> {
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let doc: toml::Table = toml::from_str(&content).map_err(|e| format!("parse toml: {e}"))?;
-
     let mut versions = HashMap::new();
-
     if let Some(t) = doc.get("versions").and_then(|v| v.as_table()) {
         for (k, v) in t {
             if let Some(s) = v.as_str() {
@@ -37,29 +20,74 @@ pub(crate) fn parse_version_catalog(path: &Path) -> Result<HashMap<String, Strin
             }
         }
     }
-
     Ok(versions)
 }
 
-// (parse_libraries_toml — removed as currently unused.
-//  Restore from git history when full [libraries] section parsing is needed.)
+/// Map catalog alias (e.g. "libs.kotlinx.coroutines") → (group, artifact, version).
+pub(crate) fn resolve_lib_map(
+    libs: &toml::Table,
+    doc: &toml::Table,
+) -> HashMap<String, (String, String, String)> {
+    let versions: HashMap<&str, &str> = doc
+        .get("versions")
+        .and_then(|v| v.as_table())
+        .map(|t| {
+            t.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.as_str(), s)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut map = HashMap::new();
+    for (alias, value) in libs {
+        let full_alias = format!("libs.{alias}");
+        match value {
+            toml::Value::String(s) => {
+                if let Some((g, a, v)) = split_gav(s) {
+                    map.insert(full_alias, (g.to_string(), a.to_string(), v.to_string()));
+                }
+            }
+            toml::Value::Table(t) => {
+                let module = t.get("module").and_then(|v| v.as_str()).unwrap_or("");
+                let version = t
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| {
+                        // version.ref creates a nested { ref = "..." } table in TOML
+                        t.get("version")
+                            .and_then(|v| v.as_table())
+                            .and_then(|vt| vt.get("ref"))
+                            .and_then(|v| v.as_str())
+                            .or_else(|| t.get("version.ref").and_then(|v| v.as_str()))
+                    })
+                    .and_then(|r| versions.get(r).copied());
+                if let (Some(v), Some((g, a))) = (version, parse_module(module)) {
+                    map.insert(full_alias, (g.to_string(), a.to_string(), v.to_string()));
+                }
+            }
+            _ => {}
+        }
+    }
+    map
+}
+
+fn parse_module(module: &str) -> Option<(&str, &str)> {
+    let mut parts = module.splitn(2, ':');
+    Some((parts.next()?, parts.next()?)).filter(|(g, a)| !g.is_empty() && !a.is_empty())
+}
 
 fn split_gav(s: &str) -> Option<(&str, &str, &str)> {
     let mut parts = s.splitn(3, ':');
-    let group = parts.next()?;
-    let artifact = parts.next()?;
-    let version = parts.next()?;
-    if group.is_empty() || artifact.is_empty() || version.is_empty() {
+    let g = parts.next()?;
+    let a = parts.next()?;
+    let v = parts.next()?;
+    if g.is_empty() || a.is_empty() || v.is_empty() {
         None
     } else {
-        Some((group, artifact, version))
+        Some((g, a, v))
     }
 }
 
-// (parse_gav — removed as currently unused together with parse_libraries_toml.
-//  Restore from git history when needed.)
-
-// ── build.gradle.kts extraction (string-scan, no regex) ────────────────
+// ── build.gradle.kts extraction ────────────────────────────────────────
 
 const DEP_CONFIGS: &[&str] = &[
     "implementation(",
@@ -70,26 +98,23 @@ const DEP_CONFIGS: &[&str] = &[
     "debugImplementation(",
 ];
 
-/// Extract all `libs.xxx.yyy` references from dependency calls in content.
 fn scan_catalog_refs(content: &str) -> Vec<String> {
     let mut refs = Vec::new();
     let mut search_from = 0;
     while let Some(pos) = content[search_from..].find("libs.") {
         let abs = search_from + pos;
-        // Check this "libs." appears inside a dep call
-        if let Some(before) = content[..abs].rfind('(') {
-            let slice = &content[before..abs];
-            if DEP_CONFIGS.iter().any(|c| slice.contains(c)) {
-                // Extract "libs.xxx.yyy" up to next `)` or non-word char
-                let start = abs + "libs.".len();
-                let end = content[start..]
-                    .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
-                    .map(|p| start + p)
-                    .unwrap_or(content.len());
-                let alias = format!("libs.{}", &content[start..end]);
-                if alias.len() > "libs.".len() {
-                    refs.push(alias);
-                }
+        // Look for a dep config within 80 chars before the ref
+        let window = abs.saturating_sub(80)..abs;
+        let preceding = &content[window];
+        if DEP_CONFIGS.iter().any(|c| preceding.contains(c)) {
+            let start = abs + "libs.".len();
+            let end = content[start..]
+                .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+                .map(|p| start + p)
+                .unwrap_or(content.len());
+            let alias = format!("libs.{}", &content[start..end]);
+            if alias.len() > "libs.".len() {
+                refs.push(alias);
             }
         }
         search_from = abs + 1;
@@ -97,25 +122,22 @@ fn scan_catalog_refs(content: &str) -> Vec<String> {
     refs
 }
 
-/// Extract all `projects.xxx.yyy` references from dependency calls.
 fn scan_project_refs(content: &str) -> Vec<String> {
     let mut refs = Vec::new();
     let mut search_from = 0;
     while let Some(pos) = content[search_from..].find("projects.") {
         let abs = search_from + pos;
-        // Only match when "projects." is immediately after a "(" and preceded by a dep config
-        if let Some(before) = content[..abs].rfind('(') {
-            let slice = &content[before..abs];
-            if DEP_CONFIGS.iter().any(|c| slice.contains(c)) {
-                let start = abs + "projects.".len();
-                let end = content[start..]
-                    .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
-                    .map(|p| start + p)
-                    .unwrap_or(content.len());
-                let alias = format!("projects.{}", &content[start..end]);
-                if alias.len() > "projects.".len() {
-                    refs.push(alias);
-                }
+        let window = abs.saturating_sub(80)..abs;
+        let preceding = &content[window];
+        if DEP_CONFIGS.iter().any(|c| preceding.contains(c)) {
+            let start = abs + "projects.".len();
+            let end = content[start..]
+                .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+                .map(|p| start + p)
+                .unwrap_or(content.len());
+            let alias = format!("projects.{}", &content[start..end]);
+            if alias.len() > "projects.".len() {
+                refs.push(alias);
             }
         }
         search_from = abs + 1;
@@ -123,7 +145,6 @@ fn scan_project_refs(content: &str) -> Vec<String> {
     refs
 }
 
-/// Extract literal `implementation("g:a:v")` strings.
 fn scan_literal_deps(content: &str) -> Vec<String> {
     let mut refs = Vec::new();
     for config in DEP_CONFIGS {
@@ -150,7 +171,6 @@ pub(crate) fn extract_deps_from_build(
     _catalog: &HashMap<String, String>,
     deps: &mut GradleDeps,
 ) {
-    // Catalog deps
     for alias in scan_catalog_refs(content) {
         deps.external.push(ExternalDep {
             alias,
@@ -159,22 +179,17 @@ pub(crate) fn extract_deps_from_build(
             version: String::new(),
         });
     }
-
-    // Project deps
     for alias in scan_project_refs(content) {
         deps.projects.push(ProjectDep {
             alias,
             module_path: String::new(),
         });
     }
-
-    // Literal deps
     for alias in scan_literal_deps(content) {
         let gav_str = alias.strip_prefix("literal:").unwrap_or(&alias);
-        let alias_clone = alias.clone();
         if let Some((group, artifact, version)) = split_gav(gav_str) {
             deps.external.push(ExternalDep {
-                alias: alias_clone,
+                alias: alias.clone(),
                 group: group.to_string(),
                 artifact: artifact.to_string(),
                 version: version.to_string(),
@@ -182,8 +197,6 @@ pub(crate) fn extract_deps_from_build(
         }
     }
 }
-
-// ── settings.gradle.kts extraction ─────────────────────────────────────
 
 pub(crate) fn extract_projects_from_settings(content: &str, deps: &mut GradleDeps) {
     let mut search_from = 0;
@@ -195,7 +208,6 @@ pub(crate) fn extract_projects_from_settings(content: &str, deps: &mut GradleDep
                 "projects.{}",
                 module_path.trim_start_matches(':').replace(':', ".")
             );
-
             let found = deps.projects.iter_mut().any(|p| {
                 if p.alias == alias {
                     p.module_path = module_path.to_string();
