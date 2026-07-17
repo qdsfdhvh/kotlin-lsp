@@ -41,66 +41,8 @@ pub(crate) fn parse_version_catalog(path: &Path) -> Result<HashMap<String, Strin
     Ok(versions)
 }
 
-/// Parse `libs.versions.toml` libraries section. Returns `(alias → ExternalDep)` map.
-///
-/// Supports two library formats:
-/// - Rich: `lib = { module = "g:a", version.ref = "v" }`
-/// - Simple: `lib = "g:a:v"`
-pub(crate) fn parse_libraries_toml(path: &Path) -> Result<HashMap<String, ExternalDep>, String> {
-    let content =
-        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let doc: toml::Table = toml::from_str(&content).map_err(|e| format!("parse toml: {e}"))?;
-
-    let versions: HashMap<String, String> = doc
-        .get("versions")
-        .and_then(|v| v.as_table())
-        .map(|t| {
-            t.iter()
-                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let mut libs = HashMap::new();
-
-    if let Some(libraries) = doc.get("libraries").and_then(|v| v.as_table()) {
-        for (alias, value) in libraries {
-            let dep = match value {
-                toml::Value::Table(t) => {
-                    let module = t.get("module").and_then(|v| v.as_str()).unwrap_or("");
-                    let version = t
-                        .get("version")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| {
-                            t.get("version.ref")
-                                .and_then(|v| v.as_str())
-                                .and_then(|ref_key| versions.get(ref_key).map(|s| s.as_str()))
-                        })
-                        .unwrap_or("");
-                    parse_gav(module, version).map(|d| ExternalDep {
-                        alias: alias.clone(),
-                        ..d
-                    })
-                }
-                toml::Value::String(s) => {
-                    split_gav(s).map(|(group, artifact, version)| ExternalDep {
-                        alias: alias.clone(),
-                        group: group.to_string(),
-                        artifact: artifact.to_string(),
-                        version: version.to_string(),
-                    })
-                }
-                _ => None,
-            };
-
-            if let Some(dep) = dep {
-                libs.insert(alias.clone(), dep);
-            }
-        }
-    }
-
-    Ok(libs)
-}
+// (parse_libraries_toml — removed as currently unused.
+//  Restore from git history when full [libraries] section parsing is needed.)
 
 fn split_gav(s: &str) -> Option<(&str, &str, &str)> {
     let mut parts = s.splitn(3, ':');
@@ -114,21 +56,8 @@ fn split_gav(s: &str) -> Option<(&str, &str, &str)> {
     }
 }
 
-fn parse_gav(module: &str, version: &str) -> Option<ExternalDep> {
-    let mut parts = module.splitn(2, ':');
-    let group = parts.next()?;
-    let artifact = parts.next()?;
-    if group.is_empty() || artifact.is_empty() || version.is_empty() {
-        None
-    } else {
-        Some(ExternalDep {
-            alias: String::new(),
-            group: group.to_string(),
-            artifact: artifact.to_string(),
-            version: version.to_string(),
-        })
-    }
-}
+// (parse_gav — removed as currently unused together with parse_libraries_toml.
+//  Restore from git history when needed.)
 
 // ── build.gradle.kts extraction (string-scan, no regex) ────────────────
 
