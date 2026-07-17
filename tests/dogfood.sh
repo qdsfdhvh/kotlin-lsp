@@ -121,11 +121,10 @@ test_project() {
         check "$name: hover"              "$dir" hover "$file" "$line" "$col"
         check "$name: context"            "$dir" context "$file" "$line" "$col"
         check "$name: code-action"        "$dir" code-action "$file" "$line" "$col"
-        check "$name: call-hierarchy"     "$dir" call-hierarchy "$file" "$line" "$col"
+        check "$name: call hierarchy"    "$dir" call hierarchy "$file" "$line" "$col"
         check "$name: impact"             "$dir" impact "$file" "$line" "$col"
         check "$name: find-test"          "$dir" find-test "$file" "$line" "$col"
-        check "$name: callers"            "$dir" callers "$file" "$line" "$col"
-        check "$name: callees"            "$dir" callees "$file" "$line" "$col"
+        check "$name: call hierarchy out" "$dir" call hierarchy "$file" "$line" "$col" --outgoing
     }
 
     # ── workspace-wide commands ──
@@ -143,7 +142,14 @@ test_project() {
         check "$name: complete"           "$dir" complete "$file" 1 1
     }
 
-    # ── type-hierarchy with a class (if provided) ──
+    # ── type hierarchy (if class_symbol provided) ──
+    if [ -n "${class_symbol:-}" ]; then
+        check "$name: type hierarchy"        "$dir" type hierarchy "$class_symbol"
+    fi
+
+    # ── gradle smoke ──
+    check "$name: gradle-deps"       "$dir" gradle-deps
+    check "$name: index --gradle"    "$dir" index --gradle
 
 
 
