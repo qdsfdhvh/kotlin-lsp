@@ -26,7 +26,7 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Format check → kotlin-lsp format check
    ├─ Caller/callee tree → kotlin-lsp call hierarchy
    ├─ Implementation tree → kotlin-lsp type hierarchy
-   ├─ Search by name → kotlin-lsp find <name>
+   ├─ Composable analysis → kotlin-lsp android composables <file> --call-graph/--state/--preview
    ├─ Batch queries → echo '[...]' | kotlin-lsp query --json
    ├─ Import analysis → kotlin-lsp imports-of
    ├─ Annotation query → kotlin-lsp annotated
@@ -97,6 +97,13 @@ kotlin-lsp rename <file> <line> <col> <newName>
 
 # Doctor
 kotlin-lsp doctor [--json]
+
+# Android / Compose
+kotlin-lsp android composables <file> --call-graph
+kotlin-lsp android composables <file> --state
+kotlin-lsp android composables <file> --preview
+```
+kotlin-lsp doctor [--json]
 ```
 
 ## All commands
@@ -127,7 +134,7 @@ kotlin-lsp doctor [--json]
 | Module files | `kotlin-lsp module files <name>` |
 | Module packages | `kotlin-lsp module packages [name]` |
 | Android activities | `kotlin-lsp android activities` |
-| Android composables | `kotlin-lsp android composables <file>` |
+| Android composables | `kotlin-lsp android composables <file> [--call-graph] [--state] [--preview]` |
 | Import analysis | `kotlin-lsp imports-of <name>` |
 | Annotation query | `kotlin-lsp annotated <name>` |
 | Symbol summary | `kotlin-lsp summarize <name>` |
