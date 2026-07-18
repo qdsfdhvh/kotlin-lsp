@@ -239,10 +239,7 @@ fn find_composables(
                         .strip_prefix("var ")
                         .or_else(|| trimmed.strip_prefix("val "))
                     {
-                        if let Some(ident) = rest
-                            .split(&[':', '=', ' '])
-                            .next()
-                        {
+                        if let Some(ident) = rest.split(&[':', '=', ' ']).next() {
                             if !ident.is_empty() && !ident.starts_with("by") {
                                 state_vars.push(ident.to_string());
                             }
