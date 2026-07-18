@@ -1193,8 +1193,15 @@ pub(crate) async fn run(args: CliArgs) {
                 let r = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
                 crate::cli::android::run_android_activities(&r, json);
             }
-            AndroidSub::Composables { file } => {
-                crate::cli::android::run_android_composables(&file, json);
+            AndroidSub::Composables {
+                file,
+                call_graph,
+                state,
+                preview,
+            } => {
+                crate::cli::android::run_android_composables(
+                    &file, json, call_graph, state, preview,
+                );
             }
         },
         Subcommand::SymbolGraph => {
