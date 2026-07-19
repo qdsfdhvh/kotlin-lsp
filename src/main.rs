@@ -259,3 +259,4 @@ fn parse_lsp_flags() -> LspCliFlags {
         remaining,
     }
 }
+// docs only
