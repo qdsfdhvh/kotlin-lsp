@@ -19,6 +19,11 @@ cargo fmt -- --check || {
 }
 
 # Run tests
+echo "  🔍 Running cargo check..."
+cargo check --quiet || {
+    echo "  ❌ Cargo check failed!"
+    exit 1
+}
 echo "  🧪 Running tests..."
 cargo test --quiet || {
     echo "  ❌ Tests failed!"
