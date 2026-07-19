@@ -90,22 +90,22 @@ Quick reference:
 | Completions | `kotlin-lsp complete <FILE> <LINE> [COL]` |
 | One-stop context | `kotlin-lsp context <FILE> <LINE> <COL>` |
 | Syntax errors | `kotlin-lsp check <FILE>...` |
-| Code actions | `kotlin-lsp code-action <FILE> <LINE> <COL>` |
+| Code actions | `kotlin-lsp tool code-action <FILE> <LINE> <COL>` |
 | Call hierarchy | `kotlin-lsp call hierarchy <FILE> <LINE> <COL>` |
 | Type hierarchy | `kotlin-lsp type hierarchy <NAME>` |
-| Organize imports | `kotlin-lsp organize-imports <FILE>...` |
-| Batch imports | `kotlin-lsp batch-imports <FILE>` |
+| Organize imports | `kotlin-lsp edit organize <FILE>...` |
+| Batch imports | `kotlin-lsp edit imports <FILE>` |
 | Index JAR sources | `kotlin-lsp index-jars [ROOT]` |
 | Index workspace | `kotlin-lsp index [--root <DIR>]` |
 | Cache stats | `kotlin-lsp cache stats` |
-| Benchmark | `kotlin-lsp benchmark` |
+| Benchmark | `kotlin-lsp tool bench` |
 | Filter by kind | `--kind class,fun,interface` |
 | Callers tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --incoming` |
 | Callees tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --outgoing` |
 | Impact analysis | `kotlin-lsp impact <FILE> <LINE> <COL>` |
-| Symbol overview | `kotlin-lsp summarize <NAME>` |
-| Find tests | `kotlin-lsp find-test <FILE> <LINE> <COL>` |
-| KMP expect/actual | `kotlin-lsp expect-actual <NAME>` |
+| Symbol overview | `kotlin-lsp search summarize <NAME>` |
+| Find tests | `kotlin-lsp search find-test <FILE> <LINE> <COL>` |
+| KMP expect/actual | `kotlin-lsp search expect-actual <NAME>` |
 | Module deps | `kotlin-lsp module list / deps / files / packages` |
 | Android resources | `kotlin-lsp android activities / composables` |
 | Format check | `kotlin-lsp format check <FILE>...` |
