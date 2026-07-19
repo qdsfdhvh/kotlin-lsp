@@ -1,3 +1,52 @@
+## 0.29.0 (2026-07-19)
+
+### feat(gradle): plugin detection + config-aware deps + android block (#191)
+
+- `kotlin-lsp gradle-deps` now shows plugins, dependency configurations, and Android block settings.
+- Plugin parser handles `id("...")` and `kotlin("...")` syntax.
+- 9 dependency configurations tracked: implementation, api, kapt, ksp, etc.
+- Android block extracts namespace, compileSdk, minSdk, targetSdk, applicationId.
+
+### feat(sealed): is_sealed detection + type sealed command (#191, #193)
+
+- `SymbolEntry.is_sealed` field detected from tree-sitter line prefix.
+- `kotlin-lsp type sealed <name>` lists direct subclasses of sealed types.
+- CACHE_VERSION bumped 16 → 17.
+
+### feat(cli): command grouping — search, edit, tool (#193)
+
+30+ top-level commands consolidated into 4 groups:
+
+| Group | Subcommands |
+|-------|-------------|
+| `search` | docs, semantic, summarize, cache-stats, imports, annotated, find-test, expect-actual |
+| `edit` | rename, batch, imports, inject, insert, new, organize |
+| `tool` | inspect, graph, snapshot, bench, doctor, workspace, query, skills, code-action, tokens, tree |
+| `type` | hierarchy, **sealed** (new) |
+
+Old names still work with deprecation warnings.
+
+### perf(cache): Gradle build script staleness detection (#191)
+
+- `GradleDeps.mtime_secs` tracks when `build.gradle.kts` was last parsed.
+- `ensure_gradle_indexed()` auto-reparses on build file change.
+
+### fix(check): suppress FP for annotated function type with named params (#194)
+
+`kotlin-lsp check` no longer reports false-positive syntax errors for patterns like
+`@Composable (value: String) -> Unit`.
+
+### docs
+
+- `docs/commands.md`: full rewrite with group/standalone/deprecated sections.
+- `skills/kotlin-lsp/SKILL.md` + `references/commands.md`: updated with grouped names.
+- `AGENTS.md`: CLI grouping rules, CI monitoring patterns, post-change doc checklist.
+- `rustfmt.toml`: ignore `tests/dogfood/` fixtures.
+- `.githooks/pre-commit`: use `cargo fmt` instead of `find | xargs rustfmt`.
+
+### tests
+
+- 1,259 → 1,301 (+42 tests)
 ## 0.28.0 (2026-07-17)
 
 ### feat(gradle): shallow dependency parsing without daemon
