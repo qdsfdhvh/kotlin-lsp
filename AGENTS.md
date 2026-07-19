@@ -147,6 +147,14 @@ Before touching tags, verify:
 1. Is this a new tag or an existing release?
 2. Ask: "vX.Y.Z already exists as a published release. Are you sure you want to overwrite it?"
 
+11. **Post-change documentation check** — After any code change that affects CLI commands, output format, architecture, or developer workflows:
+    - **docs/commands.md** — update if CLI commands changed (new, renamed, or removed)
+    - **skills/kotlin-lsp/SKILL.md** — update if command names/signatures changed (agents use this)
+    - **AGENTS.md** — update if development rules or workflows changed
+    - **README.md** — update if user-facing behavior or install instructions changed
+
+    Default assumption: every CLI change needs a docs + skills update. Flag it explicitly if not.
+
 ## CI Monitoring via pi-loop
 
 This project uses the `pi-loop` extension for CI/CD automation.

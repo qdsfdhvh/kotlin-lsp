@@ -1581,7 +1581,6 @@ fn is_subcommand(value: &str) -> bool {
             | "summarize"
             | "search"
             | "summary-cache"
-            
             | "edit"
             | "tool"
             | "gradle-deps"
