@@ -146,3 +146,49 @@ CI artifacts, and downstream consumers that reference the tag.
 Before touching tags, verify:
 1. Is this a new tag or an existing release?
 2. Ask: "vX.Y.Z already exists as a published release. Are you sure you want to overwrite it?"
+
+## CI Monitoring via pi-loop
+
+This project uses the `pi-loop` extension for CI/CD automation.
+
+### Watch PR CI
+
+After pushing a PR, start a monitor to watch CI completion:
+
+```
+MonitorCreate(command="gh pr checks --watch <PR_NUMBER>", onDone="Report CI results")
+```
+
+Or poll every 2 minutes until green:
+
+```
+LoopCreate(trigger="2m", prompt="Check 'gh pr checks <N>' — if all pass, report; if fail, fix and push", maxFires=20)
+```
+
+### Auto-merge on green
+
+```
+LoopCreate(
+  trigger="2m",
+  prompt="Run 'gh pr checks <N>' — if all green, run 'gh pr merge <N> --squash --delete-branch' then delete this loop",
+  maxFires=15
+)
+```
+
+### Test loop (CI simulation)
+
+Before pushing, run a local test loop to catch regressions early:
+
+```
+LoopCreate(trigger="1m", prompt="Run 'cargo test 2>&1 | tail -5' — if any failure, stop and report", maxFires=5)
+```
+
+### Key loops for this project
+
+| Use case | Trigger | Pattern |
+|----------|---------|---------|
+| Watch PR CI | `MonitorCreate` + `onDone` | One-shot background |
+| Poll PR CI | `2m` cron | LoopCreate with maxFires=20 |
+| Auto-merge on green | `2m` cron | Check `gh pr checks` → `gh pr merge` |
+| Local pre-push test | `1m` cron | `cargo test && cargo clippy` |
+| Dogfood regressions | `5m` cron | Run dogfood.conf projects |
