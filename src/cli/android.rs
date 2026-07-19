@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize)]
 struct ActivityInfo {
@@ -12,12 +12,15 @@ struct ActivityInfo {
 }
 
 #[derive(Debug, Serialize)]
-struct ComposableInfo {
+pub(crate) struct ComposableInfo {
     name: String,
     line: u32,
     params: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     calls: Vec<String>,
+    /// Cross-file @Composable calls.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub external_calls: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     state_vars: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -25,7 +28,7 @@ struct ComposableInfo {
 }
 
 #[derive(Debug, Serialize)]
-struct PreviewInfo {
+pub(crate) struct PreviewInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -268,6 +271,181 @@ fn find_composables(
             line,
             params,
             calls,
+            state_vars,
+            external_calls: Vec::new(),
+            preview: prev,
+        });
+    }
+    result
+}
+
+/// Multi-file composable analysis with cross-file call tracking.
+/// Scans all files for @Composable functions, builds a global name set,
+/// and detects cross-file calls for each composable.
+#[allow(dead_code)]
+pub(crate) fn find_composables_multi(
+    files: &[PathBuf],
+    call_graph: bool,
+    state: bool,
+    preview: bool,
+) -> Vec<ComposableInfo> {
+    // Step 0: collect all @Composable function names across ALL files
+    let mut global_names: HashSet<String> = HashSet::new();
+
+    for file in files {
+        let Ok(src) = std::fs::read_to_string(file) else {
+            continue;
+        };
+        let mut p = tree_sitter::Parser::new();
+        p.set_language(&tree_sitter_kotlin_sg::LANGUAGE.into()).ok();
+        let Some(tree) = p.parse(&src, None) else {
+            continue;
+        };
+        let root = tree.root_node();
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            if n.kind() == "function_declaration" && node_text_contains(&n, &src, "@Composable") {
+                let name = first_child_ident(&n, &src);
+                if !name.is_empty() {
+                    global_names.insert(name);
+                }
+            }
+            let mut cursor = n.walk();
+            for ch in n.children(&mut cursor) {
+                stack.push(ch);
+            }
+        }
+    }
+
+    // Step 1: for each file, analyze with global name awareness
+    let mut result = Vec::new();
+    for file in files {
+        let file_composables =
+            find_composables_with_names(file, call_graph, state, preview, &global_names);
+        result.extend(file_composables);
+    }
+    result
+}
+
+/// Like find_composables but accepts an external names set for cross-file detection.
+fn find_composables_with_names(
+    file: &Path,
+    call_graph: bool,
+    state: bool,
+    preview: bool,
+    global_names: &HashSet<String>,
+) -> Vec<ComposableInfo> {
+    let Ok(src) = std::fs::read_to_string(file) else {
+        return vec![];
+    };
+    let mut p = tree_sitter::Parser::new();
+    p.set_language(&tree_sitter_kotlin_sg::LANGUAGE.into()).ok();
+    let Some(tree) = p.parse(&src, None) else {
+        return vec![];
+    };
+    let root = tree.root_node();
+
+    let mut fns: Vec<(String, tree_sitter::Node)> = Vec::new();
+    {
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            if n.kind() == "function_declaration" && node_text_contains(&n, &src, "@Composable") {
+                let name = first_child_ident(&n, &src);
+                fns.push((name, n));
+            }
+            let mut c = n.walk();
+            for ch in n.children(&mut c) {
+                stack.push(ch);
+            }
+        }
+    }
+
+    let local_names: HashSet<String> = fns.iter().map(|(n, _)| n.clone()).collect();
+    let mut result = Vec::new();
+
+    for (name, node) in fns {
+        let line = node.start_position().row as u32 + 1;
+        let params: Vec<String> = extract_params_text(&node, &src);
+        let mut calls: Vec<String> = Vec::new();
+        let mut external_calls: Vec<String> = Vec::new();
+        let mut state_vars: Vec<String> = Vec::new();
+        let mut prev: Option<PreviewInfo> = None;
+
+        let mut fc = node.walk();
+        let body = node
+            .children(&mut fc)
+            .find(|ch| ch.kind() == "function_body");
+
+        if call_graph {
+            if let Some(b) = body {
+                let mut seen = HashSet::new();
+                let mut stack = vec![b];
+                while let Some(nn) = stack.pop() {
+                    if nn.kind() == "call_expression" {
+                        let callee = first_child_ident(&nn, &src);
+                        if !callee.is_empty()
+                            && global_names.contains(&callee)
+                            && seen.insert(callee.clone())
+                        {
+                            if local_names.contains(&callee) {
+                                calls.push(callee);
+                            } else {
+                                external_calls.push(callee);
+                            }
+                        }
+                    }
+                    let mut c = nn.walk();
+                    for ch in nn.children(&mut c) {
+                        stack.push(ch);
+                    }
+                }
+                calls.sort();
+                external_calls.sort();
+            }
+        }
+
+        if state {
+            let fn_text = node_text(&node, &src);
+            for line_text in fn_text.lines() {
+                if line_text.contains("by ")
+                    && (line_text.contains("mutableStateOf")
+                        || line_text.contains("remember")
+                        || line_text.contains("derivedStateOf"))
+                {
+                    let trimmed = line_text.trim();
+                    if let Some(rest) = trimmed
+                        .strip_prefix("var ")
+                        .or_else(|| trimmed.strip_prefix("val "))
+                    {
+                        if let Some(ident) = rest.split(&[':', '=', ' ']).next() {
+                            if !ident.is_empty() && !ident.starts_with("by") {
+                                state_vars.push(ident.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            state_vars.sort();
+            state_vars.dedup();
+        }
+
+        if preview {
+            for ch in node_children(&node) {
+                if ch.kind() == "modifiers" || ch.kind() == "annotation" {
+                    let t = node_text(&ch, &src);
+                    if t.contains("@Preview") {
+                        prev = Some(parse_preview_params(&src, ch.start_byte(), ch.end_byte()));
+                    }
+                }
+            }
+        }
+
+        result.push(ComposableInfo {
+            name,
+            line,
+            params,
+            calls,
+            external_calls,
             state_vars,
             preview: prev,
         });
