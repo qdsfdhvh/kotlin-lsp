@@ -68,3 +68,15 @@ npx skills add https://github.com/qdsfdhvh/kotlin-lsp
 
 The bundled skill teaches your agent to prefer `kotlin-lsp find` / `refs` /
 `hover` over text-grep for Kotlin/Java/Swift symbols. Re-run after updates.
+
+### Agent mode
+
+Limit what the agent indexes by placing a `tools/kotlin-lsp` file in your project root:
+
+```
+# tools/kotlin-lsp — paths to index in agent mode
+src/
+build.gradle.kts
+```
+
+Then start kotlin-lsp with `--agent`. Only listed paths are indexed, reducing memory and startup time for agent workflows.
