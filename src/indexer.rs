@@ -420,12 +420,27 @@ impl Indexer {
     /// Called lazily on first symbol resolution miss when `--gradle` is active.
     /// Thread-safe: only the first caller parses; subsequent callers see the cached result.
     pub(crate) fn ensure_gradle_indexed(&self, root_dir: &Path) {
-        // Fast path: already checked
+        // Fast path: already parsed and build file unchanged
         {
             let deps = self.gradle_deps.read().expect("gradle_deps lock");
-            if deps.is_some() {
-                return;
+            if let Some(Some(dep_data)) = deps.as_ref() {
+                let build_file = root_dir.join("build.gradle.kts");
+                let current_mtime = std::fs::metadata(&build_file)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                if dep_data.mtime_secs == current_mtime {
+                    return;
+                }
+                // Stale — drop the lock and clear the stale entry
             }
+        }
+        // Clear stale deps so we re-parse below
+        {
+            let mut deps = self.gradle_deps.write().expect("gradle_deps lock");
+            *deps = None;
         }
 
         // Parse Gradle config

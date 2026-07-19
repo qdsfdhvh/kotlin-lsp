@@ -136,6 +136,7 @@ fn parse_project_complete() {
     let deps = super::parse_project(dir.path()).expect("should parse");
     assert_eq!(deps.external.len(), 1);
     assert_eq!(deps.external[0].alias, "libs.stdlib");
+    assert_eq!(deps.external[0].config, "implementation");
     assert_eq!(deps.projects.len(), 1);
     assert_eq!(deps.projects[0].module_path, ":app");
 }
@@ -147,8 +148,184 @@ fn parse_project_not_gradle() {
     assert!(result.is_none(), "no build.gradle.kts → None");
 }
 
+// ── Plugin scanning ─────────────────────────────────────────────────────
+
+#[test]
+fn scan_plugins_id_basic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("build.gradle.kts"),
+        r#"plugins {
+    id("org.jetbrains.kotlin.jvm") version "1.9.0"
+    id("com.android.application") version "8.2.0" apply false
+}"#,
+    )
+    .expect("write build");
+
+    let deps = super::parse_project(dir.path()).expect("should parse");
+    assert_eq!(deps.plugins.len(), 2, "expected 2 plugins");
+    assert_eq!(deps.plugins[0].id, "com.android.application"); // sorted
+    assert_eq!(deps.plugins[0].version.as_deref(), Some("8.2.0"));
+    assert!(deps.plugins[0].apply_false);
+    assert_eq!(deps.plugins[1].id, "org.jetbrains.kotlin.jvm");
+    assert_eq!(deps.plugins[1].version.as_deref(), Some("1.9.0"));
+    assert!(!deps.plugins[1].apply_false);
+}
+
+#[test]
+fn scan_plugins_kotlin_shorthand() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("build.gradle.kts"),
+        r#"plugins {
+    kotlin("jvm") version "1.9.0"
+    kotlin("plugin.serialization") version "1.9.0"
+}"#,
+    )
+    .expect("write build");
+
+    let deps = super::parse_project(dir.path()).expect("should parse");
+    assert_eq!(deps.plugins.len(), 2);
+    // kotlin("jvm") → "kotlin-jvm"
+    assert_eq!(deps.plugins[0].id, "kotlin-jvm");
+    assert_eq!(deps.plugins[1].id, "kotlin-plugin.serialization");
+}
+
+#[test]
+fn scan_plugins_no_plugins() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("build.gradle.kts"),
+        "dependencies { implementation(\"com.example:lib:1.0\") }\n",
+    )
+    .expect("write build");
+
+    let deps = super::parse_project(dir.path()).expect("should parse");
+    assert!(deps.plugins.is_empty());
+}
 // ── cache module ─────────────────────────────────────────────────────────
 
+#[test]
+fn config_detection() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("build.gradle.kts"),
+        r#"dependencies {
+    implementation("com.example:app:1.0")
+    api("com.example:api:2.0")
+    testImplementation("org.test:junit:4.13")
+    kapt("com.google.dagger:dagger-compiler:2.50")
+}"#,
+    )
+    .expect("write build");
+
+    let deps = super::parse_project(dir.path()).expect("should parse");
+    assert_eq!(deps.external.len(), 4);
+    let impl_dep = deps
+        .external
+        .iter()
+        .find(|d| d.artifact == "app")
+        .expect("app dep");
+    assert_eq!(impl_dep.config, "implementation");
+    let api_dep = deps
+        .external
+        .iter()
+        .find(|d| d.artifact == "api")
+        .expect("api dep");
+    assert_eq!(api_dep.config, "api");
+    let test_dep = deps
+        .external
+        .iter()
+        .find(|d| d.artifact == "junit")
+        .expect("junit dep");
+    assert_eq!(test_dep.config, "testImplementation");
+    let kapt_dep = deps
+        .external
+        .iter()
+        .find(|d| d.artifact == "dagger-compiler")
+        .expect("kapt dep");
+    assert_eq!(kapt_dep.config, "kapt");
+}
+
+#[test]
+fn config_detection_with_catalog() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("libs.versions.toml"),
+        r#"[versions]
+compose-bom = "2024.01.00"
+[libraries]
+compose-ui = { module = "androidx.compose.ui:ui", version.ref = "compose-bom" }
+compose-material = { module = "androidx.compose.material:material", version.ref = "compose-bom" }
+"#,
+    )
+    .expect("write toml");
+    std::fs::write(
+        dir.path().join("build.gradle.kts"),
+        r#"dependencies {
+    implementation(libs.compose.ui)
+    testImplementation(libs.compose.material)
+}"#,
+    )
+    .expect("write build");
+
+    let deps = super::parse_project(dir.path()).expect("should parse");
+    assert!(deps.external.len() >= 2);
+    let ui_dep = deps
+        .external
+        .iter()
+        .find(|d| d.alias == "libs.compose.ui")
+        .expect("ui dep");
+    assert_eq!(ui_dep.config, "implementation");
+    let mat_dep = deps
+        .external
+        .iter()
+        .find(|d| d.alias == "libs.compose.material")
+        .expect("mat dep");
+    assert_eq!(mat_dep.config, "testImplementation");
+}
+
+#[test]
+fn android_block_basic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("build.gradle.kts"),
+        r#"android {
+    namespace = "com.example.app"
+    compileSdk = 34
+    defaultConfig {
+        applicationId = "com.example.app"
+        minSdk = 24
+        targetSdk = 34
+    }
+}"#,
+    )
+    .expect("write build");
+
+    let deps = super::parse_project(dir.path()).expect("should parse");
+    assert_eq!(deps.android.namespace.as_deref(), Some("com.example.app"));
+    assert_eq!(deps.android.compile_sdk, Some(34));
+    assert_eq!(
+        deps.android.application_id.as_deref(),
+        Some("com.example.app")
+    );
+    assert_eq!(deps.android.min_sdk, Some(24));
+    assert_eq!(deps.android.target_sdk, Some(34));
+}
+
+#[test]
+fn android_block_no_android() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("build.gradle.kts"),
+        r#"plugins { id("org.jetbrains.kotlin.jvm") }"#,
+    )
+    .expect("write build");
+
+    let deps = super::parse_project(dir.path()).expect("should parse");
+    assert!(deps.android.namespace.is_none());
+    assert!(deps.android.compile_sdk.is_none());
+}
 #[test]
 fn find_source_jar_home_dir_access() {
     let result = super::cache::find_source_jar("com.example", "test", "1.0.0");

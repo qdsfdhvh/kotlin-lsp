@@ -647,6 +647,8 @@ mod code_action_tests {
             return_type: None,
             parameters: Vec::new(),
             documentation: None,
+
+            is_sealed: false,
         }
     }
 

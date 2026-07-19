@@ -39,6 +39,8 @@ fn cache_entry_to_file_result_supertypes_extracted() {
         return_type: None,
         parameters: Vec::new(),
         documentation: None,
+
+        is_sealed: false,
     });
     data.supers.push((
         0,
@@ -88,6 +90,8 @@ fn cache_entry_to_file_result_preserves_hash() {
         return_type: None,
         parameters: Vec::new(),
         documentation: None,
+
+        is_sealed: false,
     });
 
     let entry = FileCacheEntry {

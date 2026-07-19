@@ -121,6 +121,9 @@ pub(crate) struct SymbolEntry {
     /// KDoc summary line, if any.
     #[serde(default)]
     pub documentation: Option<String>,
+    /// Whether the class/interface is declared with the `sealed` modifier.
+    #[serde(default)]
+    pub is_sealed: bool,
 }
 
 impl SymbolEntry {
