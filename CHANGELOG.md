@@ -1,3 +1,57 @@
+## 0.30.0 (2026-07-19)
+
+### feat(lsp): --agent flag for AI coding agent startup (#209)
+
+- `kotlin-lsp --agent` starts with agent-optimized defaults (no diagnostics, semantic tokens, inlay hints, code actions, folding, formatting, etc.)
+- `initializationOptions.features` for fine-grained control
+
+### feat(composable): multi-file @Composable call graph (#204)
+
+- `find_composables_multi()` scans multiple files and detects cross-file calls.
+- New `external_calls` field on `ComposableInfo`.
+
+### feat(check): --when-exhaustive flag (#201)
+
+- Lightweight CST-level scan for non-exhaustive `when` expressions.
+- `kotlin-lsp check --when-exhaustive Foo.kt`
+
+### feat(lsp): index compaction (#205)
+
+- `compact_stale_entries()` on `did_close` and `shutdown`.
+- Removes files no longer on disk from the index.
+
+### feat(query): agent batch query — implementations, subclasses (#203)
+
+- `tool query` now accepts `implementations`, `subclasses` types.
+- JSON-in/JSON-out: `echo '[{"type":"subclasses","name":"Result"}]' | kotlin-lsp tool query --json`
+
+### perf(stdlib): O(1) HashMap-backed symbol lookup (#210)
+
+- Replaces O(n) linear scan in `hover()` with lazy-init HashMap index.
+
+### feat(lsp): FeatureToggles via initializationOptions (#202)
+
+- Clients can disable features: `{ features: { diagnostics: false, ... } }`.
+- Default: all true (full IDE mode).
+
+### chore(cli): remove 43 deprecated CLI aliases from is_subcommand (#211)
+
+- `--help` no longer shows `organize-imports`, `code-action`, `benchmark`, etc.
+- Old names still work internally but are hidden.
+
+### fix(install): cargo detection + tmp trap (#200)
+
+- Detects toolchain-direct cargo binary to avoid rustup proxy issues.
+- Fixes `tmp: unbound variable` on script exit.
+
+### docs
+
+- All docs updated to grouped command names (#212).
+- `AGENTS.md`: CLI grouping rules, CI monitoring patterns, post-change doc checklist, development flow with LSP.
+
+### tests
+
+- 1,259 → 1,301 (+42)
 ## 0.29.0 (2026-07-19)
 
 ### feat(gradle): plugin detection + config-aware deps + android block (#191)
