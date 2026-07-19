@@ -199,4 +199,9 @@ LoopCreate(trigger="1m", prompt="Run 'cargo test 2>&1 | tail -5' — if any fail
 | Poll PR CI | `2m` cron | LoopCreate with maxFires=20 |
 | Auto-merge on green | `2m` cron | Check `gh pr checks` → `gh pr merge` |
 | Local pre-push test | `1m` cron | `cargo test && cargo clippy` |
-| Dogfood regressions | `5m` cron | Run dogfood.conf projects |
+| Dogfood regressions | `5m` cron | Run dogfood.conf projects |12. **Development flow with LSP** — The pre-commit hook runs fmt → test → clippy.  
+    Before committing, run `cargo check` for fast type-checking (2-5s vs 30s test).  
+    rust-analyzer is recommended for real-time diagnostics during development:  
+    `rustup component add rust-analyzer`  
+    (Already installed at `~/.cargo/bin/rust-analyzer`).  
+    The pre-commit hook uses toolchain binaries directly to avoid rustup PATH issues.
