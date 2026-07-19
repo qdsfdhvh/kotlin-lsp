@@ -16,13 +16,19 @@ zero external runtime.
 ### macOS / Linux
 
 ```bash
+# Primary: build from source via cargo (→ ~/.cargo/bin)
+cargo install --git https://github.com/qdsfdhvh/kotlin-lsp --tag v0.29.0
+
+# Fallback: pre-built binary
 curl -fsSL https://github.com/qdsfdhvh/kotlin-lsp/releases/latest/download/install.sh | bash
+
 kotlin-lsp --version
 ```
 
 ### Windows
 
 ```powershell
+# PowerShell
 iwr -useb https://github.com/qdsfdhvh/kotlin-lsp/releases/latest/download/install.ps1 | iex
 kotlin-lsp --version
 ```
@@ -31,6 +37,16 @@ kotlin-lsp --version
 
 Download from [releases](https://github.com/qdsfdhvh/kotlin-lsp/releases/latest)
 and place the binary on your `PATH`.
+
+### Build from source
+
+```bash
+git clone https://github.com/qdsfdhvh/kotlin-lsp
+cd kotlin-lsp
+cargo build --release
+# binary at target/release/kotlin-lsp
+```
+
 
 **Recommended:** install `fd` and `rg` (ripgrep) for faster file discovery.
 
