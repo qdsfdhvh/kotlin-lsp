@@ -977,13 +977,17 @@ pub(crate) async fn run(args: CliArgs) {
             super::inject::run_inject(&file, &root, json, 50).await;
         }
 
-        Subcommand::Check { files, diagnose } => {
+        Subcommand::Check {
+            files,
+            diagnose,
+            when_exhaustive,
+        } => {
             if files.is_empty() {
                 eprintln!("check requires at least one FILE argument");
                 std::process::exit(1);
             }
             let expanded = super::check::expand_file_list(&files);
-            super::check::run_check(&expanded, json);
+            super::check::run_check(&expanded, json, when_exhaustive);
             if diagnose {
                 let root = resolve_root_for_file(args.root.as_deref(), &expanded[0]);
                 let index = build_index(&root, true).await;

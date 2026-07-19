@@ -1,6 +1,6 @@
 //! CLI `check` subcommand — syntax error diagnostics without an LSP session.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -12,7 +12,7 @@ struct CheckError {
     message: String,
 }
 
-pub(crate) fn run_check(files: &[PathBuf], json: bool) {
+pub(crate) fn run_check(files: &[PathBuf], json: bool, when_exhaustive: bool) {
     use crate::parser::parse_by_extension;
 
     let mut errors: Vec<CheckError> = Vec::new();
@@ -76,6 +76,10 @@ pub(crate) fn run_check(files: &[PathBuf], json: bool) {
         }
     }
 
+    if when_exhaustive {
+        check_when_exhaustive(files);
+    }
+
     if !errors.is_empty() {
         std::process::exit(1);
     }
@@ -105,4 +109,60 @@ pub(crate) fn expand_file_list(paths: &[PathBuf]) -> Vec<PathBuf> {
         }
     }
     result
+}
+
+// ── when exhaustiveness check ──────────────────────────────────────────────
+
+/// Lightweight CST-level check for non-exhaustive when expressions.
+fn check_when_exhaustive(files: &[PathBuf]) {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_kotlin_sg::LANGUAGE.into())
+        .ok();
+
+    for f in files {
+        let src = match std::fs::read_to_string(f) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let Some(tree) = parser.parse(&src, None) else {
+            continue;
+        };
+        walk_when_nodes(f, tree.root_node(), &src);
+    }
+}
+
+fn walk_when_nodes(file: &Path, node: tree_sitter::Node, src: &str) {
+    if node.kind() == "when_expression" {
+        check_one_when(file, node, src);
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_when_nodes(file, child, src);
+    }
+}
+
+fn check_one_when(file: &Path, node: tree_sitter::Node, src: &str) {
+    let text = &src[node.start_byte()..node.end_byte()];
+
+    // Only `when (expr) { ... }` — skip subject-less when
+    let before_brace = text.find('{').unwrap_or(text.len());
+    let header = &text[..before_brace];
+    if !header.contains('(') {
+        return;
+    }
+    // Has else branch → exhaustive
+    if text.contains("else ->") {
+        return;
+    }
+    // Flag when with single branch and no else
+    let branch_count = text.matches(" -> ").count();
+    if branch_count <= 1 {
+        let line = node.start_position().row as u32 + 1;
+        eprintln!(
+            "{}:{}: when expression may be non-exhaustive (no 'else' branch)",
+            file.display(),
+            line,
+        );
+    }
 }
