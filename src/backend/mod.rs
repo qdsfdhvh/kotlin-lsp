@@ -34,6 +34,60 @@ pub(crate) mod rename;
 
 use self::progress::LspProgressReporter;
 
+/// Per-feature toggles from initializationOptions.features.
+/// All default to true. Clients can disable agent-irrelevant features.
+#[derive(Debug, Clone)]
+pub(crate) struct FeatureToggles {
+    pub semantic_tokens: bool,
+    pub inlay_hints: bool,
+    pub diagnostics: bool,
+    pub folding_ranges: bool,
+    pub code_actions: bool,
+    pub document_formatting: bool,
+    pub selection_ranges: bool,
+    pub signature_help: bool,
+    pub rename: bool,
+}
+
+impl Default for FeatureToggles {
+    fn default() -> Self {
+        Self {
+            semantic_tokens: true,
+            inlay_hints: true,
+            diagnostics: true,
+            folding_ranges: true,
+            code_actions: true,
+            document_formatting: true,
+            selection_ranges: true,
+            signature_help: true,
+            rename: true,
+        }
+    }
+}
+
+impl FeatureToggles {
+    pub(crate) fn from_init_params(params: &serde_json::Value) -> Self {
+        let f = params.get("features");
+        macro_rules! b {
+            ($k:literal) => {
+                f.and_then(|v| v.get($k))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true)
+            };
+        }
+        Self {
+            semantic_tokens: b!("semanticTokens"),
+            inlay_hints: b!("inlayHints"),
+            diagnostics: b!("diagnostics"),
+            folding_ranges: b!("foldingRanges"),
+            code_actions: b!("codeActions"),
+            document_formatting: b!("documentFormatting"),
+            selection_ranges: b!("selectionRanges"),
+            signature_help: b!("signatureHelp"),
+            rename: b!("rename"),
+        }
+    }
+}
 pub(crate) struct Backend {
     pub(super) client: Client,
     pub(super) indexer: Arc<Indexer>,
@@ -45,6 +99,7 @@ pub(crate) struct Backend {
     pub(super) snippet_support: Arc<AtomicBool>,
     /// Inlay hint configuration toggles, parsed from initialization options.
     pub(super) inlay_hint_config: Arc<std::sync::RwLock<InlayHintConfig>>,
+    pub(super) feature_toggles: std::sync::RwLock<FeatureToggles>,
     /// Kotlin formatter tool override.  "ktlint" | "ktfmt" | None = default (ktfmt).
     pub(super) format_tool: Option<String>,
 }
@@ -78,6 +133,7 @@ impl Backend {
             pending_reindex: DashMap::new(),
             snippet_support: Arc::new(AtomicBool::new(false)),
             inlay_hint_config: Arc::new(std::sync::RwLock::new(InlayHintConfig::default())),
+            feature_toggles: std::sync::RwLock::new(FeatureToggles::default()),
             format_tool: None,
         }
     }
@@ -311,6 +367,7 @@ impl Backend {
         let indexer = Arc::clone(&self.indexer);
         let semaphore = indexer.parse_sem();
         let client = self.client.clone();
+        let send_diag = self.feature_toggles.read().unwrap().diagnostics;
         let cached_indexer = Arc::clone(&self.indexer);
         tokio::task::spawn(async move {
             let uri = opened_document.uri;
@@ -339,9 +396,11 @@ impl Backend {
                 }
                 Err(_) => Vec::new(),
             };
-            client
-                .publish_diagnostics(uri_for_diagnostics, diagnostics, None)
-                .await;
+            if send_diag {
+                client
+                    .publish_diagnostics(uri_for_diagnostics, diagnostics, None)
+                    .await;
+            }
         });
     }
 }
@@ -351,6 +410,24 @@ impl LanguageServer for Backend {
     // ── lifecycle ────────────────────────────────────────────────────────────
 
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        let toggles = params
+            .initialization_options
+            .as_ref()
+            .map(FeatureToggles::from_init_params)
+            .unwrap_or_default();
+        *self.feature_toggles.write().unwrap() = toggles.clone();
+        log::info!(
+            "feature toggles: st={} inlay={} diag={} fold={} ca={} fmt={} sel={} sig={} ren={}",
+            toggles.semantic_tokens,
+            toggles.inlay_hints,
+            toggles.diagnostics,
+            toggles.folding_ranges,
+            toggles.code_actions,
+            toggles.document_formatting,
+            toggles.selection_ranges,
+            toggles.signature_help,
+            toggles.rename
+        );
         let supports_snippets = Self::detect_snippet_support(&params);
         self.snippet_support
             .store(supports_snippets, Ordering::Relaxed);
