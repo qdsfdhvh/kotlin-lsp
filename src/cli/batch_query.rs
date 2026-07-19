@@ -30,6 +30,10 @@ enum QuerySpec {
         col: u32,
         depth: Option<u32>,
     },
+    #[serde(rename = "implementations")]
+    Implementations { name: String },
+    #[serde(rename = "subclasses")]
+    Subclasses { name: String },
 }
 
 #[derive(Debug, Serialize)]
@@ -231,6 +235,48 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
                     "callers": callers,
                     "depth": depth,
                 }),
+            }
+        }
+        QuerySpec::Implementations { name } => {
+            let results: Vec<serde_json::Value> =
+                if let Some(locs) = index.subtypes.get(name.as_str()) {
+                    locs.value()
+                        .iter()
+                        .take(50)
+                        .map(|loc| {
+                            serde_json::json!({
+                                "file": loc.uri.to_string(),
+                                "line": loc.range.start.line + 1,
+                            })
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+            QueryResult {
+                query_type: "implementations".into(),
+                data: serde_json::json!({ "name": name, "results": results }),
+            }
+        }
+        QuerySpec::Subclasses { name } => {
+            let results: Vec<serde_json::Value> =
+                if let Some(locs) = index.subtypes.get(name.as_str()) {
+                    locs.value()
+                        .iter()
+                        .take(50)
+                        .map(|loc| {
+                            serde_json::json!({
+                                "file": loc.uri.to_string(),
+                                "line": loc.range.start.line + 1,
+                            })
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+            QueryResult {
+                query_type: "subclasses".into(),
+                data: serde_json::json!({ "name": name, "results": results }),
             }
         }
     }
