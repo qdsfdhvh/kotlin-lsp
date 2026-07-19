@@ -108,6 +108,7 @@ async fn async_main() {
 
     let lsp_flags = parse_lsp_flags();
     let format_tool = lsp_flags.format_tool;
+    let agent_mode = lsp_flags.agent_mode;
     let args: Vec<String> = lsp_flags.remaining;
 
     // --index-only <path>  — build cache and exit
@@ -172,6 +173,9 @@ async fn async_main() {
                 let mut backend = backend::Backend::new(client);
                 if let Some(tool) = ft.clone() {
                     backend = backend.with_format_tool(tool);
+                    if agent_mode {
+                        backend = backend.with_agent_mode();
+                    }
                 }
                 backend
             });
@@ -188,6 +192,9 @@ async fn async_main() {
         let mut backend = backend::Backend::new(client);
         if let Some(tool) = ft.clone() {
             backend = backend.with_format_tool(tool);
+            if agent_mode {
+                backend = backend.with_agent_mode();
+            }
         }
         backend
     });
@@ -197,6 +204,7 @@ async fn async_main() {
 /// LSP-server-level CLI flags, parsed before subcommands.
 struct LspCliFlags {
     format_tool: Option<String>,
+    agent_mode: bool,
     /// Remaining args after stripping recognised flags (kept in order).
     remaining: Vec<String>,
 }
@@ -209,11 +217,15 @@ struct LspCliFlags {
 /// `--port 1234 --format-tool ktlint` both work.
 fn parse_lsp_flags() -> LspCliFlags {
     let mut format_tool: Option<String> = None;
+    let mut agent_mode = false;
     let mut remaining: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1).peekable();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--agent" => {
+                agent_mode = true;
+            }
             "--format-tool" => {
                 let tool = args.next().unwrap_or_else(|| {
                     eprintln!("Usage: kotlin-lsp --format-tool <ktlint|ktfmt>");
@@ -243,6 +255,7 @@ fn parse_lsp_flags() -> LspCliFlags {
 
     LspCliFlags {
         format_tool,
+        agent_mode,
         remaining,
     }
 }

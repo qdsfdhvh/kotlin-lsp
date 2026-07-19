@@ -101,6 +101,7 @@ pub(crate) struct Backend {
     pub(super) inlay_hint_config: Arc<std::sync::RwLock<InlayHintConfig>>,
     pub(super) feature_toggles: std::sync::RwLock<FeatureToggles>,
     /// Kotlin formatter tool override.  "ktlint" | "ktfmt" | None = default (ktfmt).
+    pub(super) agent_mode: bool,
     pub(super) format_tool: Option<String>,
 }
 
@@ -134,11 +135,18 @@ impl Backend {
             snippet_support: Arc::new(AtomicBool::new(false)),
             inlay_hint_config: Arc::new(std::sync::RwLock::new(InlayHintConfig::default())),
             feature_toggles: std::sync::RwLock::new(FeatureToggles::default()),
+            agent_mode: false,
             format_tool: None,
         }
     }
 
     /// Override the Kotlin formatter tool ("ktlint" | "ktfmt").
+    /// Enable agent mode — applies optimized defaults for AI coding agents.
+    pub(crate) fn with_agent_mode(mut self) -> Self {
+        self.agent_mode = true;
+        self
+    }
+
     pub(crate) fn with_format_tool(mut self, tool: String) -> Self {
         self.format_tool = Some(tool);
         self
@@ -415,7 +423,28 @@ impl LanguageServer for Backend {
             .as_ref()
             .map(FeatureToggles::from_init_params)
             .unwrap_or_default();
-        *self.feature_toggles.write().unwrap() = toggles.clone();
+        // Apply agent defaults if --agent flag was set and no explicit features provided
+        let has_explicit_features = params
+            .initialization_options
+            .as_ref()
+            .and_then(|v| v.get("features"))
+            .is_some();
+        let effective_toggles = if self.agent_mode && !has_explicit_features {
+            FeatureToggles {
+                diagnostics: false,
+                semantic_tokens: false,
+                inlay_hints: false,
+                folding_ranges: false,
+                code_actions: false,
+                document_formatting: false,
+                selection_ranges: false,
+                signature_help: false,
+                rename: false,
+            }
+        } else {
+            toggles.clone()
+        };
+        *self.feature_toggles.write().unwrap() = effective_toggles.clone();
         log::info!(
             "feature toggles: st={} inlay={} diag={} fold={} ca={} fmt={} sel={} sig={} ren={}",
             toggles.semantic_tokens,
