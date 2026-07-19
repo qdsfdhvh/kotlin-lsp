@@ -32,7 +32,19 @@ try_cargo() {
     info "KOTLIN_LSP_FORCE_BINARY=1 — skipping cargo, using binary download"
     return 1
   fi
-  if ! command -v cargo >/dev/null 2>&1; then
+  # Detect the real cargo binary (not the rustup wrapper symlink)
+  local cargo_bin=""
+  if command -v cargo >/dev/null 2>&1; then
+    # Prefer toolchain-direct cargo binary to avoid rustup proxy issues
+    local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+    local toolchain_dir=$(ls -d "$rustup_home/toolchains"/stable-*/bin/cargo 2>/dev/null | head -1)
+    if [ -x "$toolchain_dir" ]; then
+      cargo_bin="$toolchain_dir"
+    else
+      cargo_bin="cargo"
+    fi
+  fi
+  if [ -z "$cargo_bin" ] || ! "$cargo_bin" --version >/dev/null 2>&1; then
     warn "cargo not found — falling back to binary download"
     info "  install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
     return 1
@@ -48,7 +60,7 @@ try_cargo() {
   fi
   local url="${REPO_URL}.git"
   info "installing via cargo from ${url}"
-  cargo install --git "$url" --tag "$VERSION" "$pkg" 2>&1 || {
+  "$cargo_bin" install --git "$url" --tag "$VERSION" "$pkg" 2>&1 || {
     warn "cargo install failed — falling back to binary download"
     return 1
   }
@@ -86,7 +98,7 @@ download_binary() {
   info "downloading ${url}"
 
   local tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
+  trap 'rm -rf "${tmp:-}"' EXIT
 
   if command -v curl >/dev/null 2>&1; then
     curl -fSL --retry 3 -o "$tmp/asset.tar.gz" "$url" \
