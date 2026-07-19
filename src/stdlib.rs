@@ -508,13 +508,30 @@ fn all() -> impl Iterator<Item = &'static StdlibEntry> {
         .chain(TOP_LEVEL_FUNS)
 }
 
+// ── O(1) HashMap symbol index ────────────────────────────────────────────────
+// Lazily-built from linear arrays. Replaces O(n) scan for lookups.
+
+use std::collections::HashMap;
+
+fn stdlib_index() -> &'static HashMap<&'static str, Vec<&'static str>> {
+    use std::sync::OnceLock;
+    static INDEX: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        let mut m: HashMap<&str, Vec<&str>> = HashMap::new();
+        for e in all() {
+            m.entry(e.name).or_default().push(e.signature);
+        }
+        m
+    })
+}
+
+pub(crate) fn lookup_stdlib(name: &str) -> Vec<&'static str> {
+    stdlib_index().get(name).cloned().unwrap_or_default()
+}
+
 /// Hover markdown for a stdlib symbol, or `None` if not known.
 pub(crate) fn hover(name: &str) -> Option<String> {
-    // Collect all matching signatures (same name can appear in multiple tables).
-    let sigs: Vec<&str> = all()
-        .filter(|e| e.name == name)
-        .map(|e| e.signature)
-        .collect();
+    let sigs = lookup_stdlib(name);
     if sigs.is_empty() {
         return None;
     }
