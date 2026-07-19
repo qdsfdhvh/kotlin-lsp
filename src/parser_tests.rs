@@ -2908,3 +2908,39 @@ fn sealed_modifier_not_on_function() {
         "function named sealed should not be is_sealed"
     );
 }
+
+// ── false positive: annotated function type with named params (#192) ─────
+
+#[test]
+fn fp_annotated_function_type_named_params() {
+    let src = r#"
+@Target(AnnotationTarget.TYPE)
+annotation class Composable
+
+fun render(content: @Composable (value: String, index: Int) -> Unit) = Unit
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for @Composable (value: String, ...), got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_annotated_function_type_named_params_nested() {
+    let src = r#"
+@Target(AnnotationTarget.TYPE)
+annotation class Composable
+
+fun render(
+    content: @Composable (onSuccess: () -> Unit, onDismiss: () -> Unit) -> Unit = { _, _ -> },
+) = Unit
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for nested named callbacks, got: {:?}",
+        data.syntax_errors
+    );
+}

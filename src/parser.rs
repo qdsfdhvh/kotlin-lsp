@@ -602,6 +602,9 @@ fn is_annotation_function_type_error(node: &Node, bytes: &[u8]) -> bool {
     // Broader check: error contains `->` and an annotation-like prefix
     // (handles cases where more context is captured in the error).
     trimmed.contains("->") && (trimmed.contains("@") || trimmed.starts_with("suspend"))
+        // Named params in annotated function types (#192):
+        // tree-sitter produces ERROR e.g. ": @Composable (name` — has @, (, : but no ->
+        || (trimmed.contains('@') && trimmed.contains('(') && trimmed.contains(':') && !trimmed.contains("->"))
 }
 
 /// Returns the interface name if this `function_declaration` is actually a misparse
