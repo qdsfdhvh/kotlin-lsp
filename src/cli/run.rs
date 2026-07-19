@@ -1371,6 +1371,41 @@ pub(crate) async fn run(args: CliArgs) {
         }
 
         Subcommand::Type { sub } => match sub {
+            TypeSub::Sealed { name } => {
+                let root = resolve_root(args.root.as_deref());
+                let index = build_index(&root, false).await;
+                if json {
+                    let mut result = serde_json::Map::new();
+                    result.insert("name".into(), serde_json::json!(name));
+                    let children: Vec<serde_json::Value> =
+                        if let Some(locs) = index.subtypes.get(&name) {
+                            locs.iter()
+                                .map(|loc| {
+                                    serde_json::json!({
+                                        "file": loc.uri.to_string(),
+                                        "line": loc.range.start.line + 1,
+                                    })
+                                })
+                                .collect()
+                        } else {
+                            Vec::new()
+                        };
+                    let count = children.len();
+                    result.insert("subclasses".into(), serde_json::Value::Array(children));
+                    result.insert("count".into(), serde_json::json!(count));
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::Value::Object(result)).unwrap()
+                    );
+                } else if let Some(locs) = index.subtypes.get(&name) {
+                    println!("Subclasses of {name}: {} found", locs.len());
+                    for loc in locs.iter() {
+                        println!("  {}:{}", loc.uri, loc.range.start.line + 1);
+                    }
+                } else {
+                    println!("No subclasses found for '{name}'");
+                }
+            }
             TypeSub::Hierarchy {
                 name,
                 subtypes,

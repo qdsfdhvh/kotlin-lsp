@@ -328,6 +328,9 @@ pub(crate) enum TypeSub {
         graph: bool,
         depth: u32,
     },
+    Sealed {
+        name: String,
+    },
 }
 
 /// Sub-command within the `call` parent command.
@@ -746,6 +749,115 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let root = positionals.first().map(PathBuf::from);
             Ok(Subcommand::IndexJars { root })
         }
+        "search" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            match sub.as_str() {
+                "docs" => {
+                    let query = positionals.get(1).cloned().ok_or("search docs requires QUERY")?;
+                    Ok(Subcommand::Docs { query })
+                }
+                "semantic" | "" => {
+                    let query = positionals.get(1).cloned().ok_or("search semantic requires QUERY")?;
+                    let limit = parsed.limit.unwrap_or(20);
+                    Ok(Subcommand::Search { query, limit })
+                }
+                "summarize" => {
+                    let name = positionals.get(1).cloned().unwrap_or_default();
+                    if name.is_empty() { return Err("search summarize requires NAME".into()); }
+                    let expand = positionals.contains(&"--expand".to_string());
+                    Ok(Subcommand::Summarize { name, expand, cached: parsed.cached })
+                }
+                "cache-stats" => Ok(Subcommand::SummaryCacheStats),
+                "imports" => {
+                    let name = positionals.get(1).cloned().ok_or("search imports requires NAME")?;
+                    Ok(Subcommand::ImportsOf { name })
+                }
+                "annotated" => {
+                    let a = positionals.get(1).cloned().ok_or("search annotated requires ANNOTATION")?;
+                    Ok(Subcommand::Annotated { annotation: a })
+                }
+                "find-test" => {
+                    let r = positionals[1..].to_vec();
+                    let (f, l, c) = parse_file_line_col(r, "search find-test")?;
+                    Ok(Subcommand::FindTest { file: f, line: l, col: c })
+                }
+                "expect-actual" => {
+                    let n = positionals.get(1).cloned().unwrap_or_default();
+                    if n.is_empty() { return Err("search expect-actual requires NAME".into()); }
+                    Ok(Subcommand::ExpectActual { name: n })
+                }
+                o => Err(format!("unknown search subcommand '{o}'. Available: docs, semantic, summarize, cache-stats, imports, annotated, find-test, expect-actual")),
+            }
+        }
+        "edit" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            let rem = positionals[1..].to_vec();
+            match sub.as_str() {
+                "rename" => {
+                    let (f, l, c) = parse_file_line_col(rem, "edit rename")?;
+                    let nn = positionals.get(4).ok_or("edit rename: <file> <line> <col> <newName>")?.to_string();
+                    Ok(Subcommand::Rename { file: f, line: l, col: c, new_name: nn, apply: apply_action })
+                }
+                "batch" => {
+                    let f = PathBuf::from(rem.first().cloned().unwrap_or_default());
+                    if f.as_os_str().is_empty() { return Err("edit batch requires FILE".into()); }
+                    Ok(Subcommand::Batch { file: f, dry_run, imports: false, apply: apply_action, output: None })
+                }
+                "imports" => {
+                    let f = PathBuf::from(rem.first().cloned().unwrap_or_default());
+                    if f.as_os_str().is_empty() { return Err("edit imports requires FILE".into()); }
+                    Ok(Subcommand::Batch { file: f, dry_run, imports: true, apply: apply_action, output: None })
+                }
+                "inject" => {
+                    let f = PathBuf::from(rem.first().cloned().unwrap_or_default());
+                    if f.as_os_str().is_empty() { return Err("edit inject requires FILE".into()); }
+                    Ok(Subcommand::Inject { file: f })
+                }
+                "insert" => build_insert_subcommand(rem, before, after, content, in_place),
+                "new" => {
+                    let tpl = rem.first().cloned().unwrap_or_default();
+                    let n = rem.get(1).cloned().unwrap_or_default();
+                    if tpl.is_empty() || n.is_empty() { return Err("edit new: <template> <Name>".into()); }
+                    Ok(Subcommand::NewFile { template: tpl, name: n, package_name: package_filter.clone(), directory: dir_filter.clone() })
+                }
+                "organize" => {
+                    let files: Vec<PathBuf> = rem.iter().map(PathBuf::from).collect();
+                    Ok(Subcommand::OrganizeImports { files })
+                }
+                o => Err(format!("unknown edit subcommand '{o}'. Available: rename, batch, imports, inject, insert, new, organize")),
+            }
+        }
+        "tool" => {
+            let sub = positionals.first().cloned().unwrap_or_default();
+            let rem = positionals[1..].to_vec();
+            match sub.as_str() {
+                "tokens" => {
+                    let f = PathBuf::from(rem.first().cloned().ok_or("tool tokens requires FILE")?);
+                    Ok(Subcommand::Tokens { file: f, cst_only: false, resolve: false, phases: false, show_tree: false })
+                }
+                "tree" => {
+                    let f = PathBuf::from(rem.first().cloned().ok_or("tool tree requires FILE")?);
+                    Ok(Subcommand::Tree { file: f })
+                }
+                "inspect" => {
+                    let f = PathBuf::from(rem.first().cloned().ok_or("tool inspect requires FILE")?);
+                    Ok(Subcommand::Inspect { file: f, expand })
+                }
+                "graph" => Ok(Subcommand::SymbolGraph),
+                "snapshot" => Ok(Subcommand::Snapshot { filter_kind: None, exclude_relationships: parsed.exclude_relationships }),
+                "bench" => Ok(Subcommand::Benchmark),
+                "doctor" => Ok(Subcommand::Doctor { verbose: parsed.verbose, json: parsed.fmt == OutputFmt::Json }),
+                "workspace" => Ok(Subcommand::Workspace),
+                "query" => Ok(Subcommand::Query),
+                "skills" => Ok(Subcommand::Skills { args: rem }),
+                "code-action" => {
+                    let (f, l, c) = parse_file_line_col(rem, "tool code-action")?;
+                    Ok(Subcommand::CodeAction { file: f, line: l, col: c, kind: kind_filter.clone(), apply: apply_action })
+                }
+                o => Err(format!("unknown tool subcommand '{o}'. Available: tokens, tree, inspect, graph, snapshot, bench, doctor, workspace, query, skills, code-action")),
+            }
+        }
+
         "gradle-deps" => Ok(Subcommand::GradleDeps),
         "benchmark" => Ok(Subcommand::Benchmark),
         "tokens" => Ok(Subcommand::Tokens {
@@ -1120,6 +1232,15 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "call" => {
             let sub = positionals.first().cloned().unwrap_or_default();
             match sub.as_str() {
+                "sealed" => {
+                    let n = positionals.get(1).cloned().unwrap_or_default();
+                    if n.is_empty() {
+                        return Err("type sealed requires NAME".into());
+                    }
+                    Ok(Subcommand::Type {
+                        sub: TypeSub::Sealed { name: n },
+                    })
+                }
                 "hierarchy" => {
                     let remaining = positionals[1..].to_vec();
                     let (file, line, col) = parse_file_line_col(remaining, "call hierarchy")?;
@@ -1135,7 +1256,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     })
                 }
                 other => Err(format!(
-                    "unknown call subcommand '{}'. Available: hierarchy",
+                    "unknown call subcommand '{}'. Available: hierarchy, sealed",
                     other
                 )),
             }
@@ -1177,12 +1298,21 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "type" => {
             let sub = positionals.first().cloned().unwrap_or_default();
             match sub.as_str() {
+                "sealed" => {
+                    let n = positionals.get(1).cloned().unwrap_or_default();
+                    if n.is_empty() {
+                        return Err("type sealed requires NAME".into());
+                    }
+                    Ok(Subcommand::Type {
+                        sub: TypeSub::Sealed { name: n },
+                    })
+                }
                 "hierarchy" => {
                     let remaining = positionals[1..].to_vec();
                     build_type_subcommand(remaining, type_subtypes, type_supertypes, type_graph)
                 }
                 other => Err(format!(
-                    "unknown type subcommand '{}'. Available: hierarchy",
+                    "unknown type subcommand '{}'. Available: hierarchy, sealed",
                     other
                 )),
             }
@@ -1214,14 +1344,6 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 .cloned()
                 .ok_or("docs requires a QUERY argument")?;
             Ok(Subcommand::Docs { query })
-        }
-        "search" => {
-            let query = positionals
-                .first()
-                .cloned()
-                .ok_or("search requires a QUERY argument")?;
-            let limit = parsed.limit.unwrap_or(20);
-            Ok(Subcommand::Search { query, limit })
         }
         "summary-cache" => Ok(Subcommand::SummaryCacheStats),
         "type-hierarchy" => {
@@ -1459,6 +1581,9 @@ fn is_subcommand(value: &str) -> bool {
             | "summarize"
             | "search"
             | "summary-cache"
+            
+            | "edit"
+            | "tool"
             | "gradle-deps"
             | "callers"
             | "callees"
