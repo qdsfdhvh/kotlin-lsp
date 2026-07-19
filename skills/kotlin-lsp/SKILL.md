@@ -114,9 +114,9 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Syntax check | `kotlin-lsp check <file>...` |
 | Format check | `kotlin-lsp format check <dir>...` |
 | Format apply | `kotlin-lsp format apply <dir>...` |
-| Code actions | `kotlin-lsp code-action <file> <line> <col>` |
-| Organize imports | `kotlin-lsp organize-imports <file>...` |
-| Batch imports | `kotlin-lsp batch-imports <file>` |
+| Code actions | `kotlin-lsp tool code-action <file> <line> <col>` |
+| Organize imports | `kotlin-lsp edit organize <file>...` |
+| Batch imports | `kotlin-lsp edit imports <file>` |
 | Rename | `kotlin-lsp rename <file> <line> <col> <new>` |
 | Semantic insert | `kotlin-lsp insert <file> <kind>` |
 | Inject types | `kotlin-lsp inject <file>` |
@@ -148,9 +148,9 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Batch query | `echo '[...]' \| kotlin-lsp query --json` |
 | File inspect | `kotlin-lsp inspect <file>` |
 | Tokens (debug) | `kotlin-lsp tokens <file>` |
-| Parse tree (debug) | `kotlin-lsp tree <file>` |
-| New file | `kotlin-lsp new-file <template> <name>` |
-| Benchmark | `kotlin-lsp benchmark` |
+| Parse tree (debug) | `kotlin-lsp tool tree <file>` |
+| New file | `kotlin-lsp edit new <template> <name>` |
+| Benchmark | `kotlin-lsp tool bench` |
 | Agent skills | `kotlin-lsp skills list \| read <name>` |
 
 Full command reference → references/commands.md
