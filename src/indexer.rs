@@ -528,6 +528,29 @@ impl Indexer {
         self.live_lines.remove(uri.as_str());
     }
 
+    /// Compact stale index entries for files no longer on disk.
+    /// Called on did_close and shutdown to keep memory low.
+    pub(crate) fn compact_stale_entries(&self) {
+        let mut stale = Vec::new();
+        for entry in self.files.iter() {
+            let uri_str = entry.key();
+            if let Ok(uri) = tower_lsp::lsp_types::Url::parse(uri_str) {
+                if let Ok(path) = uri.to_file_path() {
+                    if !path.exists() {
+                        stale.push(uri_str.clone());
+                    }
+                }
+            }
+        }
+        for uri_str in &stale {
+            self.files.remove(uri_str);
+            self.content_hashes.remove(uri_str);
+        }
+        if !stale.is_empty() {
+            log::info!("Compacted {} stale file entries from index", stale.len());
+        }
+    }
+
     pub(crate) fn remove_indexed_file(&self, uri: &Url) {
         self.files.remove(uri.as_str());
     }
