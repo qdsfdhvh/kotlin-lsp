@@ -1,0 +1,20 @@
+# kotlin-lsp — Agent Context
+# When the LSP starts with --agent, this file is used as the context root
+# instead of auto-discovering all files.
+# The agent sees only the paths listed here.
+
+# Source code (agent needs these for code changes)
+src/
+
+# Documentation (agent needs these for understanding the project)
+docs/commands.md
+
+# Test files (agent needs these for validating changes)
+src/parser_tests.rs
+src/gradle/tests.rs
+tests/
+
+# Configuration files (agent needs these for CI/release)
+Cargo.toml
+rustfmt.toml
+.github/workflows/ci.yml

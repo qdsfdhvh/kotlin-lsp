@@ -464,11 +464,12 @@ impl LanguageServer for Backend {
     }
 
     async fn shutdown(&self) -> Result<()> {
-        // Spawn cache write in background so the LSP shutdown response is sent
-        // immediately. The process stays alive until the `exit` notification
-        // arrives, giving the write enough time to complete for typical caches.
+        // Compact stale entries and save cache in background.
         let idx = Arc::clone(&self.indexer);
-        tokio::task::spawn_blocking(move || idx.save_cache_to_disk());
+        tokio::task::spawn_blocking(move || {
+            idx.compact_stale_entries();
+            idx.save_cache_to_disk();
+        });
         Ok(())
     }
 
