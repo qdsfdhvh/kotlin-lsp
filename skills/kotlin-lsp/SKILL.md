@@ -28,12 +28,12 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Implementation tree → kotlin-lsp type hierarchy
    ├─ Composable analysis → kotlin-lsp android composables <file> --call-graph/--state/--preview
    ├─ Batch queries → echo '[...]' | kotlin-lsp query --json
-   ├─ Import analysis → kotlin-lsp imports-of
-   ├─ Annotation query → kotlin-lsp annotated
-   ├─ Signature search → kotlin-lsp docs
-   ├─ Semantic search → kotlin-lsp search "find where token is refreshed"
-   ├─ Cached summaries → kotlin-lsp summarize <name> --cached | summary-cache
-   └─ Full project snapshot → kotlin-lsp snapshot / symbol-graph
+   ├─ Import analysis → kotlin-lsp search imports
+   ├─ Annotation query → kotlin-lsp search annotated
+   ├─ Signature search → kotlin-lsp search docs
+   ├─ Semantic search → kotlin-lsp search semantic "login repo"
+   ├─ Cached summaries → kotlin-lsp search summarize <name> --cached | search cache-stats
+   └─ Full project snapshot → kotlin-lsp tool snapshot / tool graph
 ```
 
 Full command reference → references/commands.md
@@ -54,58 +54,52 @@ Output defaults:
 ## Quick reference — most-used commands
 
 ```bash
-# Find declarations
-kotlin-lsp find <Name> [--limit N] [--module <frag>] [--kind class,fun]
-kotlin-lsp search "login repo" [--limit N] [--json]
-
-# Find references
-kotlin-lsp refs <Name> [--limit N] [--exclude-imports]
-
-# Hover / context
+# Find declarations / references
+kotlin-lsp find <Name> [--limit N] [--kind class,fun]
+kotlin-lsp refs <Name> [--limit N]
 kotlin-lsp hover <file> <line> <col>
 kotlin-lsp context <file> <line> <col>
 
-# Call graph (tree output)
+# Search group (symbol discovery)
+kotlin-lsp search semantic "login repo" [--limit N]
+kotlin-lsp search summarize <name> --cached
+kotlin-lsp search docs <query>
+kotlin-lsp search cache-stats
+kotlin-lsp search imports <name>
+kotlin-lsp search annotated <annotation>
+kotlin-lsp search find-test <file> <line> <col>
+kotlin-lsp search expect-actual <name>
+
+# Call graph
 kotlin-lsp call hierarchy <file> <line> <col>
 
-# Inheritance
-kotlin-lsp type hierarchy <Name> [--subtypes|--supertypes]
+# Type hierarchy
+kotlin-lsp type hierarchy <Name>
+kotlin-lsp type sealed <Name>
 
-# Semantic search
-kotlin-lsp search "find where token is refreshed" [--limit N]
-kotlin-lsp search "login view model" --json
+# Edit group (code modification)
+kotlin-lsp edit organize <file>...
+kotlin-lsp edit imports <file> [--apply]
+kotlin-lsp edit rename <file> <line> <col> <newName>
+kotlin-lsp edit inject <file>
+kotlin-lsp edit new <template> <Name>
 
-# Cached summaries
-kotlin-lsp summarize <name> --cached
-kotlin-lsp summary-cache
-
-# Batch
-echo '[...]' | kotlin-lsp query --json
-
-# Project snapshot
-kotlin-lsp snapshot
-kotlin-lsp symbol-graph --json
+# Tool group (debug / introspection)
+kotlin-lsp tool bench
+kotlin-lsp tool doctor [--json]
+kotlin-lsp tool inspect <file>
+kotlin-lsp tool snapshot
+kotlin-lsp tool graph --json
+kotlin-lsp tool code-action <file> <line> <col>
 
 # Syntax / format
 kotlin-lsp check <file>...
 kotlin-lsp format check <dir>...
-
-# Code edits
-kotlin-lsp organize-imports <file>
-kotlin-lsp batch-imports <file> [--apply]
-kotlin-lsp rename <file> <line> <col> <newName>
-
-# Doctor
-kotlin-lsp doctor [--json]
+kotlin-lsp format apply <dir>...
 
 # Android / Compose
-kotlin-lsp android composables <file> --call-graph
-kotlin-lsp android composables <file> --state
-kotlin-lsp android composables <file> --preview
+kotlin-lsp android composables <file> --call-graph/--state/--preview
 ```
-kotlin-lsp doctor [--json]
-```
-
 ## All commands
 
 | Need | Command |
