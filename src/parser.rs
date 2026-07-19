@@ -385,6 +385,11 @@ fn push_def_symbols(
                 String::new()
             };
             let deprecated = is_deprecated_at_line(lines, sel.start.line as usize);
+            let is_sealed = (kind == SymbolKind::CLASS || kind == SymbolKind::INTERFACE)
+                && lines
+                    .get(sel.start.line as usize)
+                    .map(|l| l.trim().starts_with("sealed "))
+                    .unwrap_or(false);
             symbols.push(SymbolEntry {
                 name,
                 kind,
@@ -399,6 +404,7 @@ fn push_def_symbols(
                 return_type,
                 parameters,
                 documentation,
+                is_sealed,
             });
         }
     }
@@ -675,6 +681,8 @@ fn push_interface_symbol(
         return_type: None,
         parameters: Vec::new(),
         documentation: extract_kdoc_from_lines(&lines, node.range().start_point.row as u32),
+
+        is_sealed: false,
     });
 }
 
@@ -819,6 +827,8 @@ fn extract_fun_from_error(
             return_type: None,
             parameters: Vec::new(),
             documentation: extract_kdoc_from_lines(lines, err.range().start_point.row as u32),
+
+            is_sealed: false,
         });
     }
 }
@@ -1838,6 +1848,8 @@ impl crate::types::FileData {
                     &self.lines,
                     node.range().start_point.row as u32,
                 ),
+
+                is_sealed: false,
             });
         }
     }
@@ -1883,6 +1895,8 @@ impl crate::types::FileData {
                         &self.lines,
                         node.range().start_point.row as u32,
                     ),
+
+                    is_sealed: false,
                 });
             }
         }
@@ -1929,6 +1943,8 @@ fn synthesize_data_class_copy(symbols: &mut Vec<SymbolEntry>, lines: &[String]) 
             return_type: None,
             parameters: Vec::new(),
             documentation: extract_kdoc_from_lines(lines, symbols[idx].range.start.line),
+
+            is_sealed: false,
         });
     }
 }

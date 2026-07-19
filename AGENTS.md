@@ -61,6 +61,22 @@ cargo clippy -- -D warnings
    - Run `cargo test --bin kotlin-lsp 'parser::tests::'` to confirm no regressions
    - Group related tests under `// ── false positive syntax error regression tests ───────────`
 
+11. **CLI command grouping** — Every subcommand MUST belong to a parent group. No orphaned top-level subcommands.
+    - New features NEVER get their own top-level subcommand. Merge into an existing group, or create a group for ≥2 related commands.
+    - **Grouped today:** `call hierarchy`, `type hierarchy`, `module`, `android`, `format`.
+    - **Consolidation targets** (ungrouped → group when refactoring):
+      - `gradle-deps`, `sealed` → candidate `gradle` / `inspect` group
+      - `imports-of`, `annotated` → candidate `query` or `find` filters
+      - `find-test`, `expect-actual` → candidate `find` sub-mode
+      - `docs`, `summarize`, `summary-cache` → candidate `info` / `symbol` group
+      - `batch`, `batch-imports`, `new-file`, `inject`, `insert` → candidate `edit` group
+      - `index`, `index-jars`, `sources`, `extract-sources`, `cache` → candidate `index` group
+      - `tokens`, `tree`, `inspect`, `symbol-graph`, `snapshot` → candidate `debug` group
+      - `benchmark`, `doctor` → candidate `diag` group
+      - `skills`, `workspace`, `query`, `rename`, `organize-imports` — each a single-use, keep grouped in next pass
+    - **Deprecation policy:** keep old names in `is_subcommand()` + `build_subcommand()` for ≤1 release with `eprintln!("[WARN] ...")`. Remove the registration in the NEXT release.
+    - **Alias cleanup:** remove `code_action` (underscore variant), remove all deprecated commands that are ≥2 releases old.
+
 ## CLI Reference
 
 See **[docs/commands.md](docs/commands.md)** for the full command reference.
@@ -130,3 +146,49 @@ CI artifacts, and downstream consumers that reference the tag.
 Before touching tags, verify:
 1. Is this a new tag or an existing release?
 2. Ask: "vX.Y.Z already exists as a published release. Are you sure you want to overwrite it?"
+
+## CI Monitoring via pi-loop
+
+This project uses the `pi-loop` extension for CI/CD automation.
+
+### Watch PR CI
+
+After pushing a PR, start a monitor to watch CI completion:
+
+```
+MonitorCreate(command="gh pr checks --watch <PR_NUMBER>", onDone="Report CI results")
+```
+
+Or poll every 2 minutes until green:
+
+```
+LoopCreate(trigger="2m", prompt="Check 'gh pr checks <N>' — if all pass, report; if fail, fix and push", maxFires=20)
+```
+
+### Auto-merge on green
+
+```
+LoopCreate(
+  trigger="2m",
+  prompt="Run 'gh pr checks <N>' — if all green, run 'gh pr merge <N> --squash --delete-branch' then delete this loop",
+  maxFires=15
+)
+```
+
+### Test loop (CI simulation)
+
+Before pushing, run a local test loop to catch regressions early:
+
+```
+LoopCreate(trigger="1m", prompt="Run 'cargo test 2>&1 | tail -5' — if any failure, stop and report", maxFires=5)
+```
+
+### Key loops for this project
+
+| Use case | Trigger | Pattern |
+|----------|---------|---------|
+| Watch PR CI | `MonitorCreate` + `onDone` | One-shot background |
+| Poll PR CI | `2m` cron | LoopCreate with maxFires=20 |
+| Auto-merge on green | `2m` cron | Check `gh pr checks` → `gh pr merge` |
+| Local pre-push test | `1m` cron | `cargo test && cargo clippy` |
+| Dogfood regressions | `5m` cron | Run dogfood.conf projects |

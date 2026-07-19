@@ -248,6 +248,8 @@ pub(crate) fn symbols_to_filedata(
             return_type: None,
             parameters: Vec::new(),
             documentation: None,
+
+            is_sealed: false,
         };
         file_symbols.push(entry);
         definitions.push((

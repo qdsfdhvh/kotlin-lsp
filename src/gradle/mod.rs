@@ -12,11 +12,26 @@ pub(crate) mod parser;
 #[path = "tests.rs"]
 mod tests;
 
+/// A Gradle plugin declaration.
+#[derive(Debug, Clone)]
+pub(crate) struct Plugin {
+    /// Plugin ID, e.g. "org.jetbrains.kotlin.jvm"
+    pub id: String,
+    /// Version string if specified
+    pub version: Option<String>,
+    /// Whether declared with `apply false`
+    pub apply_false: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GradleDeps {
     pub external: Vec<ExternalDep>,
     pub projects: Vec<ProjectDep>,
+    pub plugins: Vec<Plugin>,
     pub project_root: PathBuf,
+    pub android: AndroidBlock,
+    /// mtime of build.gradle.kts when last parsed (seconds since epoch)
+    pub mtime_secs: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -25,12 +40,24 @@ pub(crate) struct ExternalDep {
     pub group: String,
     pub artifact: String,
     pub version: String,
+    /// Gradle configuration: "implementation", "api", "testImplementation", etc.
+    pub config: String,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ProjectDep {
     pub alias: String,
     pub module_path: String,
+}
+
+/// Android block settings extracted from build.gradle.kts
+#[derive(Debug, Clone, Default)]
+pub(crate) struct AndroidBlock {
+    pub namespace: Option<String>,
+    pub compile_sdk: Option<u32>,
+    pub application_id: Option<String>,
+    pub min_sdk: Option<u32>,
+    pub target_sdk: Option<u32>,
 }
 
 /// Parse Gradle configuration for a project rooted at `project_root`.
@@ -45,6 +72,13 @@ pub(crate) fn parse_project(project_root: &std::path::Path) -> Option<GradleDeps
         project_root: project_root.to_path_buf(),
         ..Default::default()
     };
+    // Record build file mtime for staleness detection
+    deps.mtime_secs = std::fs::metadata(&build_file)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
 
     // 1. Parse build.gradle.kts for dependency references.
     let build_content = std::fs::read_to_string(&build_file).ok()?;
@@ -74,7 +108,16 @@ pub(crate) fn parse_project(project_root: &std::path::Path) -> Option<GradleDeps
         parser::extract_projects_from_settings(&content, &mut deps);
     }
 
-    if deps.external.is_empty() && deps.projects.is_empty() {
+    let has_android = deps.android.namespace.is_some()
+        || deps.android.compile_sdk.is_some()
+        || deps.android.application_id.is_some()
+        || deps.android.min_sdk.is_some()
+        || deps.android.target_sdk.is_some();
+    if deps.external.is_empty()
+        && deps.projects.is_empty()
+        && deps.plugins.is_empty()
+        && !has_android
+    {
         None
     } else {
         Some(deps)

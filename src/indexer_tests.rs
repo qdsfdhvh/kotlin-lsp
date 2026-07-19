@@ -1645,6 +1645,8 @@ fn stale_keys_includes_both_qualified_aliases() {
         return_type: None,
         parameters: Vec::new(),
         documentation: None,
+
+        is_sealed: false,
     };
     data.symbols.push(sym);
     let stale = super::stale_keys_for(&uri, &data);
@@ -1684,6 +1686,8 @@ fn stale_keys_stem_equals_sym_no_alias() {
         return_type: None,
         parameters: Vec::new(),
         documentation: None,
+
+        is_sealed: false,
     };
     data.symbols.push(sym);
     let stale = super::stale_keys_for(&uri, &data);
@@ -2171,6 +2175,8 @@ fn fn_type_subst_matches_params_to_args() {
         return_type: None,
         parameters: Vec::new(),
         documentation: None,
+
+        is_sealed: false,
     };
 
     let sym_data = std::sync::Arc::new(FileData {
@@ -2212,6 +2218,8 @@ fn fn_type_subst_arg_count_mismatch() {
         return_type: None,
         parameters: Vec::new(),
         documentation: None,
+
+        is_sealed: false,
     };
 
     let sym_data = std::sync::Arc::new(FileData {
@@ -2269,6 +2277,8 @@ fn fn_type_subst_no_type_params() {
         return_type: None,
         parameters: Vec::new(),
         documentation: None,
+
+        is_sealed: false,
     };
     let sym_data = std::sync::Arc::new(FileData {
         symbols: vec![sym],

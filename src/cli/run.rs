@@ -426,20 +426,101 @@ pub(crate) async fn run(args: CliArgs) {
             match deps.as_ref().and_then(|d| d.as_ref()) {
                 Some(gradle_deps) => {
                     if json {
-                        let output = serde_json::json!({
-                            "project_root": gradle_deps.project_root.display().to_string(),
-                            "external": gradle_deps.external.iter().map(|d| serde_json::json!({
-                                "alias": d.alias,
-                                "group": d.group,
-                                "artifact": d.artifact,
-                                "version": d.version
-                            })).collect::<Vec<_>>(),
-                            "projects": gradle_deps.projects.iter().map(|p| serde_json::json!({
-                                "alias": p.alias,
-                                "module_path": p.module_path
-                            })).collect::<Vec<_>>()
-                        });
-                        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                        let mut output = serde_json::Map::new();
+                        output.insert(
+                            "project_root".into(),
+                            serde_json::json!(gradle_deps.project_root.display().to_string()),
+                        );
+                        output.insert(
+                            "external".into(),
+                            serde_json::Value::Array(
+                                gradle_deps
+                                    .external
+                                    .iter()
+                                    .map(|d| {
+                                        serde_json::json!({
+                                            "alias": d.alias,
+                                            "group": d.group,
+                                            "artifact": d.artifact,
+                                            "version": d.version,
+                                            "config": d.config
+                                        })
+                                    })
+                                    .collect(),
+                            ),
+                        );
+                        output.insert(
+                            "projects".into(),
+                            serde_json::Value::Array(
+                                gradle_deps
+                                    .projects
+                                    .iter()
+                                    .map(|p| {
+                                        serde_json::json!({
+                                            "alias": p.alias,
+                                            "module_path": p.module_path
+                                        })
+                                    })
+                                    .collect(),
+                            ),
+                        );
+                        output.insert(
+                            "plugins".into(),
+                            serde_json::Value::Array(
+                                gradle_deps
+                                    .plugins
+                                    .iter()
+                                    .map(|p| {
+                                        let mut map = serde_json::Map::new();
+                                        map.insert(
+                                            "id".into(),
+                                            serde_json::Value::String(p.id.clone()),
+                                        );
+                                        map.insert(
+                                            "apply_false".into(),
+                                            serde_json::Value::Bool(p.apply_false),
+                                        );
+                                        if let Some(ref v) = p.version {
+                                            map.insert(
+                                                "version".into(),
+                                                serde_json::Value::String(v.clone()),
+                                            );
+                                        }
+                                        serde_json::Value::Object(map)
+                                    })
+                                    .collect(),
+                            ),
+                        );
+                        {
+                            let mut android_map = serde_json::Map::new();
+                            if let Some(ref ns) = gradle_deps.android.namespace {
+                                android_map.insert(
+                                    "namespace".into(),
+                                    serde_json::Value::String(ns.clone()),
+                                );
+                            }
+                            if let Some(sdk) = gradle_deps.android.compile_sdk {
+                                android_map.insert("compile_sdk".into(), serde_json::json!(sdk));
+                            }
+                            if let Some(ref id) = gradle_deps.android.application_id {
+                                android_map.insert(
+                                    "application_id".into(),
+                                    serde_json::Value::String(id.clone()),
+                                );
+                            }
+                            if let Some(sdk) = gradle_deps.android.min_sdk {
+                                android_map.insert("min_sdk".into(), serde_json::json!(sdk));
+                            }
+                            if let Some(sdk) = gradle_deps.android.target_sdk {
+                                android_map.insert("target_sdk".into(), serde_json::json!(sdk));
+                            }
+                            output.insert("android".into(), serde_json::Value::Object(android_map));
+                        }
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::Value::Object(output))
+                                .unwrap()
+                        );
                     } else {
                         println!("Project: {}", gradle_deps.project_root.display());
                         if !gradle_deps.external.is_empty() {
@@ -449,8 +530,8 @@ pub(crate) async fn run(args: CliArgs) {
                                     println!("  {} (unresolved)", dep.alias);
                                 } else {
                                     println!(
-                                        "  {} = {}:{}:{}",
-                                        dep.alias, dep.group, dep.artifact, dep.version
+                                        "  {} = {}:{}:{}  ({})",
+                                        dep.alias, dep.group, dep.artifact, dep.version, dep.config
                                     );
                                 }
                             }
@@ -459,6 +540,38 @@ pub(crate) async fn run(args: CliArgs) {
                             println!("\nProject dependencies ({}):", gradle_deps.projects.len());
                             for proj in &gradle_deps.projects {
                                 println!("  {} -> {}", proj.alias, proj.module_path);
+                            }
+                        }
+                        if !gradle_deps.plugins.is_empty() {
+                            println!("\nPlugins ({}):", gradle_deps.plugins.len());
+                            for p in &gradle_deps.plugins {
+                                let ver = p.version.as_deref().unwrap_or("*");
+                                let af = if p.apply_false { " [apply false]" } else { "" };
+                                println!("  {} = {}{}", p.id, ver, af);
+                            }
+                        }
+                        let a = &gradle_deps.android;
+                        if a.namespace.is_some()
+                            || a.compile_sdk.is_some()
+                            || a.application_id.is_some()
+                            || a.min_sdk.is_some()
+                            || a.target_sdk.is_some()
+                        {
+                            println!("\nAndroid:");
+                            if let Some(ref ns) = a.namespace {
+                                println!("  namespace = {}", ns);
+                            }
+                            if let Some(sdk) = a.compile_sdk {
+                                println!("  compileSdk = {}", sdk);
+                            }
+                            if let Some(ref id) = a.application_id {
+                                println!("  applicationId = {}", id);
+                            }
+                            if let Some(sdk) = a.min_sdk {
+                                println!("  minSdk = {}", sdk);
+                            }
+                            if let Some(sdk) = a.target_sdk {
+                                println!("  targetSdk = {}", sdk);
                             }
                         }
                     }

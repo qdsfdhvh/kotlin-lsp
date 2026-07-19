@@ -87,49 +87,126 @@ fn split_gav(s: &str) -> Option<(&str, &str, &str)> {
     }
 }
 
+// ── Plugin scanning ────────────────────────────────────────────────────
+
+/// Scan build.gradle.kts for plugin declarations.
+fn scan_plugins(content: &str) -> Vec<super::Plugin> {
+    let mut plugins = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Pattern 1: id("plugin.id") [version "x"] [apply false]
+    // Pattern 2: kotlin("jvm") [version "x"] [apply false]
+    for pattern in &["id(", "kotlin("] {
+        let mut search_from = 0;
+        while let Some(pos) = content[search_from..].find(pattern) {
+            let start = search_from + pos + pattern.len();
+            // Extract the plugin identifier between quotes
+            let plugin_id = if let Some(rest) = content[start..]
+                .strip_prefix('"')
+                .and_then(|s| s.split('"').next())
+            {
+                if rest.is_empty() {
+                    search_from = start + 1;
+                    continue;
+                }
+                if *pattern == "kotlin(" {
+                    format!("kotlin-{rest}")
+                } else {
+                    rest.to_string()
+                }
+            } else {
+                search_from = start + 1;
+                continue;
+            };
+
+            if !seen.insert(plugin_id.clone()) {
+                search_from = start + plugin_id.len();
+                continue;
+            }
+
+            // Look for version and apply false after the closing paren
+            let after_paren_start = start + plugin_id.len() + 2; // "x")
+            let after = &content[after_paren_start..];
+            let end_of_line = after.find('\n').unwrap_or(after.len());
+            let after_line = &after[..end_of_line];
+
+            let version = if let Some(ver_pos) = after_line.find("version ") {
+                let ver_start = ver_pos + "version ".len();
+                let ver_str = &after_line[ver_start..];
+                ver_str
+                    .strip_prefix('"')
+                    .and_then(|s| s.split('"').next())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            };
+
+            let apply_false = after_line.contains("apply false");
+
+            plugins.push(super::Plugin {
+                id: plugin_id,
+                version,
+                apply_false,
+            });
+
+            search_from = after_paren_start;
+        }
+    }
+
+    plugins.sort_by(|a, b| a.id.cmp(&b.id));
+    plugins
+}
 // ── build.gradle.kts extraction ────────────────────────────────────────
 
 const DEP_CONFIGS: &[&str] = &[
+    "testImplementation(",
+    "androidTestImplementation(",
+    "debugImplementation(",
     "implementation(",
     "api(",
-    "testImplementation(",
     "compileOnly(",
     "runtimeOnly(",
-    "debugImplementation(",
+    "kapt(",
+    "ksp(",
 ];
 
-fn scan_catalog_refs(content: &str) -> Vec<String> {
+fn scan_catalog_refs(content: &str) -> Vec<(String, String)> {
     let mut refs = Vec::new();
     let mut search_from = 0;
     while let Some(pos) = content[search_from..].find("libs.") {
         let abs = search_from + pos;
-        // Look for a dep config within 80 chars before the ref
         let window = abs.saturating_sub(80)..abs;
         let preceding = &content[window];
-        if DEP_CONFIGS.iter().any(|c| preceding.contains(c)) {
-            let start = abs + "libs.".len();
-            let end = content[start..]
-                .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
-                .map(|p| start + p)
-                .unwrap_or(content.len());
-            let alias = format!("libs.{}", &content[start..end]);
-            if alias.len() > "libs.".len() {
-                refs.push(alias);
-            }
+        // Detect which config this libs ref is under
+        let config = DEP_CONFIGS
+            .iter()
+            .find(|c| preceding.contains(*c))
+            .map(|c| c.trim_end_matches('('))
+            .unwrap_or("implementation");
+
+        let start = abs + "libs.".len();
+        let end = content[start..]
+            .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+            .map(|p| start + p)
+            .unwrap_or(content.len());
+        let alias = format!("libs.{}", &content[start..end]);
+        if alias.len() > "libs.".len() {
+            refs.push((alias, config.to_string()));
         }
         search_from = abs + 1;
     }
     refs
 }
 
-fn scan_project_refs(content: &str) -> Vec<String> {
+fn scan_project_refs(content: &str) -> Vec<(String, String)> {
     let mut refs = Vec::new();
     let mut search_from = 0;
     while let Some(pos) = content[search_from..].find("projects.") {
         let abs = search_from + pos;
         let window = abs.saturating_sub(80)..abs;
         let preceding = &content[window];
-        if DEP_CONFIGS.iter().any(|c| preceding.contains(c)) {
+        if let Some(config) = DEP_CONFIGS.iter().find(|c| preceding.contains(*c)) {
+            let config_name = config.trim_end_matches('(');
             let start = abs + "projects.".len();
             let end = content[start..]
                 .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
@@ -137,7 +214,7 @@ fn scan_project_refs(content: &str) -> Vec<String> {
                 .unwrap_or(content.len());
             let alias = format!("projects.{}", &content[start..end]);
             if alias.len() > "projects.".len() {
-                refs.push(alias);
+                refs.push((alias, config_name.to_string()));
             }
         }
         search_from = abs + 1;
@@ -145,9 +222,10 @@ fn scan_project_refs(content: &str) -> Vec<String> {
     refs
 }
 
-fn scan_literal_deps(content: &str) -> Vec<String> {
+fn scan_literal_deps(content: &str) -> Vec<(String, String)> {
     let mut refs = Vec::new();
     for config in DEP_CONFIGS {
+        let config_name = config.trim_end_matches('(');
         let mut search_from = 0;
         while let Some(pos) = content[search_from..].find(*config) {
             let abs = search_from + pos + config.len();
@@ -156,7 +234,7 @@ fn scan_literal_deps(content: &str) -> Vec<String> {
                 if let Some(end) = content[start..].find('"') {
                     let gav = &content[start..start + end];
                     if gav.contains(':') {
-                        refs.push(format!("literal:{}", gav));
+                        refs.push((format!("literal:{}", gav), config_name.to_string()));
                     }
                 }
             }
@@ -171,21 +249,22 @@ pub(crate) fn extract_deps_from_build(
     _catalog: &HashMap<String, String>,
     deps: &mut GradleDeps,
 ) {
-    for alias in scan_catalog_refs(content) {
+    for (alias, config) in scan_catalog_refs(content) {
         deps.external.push(ExternalDep {
             alias,
             group: String::new(),
             artifact: String::new(),
             version: String::new(),
+            config,
         });
     }
-    for alias in scan_project_refs(content) {
+    for (alias, _config) in scan_project_refs(content) {
         deps.projects.push(ProjectDep {
             alias,
             module_path: String::new(),
         });
     }
-    for alias in scan_literal_deps(content) {
+    for (alias, config) in scan_literal_deps(content) {
         let gav_str = alias.strip_prefix("literal:").unwrap_or(&alias);
         if let Some((group, artifact, version)) = split_gav(gav_str) {
             deps.external.push(ExternalDep {
@@ -193,9 +272,15 @@ pub(crate) fn extract_deps_from_build(
                 group: group.to_string(),
                 artifact: artifact.to_string(),
                 version: version.to_string(),
+                config,
             });
         }
     }
+    // Scan plugin declarations
+    let plugins = scan_plugins(content);
+    deps.plugins.extend(plugins);
+    // Scan android block
+    deps.android = scan_android_block(content);
 }
 
 pub(crate) fn extract_projects_from_settings(content: &str, deps: &mut GradleDeps) {
@@ -225,4 +310,71 @@ pub(crate) fn extract_projects_from_settings(content: &str, deps: &mut GradleDep
         }
         search_from = abs;
     }
+}
+
+// ── Android block scanning ──────────────────────────────────────────────
+
+/// Scan build.gradle.kts for android { ... } block settings.
+fn scan_android_block(content: &str) -> super::AndroidBlock {
+    let mut block = super::AndroidBlock::default();
+
+    // Simple line-based extraction from the android block
+    let android_start = if let Some(pos) = content.find("android {") {
+        pos
+    } else {
+        // Also try "android{" without space
+        content.find("android{").unwrap_or(usize::MAX)
+    };
+    if android_start == usize::MAX {
+        return block;
+    }
+
+    let inside = &content[android_start..];
+    // Find the matching closing brace by tracking brace depth
+    let mut depth = 0;
+    let mut end = 0;
+    let bytes = inside.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = i + 1;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let block_text = if end > 0 { &inside[..end] } else { inside };
+
+    for line in block_text.lines() {
+        let trimmed = line.trim();
+        if let Some(value) = trimmed.strip_prefix("namespace =") {
+            block.namespace = Some(
+                value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string(),
+            );
+        } else if let Some(value) = trimmed.strip_prefix("compileSdk =") {
+            block.compile_sdk = value.trim().parse().ok();
+        } else if let Some(value) = trimmed.strip_prefix("applicationId =") {
+            block.application_id = Some(
+                value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string(),
+            );
+        } else if let Some(value) = trimmed.strip_prefix("minSdk =") {
+            block.min_sdk = value.trim().parse().ok();
+        } else if let Some(value) = trimmed.strip_prefix("targetSdk =") {
+            block.target_sdk = value.trim().parse().ok();
+        }
+    }
+
+    block
 }

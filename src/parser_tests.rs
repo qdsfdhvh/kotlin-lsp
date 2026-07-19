@@ -2871,3 +2871,40 @@ fn annotation_edges_property_declaration() {
         .iter()
         .any(|(sym, ann)| sym == "service" && ann == "Inject"));
 }
+
+// ── sealed modifier detection ─────────────────────────────────────────────
+
+#[test]
+fn sealed_class_detected() {
+    let data = parse_kotlin(
+        "sealed class Result<out T> { data class Success(val data: T) : Result<T>() }",
+    );
+    let sym = data.symbols.iter().find(|s| s.name == "Result").unwrap();
+    assert!(sym.is_sealed, "sealed class should have is_sealed=true");
+}
+
+#[test]
+fn sealed_interface_detected() {
+    let data =
+        parse_kotlin("sealed interface Effect { data class Show(val msg: String) : Effect }");
+    let sym = data.symbols.iter().find(|s| s.name == "Effect").unwrap();
+    assert!(sym.is_sealed, "sealed interface should have is_sealed=true");
+}
+
+#[test]
+fn non_sealed_class_not_detected() {
+    let data = parse_kotlin("class Regular");
+    let sym = data.symbols.iter().find(|s| s.name == "Regular").unwrap();
+    assert!(!sym.is_sealed, "regular class should not be is_sealed");
+}
+
+#[test]
+fn sealed_modifier_not_on_function() {
+    // "sealed" as function name should NOT trigger is_sealed on SymbolKind::FUNCTION
+    let data = parse_kotlin("fun sealed() {}");
+    let sym = data.symbols.iter().find(|s| s.name == "sealed").unwrap();
+    assert!(
+        !sym.is_sealed,
+        "function named sealed should not be is_sealed"
+    );
+}
