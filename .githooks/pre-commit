@@ -1,14 +1,10 @@
 #!/bin/sh
 # Pre-commit hook for kotlin-lsp
-# Runs fmt check, tests, and clippy before allowing commits.
 # Install: cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 
 set -e
 
 echo "🔍 Running pre-commit checks..."
-
-# Find all Rust source files
-RUST_FILES=$(find src tests -name '*.rs')
 
 # Use toolchain binaries directly (rustup proxy has PATH issues on this machine)
 RUSTUP_TOOLCHAIN="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin"
@@ -16,7 +12,7 @@ export PATH="$RUSTUP_TOOLCHAIN:$PATH"
 
 # Check formatting (use cargo fmt to respect rustfmt.toml ignores)
 echo "  📝 Checking formatting..."
-cargo fmt -- --check 2>/dev/null || {
+cargo fmt -- --check || {
     echo "  ❌ Formatting check failed!"
     echo "     Run: cargo fmt"
     exit 1
@@ -24,14 +20,14 @@ cargo fmt -- --check 2>/dev/null || {
 
 # Run tests
 echo "  🧪 Running tests..."
-cargo test --quiet 2>/dev/null || {
+cargo test --quiet || {
     echo "  ❌ Tests failed!"
     exit 1
 }
 
 # Run clippy
 echo "  🔎 Running clippy..."
-cargo clippy -- -D warnings 2>/dev/null || {
+cargo clippy -- -D warnings || {
     echo "  ❌ Clippy found issues!"
     exit 1
 }
