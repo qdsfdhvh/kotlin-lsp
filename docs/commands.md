@@ -16,21 +16,23 @@ kotlin-lsp refs MyViewModel              # find all references
 kotlin-lsp hover src/Foo.kt 42 10        # hover info at line 42, col 10
 kotlin-lsp complete src/Foo.kt 42 --dot  # completions after last '.' on line 42
 kotlin-lsp context src/Foo.kt 42 10      # one-stop: def + sig + doc + refs
-kotlin-lsp search "login repo"          # semantic search
+kotlin-lsp search semantic "login repo"  # semantic search
+kotlin-lsp search summarize Activity     # symbol summary
 kotlin-lsp check src/Foo.kt              # syntax + import + deprecation diagnostics
 kotlin-lsp call hierarchy src/Foo.kt 42 10  # incoming + outgoing call chain
 kotlin-lsp type hierarchy Activity       # super/subtype tree
-kotlin-lsp organize-imports src/Foo.kt   # sort, dedup, remove unused
-kotlin-lsp inject src/Foo.kt             # batch-resolve all type signatures
-kotlin-lsp code-action src/Foo.kt 42 10  # list applicable code actions
-kotlin-lsp batch-imports src/Foo.kt      # scan for import candidates
-kotlin-lsp new-file activity Activity    # generate file from template
+kotlin-lsp type sealed Result            # list sealed class subclasses
+kotlin-lsp edit organize src/Foo.kt      # sort, dedup, remove unused
+kotlin-lsp edit inject src/Foo.kt        # batch-resolve all type signatures
+kotlin-lsp tool code-action src/Foo.kt 42 10  # list applicable code actions
+kotlin-lsp edit imports src/Foo.kt       # scan for import candidates
+kotlin-lsp edit new activity Activity    # generate file from template
 kotlin-lsp index --root ./android        # pre-build cache
 kotlin-lsp sources --root ./android      # list detected source roots
 kotlin-lsp extract-sources               # unpack library sources from Gradle cache
 kotlin-lsp index-jars                    # index library symbols from *-sources.jar
 kotlin-lsp cache stats                   # show index cache diagnostics
-kotlin-lsp benchmark                     # run performance benchmarks
+kotlin-lsp tool bench                    # run performance benchmarks
 ```
 
 ## Common flags
@@ -67,111 +69,99 @@ kotlin-lsp index-jars             # one-time: index library symbols
 - **IntelliJ/Android Studio projects** — `workspace.json` source roots are picked
   up automatically
 
+## Groups
 
-## Symbol lookup
+Commands are organized into groups. Old names still work alongside the new grouped names.
 
-| Command | Description |
-|---------|-------------|
-| `find <name>` | Declaration search — qualified, `--owner`, `--kind`, `--module` |
-| `refs <name>` | All references — same filters, `--explain` for provenance |
-| `hover <file> <line> <col>` | Signature, KDoc, deprecation, data class props |
-| `complete <file> <line> [col]` | Dot-completion, auto-import, scored ranking |
-| `context <file> <line> <col>` | One-stop: def + sig + doc + refs, `--expand` |
-| `search "query"` | TF-IDF semantic search over symbol names + KDoc + signatures |
-| `docs "query"` | Search by name or signature |
-| `summarize <name>` | Rich summary: kind, signature, members, KDoc, cached |
-| `summary-cache` | Manage cached symbol summaries |
-
-## Call & type hierarchy
+### `search` — Symbol discovery
 
 | Command | Description |
 |---------|-------------|
-| `call hierarchy <file> <line> <col>` | Incoming/outgoing call chain |
-| `call impact <file> <line> <col>` | Impact analysis: what depends on this? |
-| `type hierarchy <name> [--subtypes\|--supertypes]` | Supertype/subtype tree |
+| `search docs <query>` | KDoc / docs search |
+| `search semantic <query>` | TF-IDF semantic search |
+| `search summarize <name>` | Rich summary: kind, signature, members, KDoc |
+| `search cache-stats` | Show AI summary cache stats |
+| `search imports <name>` | Files importing the given symbol |
+| `search annotated <annotation>` | Symbols annotated with @annotation |
+| `search find-test <file> <line> <col>` | Find tests for a symbol |
+| `search expect-actual <name>` | KMP expect/actual declarations |
 
-### Deprecated aliases
+### `edit` — Code modification
+
+| Command | Description |
+|---------|-------------|
+| `edit rename <file> <line> <col> <new>` | Rename symbol |
+| `edit batch <file>` | Batch from JSON rules |
+| `edit imports <file>` | Batch add missing imports |
+| `edit inject <file>` | Batch-resolve type signatures |
+| `edit insert <file> <line> --content --kind` | Semantic insertion |
+| `edit new <template> <name>` | Generate file from template |
+| `edit organize <file>...` | Sort, dedup, remove unused imports |
+
+### `tool` — Debug / introspection
+
+| Command | Description |
+|---------|-------------|
+| `tool tokens <file>` | Syntax tokens (debug) |
+| `tool tree <file>` | Dump parse tree (debug) |
+| `tool inspect <file>` | Detailed file diagnostics |
+| `tool graph` | Build symbol dependency graph |
+| `tool snapshot` | Workspace snapshot |
+| `tool bench` | Performance benchmarks |
+| `tool doctor` | System diagnostics |
+| `tool workspace` | Workspace overview |
+| `tool query` | Batch query engine (pipe JSON) |
+| `tool skills list` | List bundled agent skills |
+| `tool code-action <file> <line> <col>` | List/apply code actions |
+
+### Other groups
+
+| Group | Subcommands |
+|-------|-------------|
+| `call hierarchy` | Incoming/outgoing call chain |
+| `type hierarchy` | Supertype/subtype tree |
+| `type sealed <name>` | List sealed class subclasses |
+| `module` | list / deps / files / packages |
+| `android` | activities / composables |
+| `format` | check / apply |
+| `gradle-deps` | Show parsed Gradle dependencies |
+
+## Top-level commands (standalone)
+
+| Command | Description |
+|---------|-------------|
+| `find <name>` | Declaration search |
+| `refs <name>` | All references |
+| `hover <file> <line> <col>` | Signature, KDoc, deprecation |
+| `complete <file> <line> [col]` | Dot-completion, auto-import |
+| `context <file> <line> <col>` | One-stop def + sig + doc + refs |
+| `impact <file> <line> <col>` | Impact analysis |
+| `check <file>...` | Syntax errors, imports, deprecation |
+| `index [--root <dir>]` | Index workspace |
+| `index-jars [root]` | Index library symbols from JARs |
+| `extract-sources [lib...]` | Unpack *-sources.jar |
+| `sources [--explain]` | Auto-discovered source roots |
+| `cache stats` | Index cache statistics |
+
+### Deprecated aliases (kept for backward compatibility)
+
+`summarize` → `search summarize`, `docs` → `search docs`, `search` → `search semantic`,
+`imports-of` → `search imports`, `annotated` → `search annotated`,
+`find-test` → `search find-test`, `expect-actual` → `search expect-actual`,
+`summary-cache` → `search cache-stats`,
+`rename` → `edit rename`, `batch` / `batch-imports` → `edit batch` / `edit imports`,
+`inject` → `edit inject`, `insert` → `edit insert`, `new-file` → `edit new`,
+`organize-imports` → `edit organize`,
+`tokens` → `tool tokens`, `tree` → `tool tree`, `inspect` → `tool inspect`,
+`symbol-graph` → `tool graph`, `snapshot` → `tool snapshot`,
+`benchmark` → `tool bench`, `doctor` → `tool doctor`, `workspace` → `tool workspace`,
+`query` → `tool query`, `skills` → `tool skills`, `code-action` → `tool code-action`,
 `callers` → `call hierarchy --incoming`, `callees` → `call hierarchy --outgoing`,
 `call-hierarchy` → `call hierarchy`, `implementations` → `type hierarchy --subtypes`,
-`subclasses` → `type hierarchy --subtypes`, `type-hierarchy` → `type hierarchy`
-
-## Module & package introspection
-
-| Command | Description |
-|---------|-------------|
-| `module list` | List all project modules |
-| `module deps <name> [direction]` | Show module dependency graph |
-| `module files <name>` | List files in a module |
-| `module packages [name]` | Package-level import dependencies |
-| `imports-of <name>` | Files importing the given symbol |
-| `annotated <name>` | Symbols annotated with @name |
-
-### Deprecated aliases
-`modules` → `module list`, `module-deps` → `module deps`,
-`module-files` → `module files`, `package-deps` → `module packages`
-
-## Android
-
-| Command | Description |
-|---------|-------------|
-| `android activities` | List Android activities from AndroidManifest |
-| `android composables <file>` | Find @Composable functions |
-
-### Deprecated aliases
+`subclasses` → `type hierarchy --subtypes`, `type-hierarchy` → `type hierarchy`,
+`modules` → `module list`, `module-deps` → `module deps`, `module-files` → `module files`,
+`package-deps` → `module packages`,
 `android-activities` → `android activities`, `android-composables` → `android composables`
-
-## Editing & code actions
-
-| Command | Description |
-|---------|-------------|
-| `code-action <file> <line> <col>` | List/apply code actions |
-| `organize-imports <file>...` | Sort, dedup, remove unused imports |
-| `rename <file> <line> <col> <new>` | Rename symbol |
-| `format check\|apply <file>...` | ktfmt/ktlint format |
-| `insert <file> <kind> [--owner]` | Semantic insertion |
-| `batch-imports <file>` | Batch add missing imports |
-| `inject <file>` | Batch-resolve type signatures |
-| `new-file <template> <name>` | Generate file from template |
-
-## Diagnostics & introspection
-
-| Command | Description |
-|---------|-------------|
-| `check <file>...` | Syntax errors, unused imports, deprecation, redundant vals |
-| `index [--root <dir>] [--gradle]` | Index workspace |
-| `doctor` | System diagnostics |
-| `cache stats` | Index cache statistics |
-| `sources [--explain]` | Auto-discovered source roots |
-| `tokens <file>` | Syntax tokens (debug) |
-| `tree <file>` | Dump parse tree (debug) |
-| `inspect <file>` | Detailed file diagnostics |
-| `benchmark` | Performance benchmarks |
-
-## Library & workspace
-
-| Command | Description |
-|---------|-------------|
-| `extract-sources [lib...]` | Unpack *-sources.jar from Gradle cache |
-| `index-jars [root]` | Index library symbols from JARs |
-| `gradle-deps` | Show parsed Gradle dependencies |
-| `workspace` | Workspace overview |
-| `snapshot` | Workspace snapshot |
-| `symbol-graph` | Build symbol dependency graph |
-| `query` | Batch query engine (pipe JSON) |
-
-## Cross-platform
-
-| Command | Description |
-|---------|-------------|
-| `expect-actual <name>` | KMP expect/actual declarations |
-| `find-test <file> <line> <col>` | Find related test files |
-
-## Agent skills
-
-| Command | Description |
-|---------|-------------|
-| `skills list` | List bundled agent skills |
-| `skills read <name>` | Print full SKILL.md for a skill |
 
 ## What gets indexed
 
@@ -186,5 +176,5 @@ See [Library sources](#library-sources) above for details on extracting
 third-party library symbols.
 
 All source files under the detected workspace are cached in
-`~/.kotlin-lsp/cache/`. The cache is populated automatically by
+`~/.cache/kotlin-lsp/`. The cache is populated automatically by
 `kotlin-lsp index` and refreshed on file changes.

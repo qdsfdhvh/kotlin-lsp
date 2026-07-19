@@ -14,3 +14,4 @@ progress.md
 .cache/
 .kotlin-lsp/
 tests/dogfood/projects/
+*.rlib

@@ -14,25 +14,13 @@ RUST_FILES=$(find src tests -name '*.rs')
 RUSTUP_TOOLCHAIN="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin"
 export PATH="$RUSTUP_TOOLCHAIN:$PATH"
 
-# Check formatting
+# Check formatting (use cargo fmt to respect rustfmt.toml ignores)
 echo "  📝 Checking formatting..."
-# rustfmt in PATH is a rustup-init proxy that doesn't understand --edition
-RUSTFMT=""
-if [ -f ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt ]; then
-    RUSTFMT=~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustfmt
-elif command -v rustfmt >/dev/null 2>&1; then
-    RUSTFMT="$(command -v rustfmt)"
-fi
-
-if [ -n "$RUSTFMT" ]; then
-    "$RUSTFMT" --edition 2021 --check $RUST_FILES 2>/dev/null || {
-        echo "  ❌ Formatting check failed!"
-        echo "     Run: find src tests -name '*.rs' | xargs rustfmt --edition 2021"
-        exit 1
-    }
-else
-    echo "  ⚠️  rustfmt not found, skipping formatting check"
-fi
+cargo fmt -- --check 2>/dev/null || {
+    echo "  ❌ Formatting check failed!"
+    echo "     Run: cargo fmt"
+    exit 1
+}
 
 # Run tests
 echo "  🧪 Running tests..."
