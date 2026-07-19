@@ -110,16 +110,16 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Completions | `kotlin-lsp complete <file> <line> [col]` |
 | One-stop context | `kotlin-lsp context <file> <line> <col>` |
 | Semantic search | `kotlin-lsp search "query"` |
-| Signature search | `kotlin-lsp docs "query"` |
+| KDoc search | `kotlin-lsp search docs "query"` |
 | Syntax check | `kotlin-lsp check <file>...` |
 | Format check | `kotlin-lsp format check <dir>...` |
 | Format apply | `kotlin-lsp format apply <dir>...` |
 | Code actions | `kotlin-lsp tool code-action <file> <line> <col>` |
 | Organize imports | `kotlin-lsp edit organize <file>...` |
 | Batch imports | `kotlin-lsp edit imports <file>` |
-| Rename | `kotlin-lsp rename <file> <line> <col> <new>` |
-| Semantic insert | `kotlin-lsp insert <file> <kind>` |
-| Inject types | `kotlin-lsp inject <file>` |
+| Rename | `kotlin-lsp edit rename <file> <line> <col> <new>` |
+| Semantic insert | `kotlin-lsp edit insert <file> <kind>` |
+| Inject types | `kotlin-lsp edit inject <file>` |
 | Call hierarchy | `kotlin-lsp call hierarchy <file> <line> <col>` |
 | Impact analysis | `kotlin-lsp impact <file> <line> <col>` |
 | Type hierarchy | `kotlin-lsp type hierarchy <name>` |
@@ -129,12 +129,12 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Module packages | `kotlin-lsp module packages [name]` |
 | Android activities | `kotlin-lsp android activities` |
 | Android composables | `kotlin-lsp android composables <file> [--call-graph] [--state] [--preview]` |
-| Import analysis | `kotlin-lsp imports-of <name>` |
-| Annotation query | `kotlin-lsp annotated <name>` |
-| Symbol summary | `kotlin-lsp summarize <name>` |
-| Summary cache | `kotlin-lsp summary-cache` |
-| Find tests | `kotlin-lsp find-test <file> <line> <col>` |
-| KMP expect/actual | `kotlin-lsp expect-actual <name>` |
+| Import analysis | `kotlin-lsp search imports <name>` |
+| Annotation query | `kotlin-lsp search annotated <name>` |
+| Symbol summary | `kotlin-lsp search summarize <name>` |
+| Summary cache | `kotlin-lsp search cache-stats` |
+| Find tests | `kotlin-lsp search find-test <file> <line> <col>` |
+| KMP expect/actual | `kotlin-lsp search expect-actual <name>` |
 | Index workspace | `kotlin-lsp index [--root <dir>] [--gradle]` |
 | Index JARs | `kotlin-lsp index-jars [root]` |
 | Gradle deps | `kotlin-lsp gradle-deps` |
@@ -142,9 +142,9 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Source roots | `kotlin-lsp sources` |
 | Cache stats | `kotlin-lsp cache stats` |
 | Doctor | `kotlin-lsp doctor [--json]` |
-| Workspace overview | `kotlin-lsp workspace` |
-| Snapshot | `kotlin-lsp snapshot` |
-| Symbol graph | `kotlin-lsp symbol-graph` |
+| Workspace overview | `kotlin-lsp tool workspace` |
+| Snapshot | `kotlin-lsp tool snapshot` |
+| Symbol graph | `kotlin-lsp tool graph` |
 | Batch query | `echo '[...]' \| kotlin-lsp query --json` |
 | File inspect | `kotlin-lsp inspect <file>` |
 | Tokens (debug) | `kotlin-lsp tokens <file>` |
