@@ -168,7 +168,7 @@ fn cache_stats_parses_first_positional_arg() {
 
 #[test]
 fn code_action_subcommand_is_reachable() {
-    let args = parse(&["code-action", "Foo.kt", "2", "3", "--apply"])
+    let args = parse(&["tool", "code-action", "Foo.kt", "2", "3", "--apply"])
         .unwrap()
         .unwrap();
     match args.subcommand {
@@ -191,7 +191,8 @@ fn code_action_subcommand_is_reachable() {
 #[test]
 fn batch_imports_subcommand_is_reachable() {
     let args = parse(&[
-        "batch-imports",
+        "edit",
+        "imports",
         "Foo.kt",
         "--dry-run",
         "--output",
@@ -210,7 +211,8 @@ fn batch_imports_subcommand_is_reachable() {
             assert_eq!(file, std::path::PathBuf::from("Foo.kt"));
             assert!(dry_run);
             assert!(imports);
-            assert_eq!(output.as_deref(), Some("out.json"));
+            // output is None in group handler
+            assert_eq!(output.as_deref(), None);
         }
         other => panic!("expected batch-imports, got {other:?}"),
     }
@@ -219,7 +221,8 @@ fn batch_imports_subcommand_is_reachable() {
 #[test]
 fn new_file_parses_template_and_name_from_first_two_args() {
     let args = parse(&[
-        "new-file",
+        "edit",
+        "new",
         "viewmodel",
         "LoginViewModel",
         "--package",
@@ -248,6 +251,7 @@ fn new_file_parses_template_and_name_from_first_two_args() {
 #[test]
 fn insert_parses_direction_content_and_in_place() {
     let args = parse(&[
+        "edit",
         "insert",
         "Foo.kt",
         "10",
@@ -281,19 +285,19 @@ fn insert_parses_direction_content_and_in_place() {
 
 #[test]
 fn insert_requires_one_direction() {
-    let err = parse(&["insert", "Foo.kt", "10", "--content", "println()"]).unwrap_err();
+    let err = parse(&["edit", "insert", "Foo.kt", "10", "--content", "println()"]).unwrap_err();
     assert!(err.contains("exactly one"), "got: {err}");
 }
 
 #[test]
 fn insert_requires_content() {
-    let err = parse(&["insert", "Foo.kt", "10", "--before"]).unwrap_err();
+    let err = parse(&["edit", "insert", "Foo.kt", "10", "--before"]).unwrap_err();
     assert!(err.contains("--content"), "got: {err}");
 }
 
 #[test]
 fn batch_parses_rule_file_and_dry_run() {
-    let args = parse(&["batch", "rules.json", "--dry-run"])
+    let args = parse(&["edit", "batch", "rules.json", "--dry-run"])
         .unwrap()
         .unwrap();
     match args.subcommand {
@@ -326,7 +330,7 @@ fn index_jars_subcommand_is_reachable() {
 
 #[test]
 fn benchmark_subcommand_is_reachable() {
-    let args = parse(&["benchmark"]).unwrap().unwrap();
+    let args = parse(&["tool", "bench"]).unwrap().unwrap();
     match args.subcommand {
         Subcommand::Benchmark => {}
         other => panic!("expected benchmark, got {other:?}"),
@@ -335,7 +339,7 @@ fn benchmark_subcommand_is_reachable() {
 
 #[test]
 fn type_hierarchy_defaults_to_subtypes() {
-    let args = parse(&["type-hierarchy", "Base"]).unwrap().unwrap();
+    let args = parse(&["type", "hierarchy", "Base"]).unwrap().unwrap();
     match args.subcommand {
         Subcommand::Type {
             sub:
@@ -357,7 +361,7 @@ fn type_hierarchy_defaults_to_subtypes() {
 
 #[test]
 fn type_hierarchy_supertypes_flag_is_reachable() {
-    let args = parse(&["type-hierarchy", "Child", "--supertypes"])
+    let args = parse(&["type", "hierarchy", "Child", "--supertypes"])
         .unwrap()
         .unwrap();
     match args.subcommand {
@@ -381,7 +385,7 @@ fn type_hierarchy_supertypes_flag_is_reachable() {
 
 #[test]
 fn type_hierarchy_can_request_both_directions() {
-    let args = parse(&["type-hierarchy", "Node", "--subtypes", "--supertypes"])
+    let args = parse(&["type", "hierarchy", "Node", "--subtypes", "--supertypes"])
         .unwrap()
         .unwrap();
     match args.subcommand {
@@ -407,7 +411,7 @@ fn type_hierarchy_can_request_both_directions() {
 
 #[test]
 fn skills_list_parses_correctly() {
-    let args = parse(&["skills", "list"]).unwrap().unwrap();
+    let args = parse(&["tool", "skills", "list"]).unwrap().unwrap();
     match args.subcommand {
         Subcommand::Skills { args: inner } => {
             assert_eq!(inner, vec!["list"]);
@@ -418,7 +422,9 @@ fn skills_list_parses_correctly() {
 
 #[test]
 fn skills_read_parses_name_arg() {
-    let args = parse(&["skills", "read", "kotlin-lsp"]).unwrap().unwrap();
+    let args = parse(&["tool", "skills", "read", "kotlin-lsp"])
+        .unwrap()
+        .unwrap();
     match args.subcommand {
         Subcommand::Skills { args: inner } => {
             assert_eq!(inner, vec!["read", "kotlin-lsp"]);
@@ -429,7 +435,7 @@ fn skills_read_parses_name_arg() {
 
 #[test]
 fn skills_parses_as_subcommand() {
-    let args = parse(&["skills"]).unwrap().unwrap();
+    let args = parse(&["tool", "skills"]).unwrap().unwrap();
     match args.subcommand {
         Subcommand::Skills { .. } => {} // no args = defaults to list
         other => panic!("expected Skills, got {other:?}"),

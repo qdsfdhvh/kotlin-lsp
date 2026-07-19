@@ -82,7 +82,8 @@ fn organize_imports_removes_unused() {
     );
     let output = Command::new(BIN)
         .args([
-            "organize-imports",
+            "edit",
+            "organize",
             &dir.path().join("src/Main.kt").to_string_lossy(),
         ])
         .output()
@@ -114,7 +115,8 @@ var x by lazy { 0 }
     index(dir.path());
     let output = Command::new(BIN)
         .args([
-            "organize-imports",
+            "edit",
+            "organize",
             &dir.path().join("src/Screen.kt").to_string_lossy(),
             "--root",
             &dir.path().to_string_lossy(),
@@ -148,7 +150,8 @@ val x by lazy { 0 }
     index(dir.path());
     let output = Command::new(BIN)
         .args([
-            "organize-imports",
+            "edit",
+            "organize",
             &dir.path().join("src/Screen.kt").to_string_lossy(),
             "--root",
             &dir.path().to_string_lossy(),
@@ -210,6 +213,7 @@ fn insert_writes_content_in_place() {
     write_fixture(dir.path(), "T.kt", "line1\nline2");
     let output = Command::new(BIN)
         .args([
+            "edit",
             "insert",
             &dir.path().join("T.kt").to_string_lossy(),
             "1",
@@ -249,7 +253,7 @@ fn batch_dry_run_reports_changes_without_writing() {
     std::fs::write(&rule_file, serde_json::to_string(&rule).unwrap()).unwrap();
 
     let output = Command::new(BIN)
-        .args(["batch", &rule_file.to_string_lossy(), "--dry-run"])
+        .args(["edit", "batch", &rule_file.to_string_lossy(), "--dry-run"])
         .output()
         .unwrap();
     assert!(output.status.success(), "batch failed: {:?}", output);
@@ -291,7 +295,7 @@ fn inspect_relative_path_dot_slash_works() {
     std::fs::write(&fixture, "class DotFile").unwrap();
 
     let output = Command::new(BIN)
-        .args(["inspect", "./src/DotFile.kt", "--expand", "0"])
+        .args(["tool", "inspect", "./src/DotFile.kt", "--expand", "0"])
         .current_dir(dir.path())
         .output()
         .expect("inspect should run");
@@ -306,7 +310,7 @@ fn inspect_relative_path_parent_traversal_works() {
 
     // Run from sub/ and use ../RootFile.kt
     let output = Command::new(BIN)
-        .args(["inspect", "../RootFile.kt"])
+        .args(["tool", "inspect", "../RootFile.kt"])
         .current_dir(dir.path().join("sub"))
         .output()
         .expect("inspect should run");
@@ -319,7 +323,7 @@ fn inspect_bare_filename_in_current_dir_works() {
     std::fs::write(dir.path().join("BareFile.kt"), "class BareFile").unwrap();
 
     let output = Command::new(BIN)
-        .args(["inspect", "BareFile.kt"])
+        .args(["tool", "inspect", "BareFile.kt"])
         .current_dir(dir.path())
         .output()
         .expect("inspect should run");
