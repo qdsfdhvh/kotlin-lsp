@@ -88,80 +88,9 @@ jobs:
             dist/${{ matrix.asset }}.zip
           if-no-files-found: ignore
 
-  vscode-extension:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Download all binaries
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare VS Code extension
-        run: |
-          cd contrib/vscode
-          npm install
-
-          # Create platform-specific extensions
-          mkdir -p bin
-
-          # Extract binaries
-          for arch in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
-            tar -xzf ../../artifacts/kotlin-lsp-${arch}/kotlin-lsp-${arch}.tar.gz -C bin/
-          done
-
-      - name: Update extension version
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          cd contrib/vscode
-          node -e "
-            const pkg = require('./package.json');
-            pkg.version = '${VERSION}';
-            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-
-      - name: Package universal .vsix (no bundled binary)
-        run: |
-          cd contrib/vscode
-          npx @vscode/vsce package --no-dependencies -o ../../kotlin-lsp-${GITHUB_REF_NAME}.vsix
-
-      - name: Package platform .vsix files
-        run: |
-          cd contrib/vscode
-
-          # linux-x64
-          mkdir -p server && cp bin/kotlin-lsp-linux-x86_64 server/kotlin-lsp && chmod +x server/kotlin-lsp
-          npx @vscode/vsce package --no-dependencies --target linux-x64 -o ../../kotlin-lsp-linux-x64-${GITHUB_REF_NAME}.vsix
-          rm -rf server
-
-          # linux-arm64
-          mkdir -p server && cp bin/kotlin-lsp-linux-aarch64 server/kotlin-lsp && chmod +x server/kotlin-lsp
-          npx @vscode/vsce package --no-dependencies --target linux-arm64 -o ../../kotlin-lsp-linux-arm64-${GITHUB_REF_NAME}.vsix
-          rm -rf server
-
-          # darwin-x64
-          mkdir -p server && cp bin/kotlin-lsp-darwin-x86_64 server/kotlin-lsp && chmod +x server/kotlin-lsp
-          npx @vscode/vsce package --no-dependencies --target darwin-x64 -o ../../kotlin-lsp-darwin-x64-${GITHUB_REF_NAME}.vsix
-          rm -rf server
-
-          # darwin-arm64
-          mkdir -p server && cp bin/kotlin-lsp-darwin-aarch64 server/kotlin-lsp && chmod +x server/kotlin-lsp
-          npx @vscode/vsce package --no-dependencies --target darwin-arm64 -o ../../kotlin-lsp-darwin-arm64-${GITHUB_REF_NAME}.vsix
-          rm -rf server
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vsix-packages
-          path: "*.vsix"
 
   release:
-    needs: [build, vscode-extension]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -176,7 +105,6 @@ jobs:
           mkdir release
           cp artifacts/kotlin-lsp-*/kotlin-lsp-*.tar.gz release/ 2>/dev/null || true
           cp artifacts/kotlin-lsp-*/kotlin-lsp-*.zip release/ 2>/dev/null || true
-          cp artifacts/vsix-packages/*.vsix release/ 2>/dev/null || true
           cp scripts/install.sh release/install.sh
           cp scripts/install.ps1 release/install.ps1
 
