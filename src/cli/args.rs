@@ -111,6 +111,7 @@ pub(crate) enum Subcommand {
     Check {
         files: Vec<PathBuf>,
         diagnose: bool,
+        when_exhaustive: bool,
     },
     /// Show index cache statistics and health checks.
     Cache {
@@ -472,6 +473,7 @@ struct ParsedCliFlags {
     modifier_filter: Option<String>,
     ref_kind: Option<String>,
     diagnose: bool,
+    when_exhaustive: bool,
     name_arg: Option<String>,
     exclude_relationships: bool,
     cached: bool,
@@ -549,6 +551,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         modifier_filter: None,
         ref_kind: None,
         diagnose: false,
+        when_exhaustive: false,
         exclude_relationships: false,
         name_arg: None,
         cached: false,
@@ -642,6 +645,9 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
                 parsed.exclude_relationships = true;
             }
             Some(lexopt::Arg::Long("gradle")) => parsed.gradle = true,
+            Some(lexopt::Arg::Long("when-exhaustive")) => {
+                parsed.when_exhaustive = true;
+            }
             Some(lexopt::Arg::Long("diagnose")) => {
                 parsed.diagnose = true;
             }
@@ -1086,6 +1092,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "check" => Ok(Subcommand::Check {
             files: positionals.into_iter().map(PathBuf::from).collect(),
             diagnose: parsed.diagnose,
+            when_exhaustive: parsed.when_exhaustive,
         }),
         "cache" => Ok(Subcommand::Cache {
             sub: positionals.first().cloned().unwrap_or_default(),
