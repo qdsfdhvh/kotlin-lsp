@@ -13,10 +13,19 @@ Common flags: `--json`, `--fast`/`--smart`, `--root <dir>`, `--limit <n>`, `--ki
 | `kotlin-lsp hover <file> <line> <col>` | Signature + KDoc |
 | `kotlin-lsp complete <file> <line> [col]` | Completions with auto-import |
 | `kotlin-lsp context <file> <line> <col>` | One-stop: def + sig + doc + refs |
-| `kotlin-lsp search "query"` | TF-IDF semantic search |
-| `kotlin-lsp docs "query"` | Search by name or signature |
-| `kotlin-lsp summarize <name>` | Symbol summary (cached) |
-| `kotlin-lsp summary-cache` | Manage cached summaries |
+
+## `search` — Symbol discovery
+
+| Command | Description |
+|---------|-------------|
+| `kotlin-lsp search semantic "query"` | TF-IDF semantic search |
+| `kotlin-lsp search docs "query"` | KDoc / signature search |
+| `kotlin-lsp search summarize <name>` | Symbol summary (cached) |
+| `kotlin-lsp search cache-stats` | Cached summary statistics |
+| `kotlin-lsp search imports <name>` | Files importing this symbol |
+| `kotlin-lsp search annotated <annotation>` | Annotated with @annotation |
+| `kotlin-lsp search find-test <file> <line> <col>` | Find related tests |
+| `kotlin-lsp search expect-actual <name>` | KMP expect/actual declarations |
 
 ## Call & type hierarchy
 
@@ -25,78 +34,69 @@ Common flags: `--json`, `--fast`/`--smart`, `--root <dir>`, `--limit <n>`, `--ki
 | `kotlin-lsp call hierarchy <file> <line> <col>` | Incoming + outgoing call chain |
 | `kotlin-lsp impact <file> <line> <col>` | What depends on this symbol? |
 | `kotlin-lsp type hierarchy <name> [--subtypes\|--supertypes]` | Supertype/subtype tree |
+| `kotlin-lsp type sealed <name>` | Sealed class subclasses |
 
 ## Module & package introspection
 
 | Command | Description |
 |---------|-------------|
-| `kotlin-lsp module list` | List all project modules |
+| `kotlin-lsp module list` | List modules |
 | `kotlin-lsp module deps <name>` | Module dependency graph |
 | `kotlin-lsp module files <name>` | Files in a module |
-| `kotlin-lsp module packages [name]` | Package-level import deps |
-| `kotlin-lsp imports-of <name>` | Files importing this symbol |
-| `kotlin-lsp annotated <name>` | Symbols with @annotation |
+| `kotlin-lsp module packages <name>` | Packages in a module |
+
+## `edit` — Code modification
+
+| Command | Description |
+|---------|-------------|
+| `kotlin-lsp edit rename <file> <line> <col> <new>` | Rename symbol |
+| `kotlin-lsp edit batch <file>` | Batch from JSON rules |
+| `kotlin-lsp edit imports <file>` | Batch add missing imports |
+| `kotlin-lsp edit inject <file>` | Batch-resolve type signatures |
+| `kotlin-lsp edit insert <file> <line> --content --kind` | Semantic insertion |
+| `kotlin-lsp edit new <template> <name>` | File from template |
+| `kotlin-lsp edit organize <file>...` | Sort, dedup, remove unused imports |
+
+## `tool` — Debug / introspection
+
+| Command | Description |
+|---------|-------------|
+| `kotlin-lsp tool inspect <file>` | File diagnostics for agents |
+| `kotlin-lsp tool graph` | Symbol dependency graph |
+| `kotlin-lsp tool snapshot` | Full workspace snapshot |
+| `kotlin-lsp tool bench` | Performance benchmarks |
+| `kotlin-lsp tool doctor` | System diagnostics |
+| `kotlin-lsp tool workspace` | Workspace overview |
+| `kotlin-lsp tool query` | Batch query (pipe JSON) |
+| `kotlin-lsp tool skills list\|read` | Agent skills |
+| `kotlin-lsp tool code-action <file> <line> <col>` | List/apply code actions |
+| `kotlin-lsp tool tokens <file>` | Semantic tokens (debug) |
+| `kotlin-lsp tool tree <file>` | Parse tree dump (debug) |
+
+## Infrastructure
+
+| Command | Description |
+|---------|-------------|
+| `kotlin-lsp check <file>...` | Syntax errors + warnings |
+| `kotlin-lsp format check\|apply <file>...` | Code formatting |
+| `kotlin-lsp index [--root <dir>]` | Build workspace cache |
+| `kotlin-lsp index-jars [root]` | Index library JARs |
+| `kotlin-lsp extract-sources` | Unpack `*-sources.jar` |
+| `kotlin-lsp sources [--explain]` | Auto-discovered source roots |
+| `kotlin-lsp cache stats` | Cache diagnostics |
+| `kotlin-lsp gradle-deps` | Parsed Gradle dependencies |
 
 ## Android
 
 | Command | Description |
 |---------|-------------|
-| `kotlin-lsp android activities` | AndroidManifest activities |
-| `kotlin-lsp android composables <file>` | @Composable functions |
+| `kotlin-lsp android activities` | Manifest activities |
+| `kotlin-lsp android composables <file> [--call-graph] [--state] [--preview]` | Composable analysis |
 
-## Editing & code actions
+## Output conventions
 
-| Command | Description |
-|---------|-------------|
-| `kotlin-lsp code-action <file> <line> <col>` | List/apply code actions |
-| `kotlin-lsp organize-imports <file>...` | Sort + dedup + remove unused |
-| `kotlin-lsp batch-imports <file>` | Batch add missing imports |
-| `kotlin-lsp rename <file> <line> <col> <new>` | Rename symbol |
-| `kotlin-lsp inject <file>` | Batch-resolve type signatures |
-| `kotlin-lsp insert <file> <kind>` | Semantic insertion |
-| `kotlin-lsp new-file <template> <name>` | Generate from template |
-| `kotlin-lsp format check\|apply <dir>...` | ktfmt/ktlint format |
-
-## Diagnostics & introspection
-
-| Command | Description |
-|---------|-------------|
-| `kotlin-lsp check <file>...` | Syntax errors, unused imports, deprecation |
-| `kotlin-lsp doctor [--json]` | System diagnostics |
-| `kotlin-lsp cache stats` | Index cache statistics |
-| `kotlin-lsp sources` | Detected source roots |
-| `kotlin-lsp inspect <file>` | Detailed file diagnostics |
-| `kotlin-lsp tokens <file>` | Syntax tokens (debug) |
-| `kotlin-lsp tree <file>` | Parse tree (debug) |
-| `kotlin-lsp benchmark` | Performance benchmarks |
-
-## Indexing & library sources
-
-| Command | Description |
-|---------|-------------|
-| `kotlin-lsp index [--root <dir>] [--gradle]` | Index workspace |
-| `kotlin-lsp index-jars [root]` | Index library symbols from JARs |
-| `kotlin-lsp extract-sources [lib...]` | Unpack *-sources.jar |
-| `kotlin-lsp gradle-deps` | Show parsed Gradle dependencies |
-
-## Workspace & batch
-
-| Command | Description |
-|---------|-------------|
-| `kotlin-lsp workspace` | Workspace overview |
-| `kotlin-lsp snapshot` | Workspace snapshot |
-| `kotlin-lsp symbol-graph` | Symbol dependency graph |
-| `echo '[...]' \| kotlin-lsp query --json` | Batch query engine |
-
-## Cross-platform
-
-| Command | Description |
-|---------|-------------|
-| `kotlin-lsp expect-actual <name>` | KMP expect/actual |
-| `kotlin-lsp find-test <file> <line> <col>` | Find related test files |
-
-## Agent skills
-
-| Command | Description |
-|---------|-------------|
-| `kotlin-lsp skills list \| read <name>` | Bundled agent skills |
+- **Text (default):** grouped by file with `<path>\n  line:col[name] text`. Pipe-safe.
+- **`--json`:** compact JSON — pipe to `jq` for reading.
+- **`--relative`:** workspace-relative paths. **Auto-enabled when stdout is piped.**
+- **`--absolute`:** override the non-TTY auto-relative.
+- **`--flat`:** legacy grep-style `<path>:<line>:<col>: <name>`.
