@@ -103,6 +103,7 @@ Quick reference:
 | Callers tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --incoming` |
 | Callees tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --outgoing` |
 | Impact analysis | `kotlin-lsp impact <FILE> <LINE> <COL>` |
+| Semantic search | `kotlin-lsp search <QUERY>` |
 | Symbol overview | `kotlin-lsp search summarize <NAME>` |
 | Find tests | `kotlin-lsp search find-test <FILE> <LINE> <COL>` |
 | KMP expect/actual | `kotlin-lsp search expect-actual <NAME>` |

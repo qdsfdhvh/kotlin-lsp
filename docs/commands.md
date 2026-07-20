@@ -16,7 +16,8 @@ kotlin-lsp context Foo.kt 42 10        # def + sig + doc + refs
 kotlin-lsp complete Foo.kt 42 --dot    # completions
 
 # ── groups ──
-kotlin-lsp search semantic "login"    # semantic search
+kotlin-lsp search "login"            # semantic search (shorthand)
+kotlin-lsp search semantic "login"  # semantic search (explicit)
 kotlin-lsp search summarize User      # symbol summary
 kotlin-lsp search docs "parse"        # KDoc search
 kotlin-lsp search imports UserRepo     # who imports this

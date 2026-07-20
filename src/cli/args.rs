@@ -759,40 +759,27 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let sub = positionals.first().cloned().unwrap_or_default();
             match sub.as_str() {
                 "docs" => {
-                    let query = positionals.get(1).cloned().ok_or("search docs requires QUERY")?;
+                    let query = positionals
+                        .get(1)
+                        .cloned()
+                        .ok_or("search docs requires QUERY")?;
                     Ok(Subcommand::Docs { query })
                 }
-                "semantic" | "" => {
-                    let query = positionals.get(1).cloned().ok_or("search semantic requires QUERY")?;
+                "semantic" => {
+                    let query = positionals.get(1).cloned().ok_or("search requires QUERY")?;
                     let limit = parsed.limit.unwrap_or(20);
                     Ok(Subcommand::Search { query, limit })
                 }
-                "summarize" => {
-                    let name = positionals.get(1).cloned().unwrap_or_default();
-                    if name.is_empty() { return Err("search summarize requires NAME".into()); }
-                    let expand = positionals.contains(&"--expand".to_string());
-                    Ok(Subcommand::Summarize { name, expand, cached: parsed.cached })
+                "" => Err("search requires QUERY".into()),
+                // Treat unrecognized subcommand as a semantic search query
+                // so `kotlin-lsp search <query>` works as documented in help text and SKILL.md
+                o => {
+                    let limit = parsed.limit.unwrap_or(20);
+                    Ok(Subcommand::Search {
+                        query: o.to_string(),
+                        limit,
+                    })
                 }
-                "cache-stats" => Ok(Subcommand::SummaryCacheStats),
-                "imports" => {
-                    let name = positionals.get(1).cloned().ok_or("search imports requires NAME")?;
-                    Ok(Subcommand::ImportsOf { name })
-                }
-                "annotated" => {
-                    let a = positionals.get(1).cloned().ok_or("search annotated requires ANNOTATION")?;
-                    Ok(Subcommand::Annotated { annotation: a })
-                }
-                "find-test" => {
-                    let r = positionals[1..].to_vec();
-                    let (f, l, c) = parse_file_line_col(r, "search find-test")?;
-                    Ok(Subcommand::FindTest { file: f, line: l, col: c })
-                }
-                "expect-actual" => {
-                    let n = positionals.get(1).cloned().unwrap_or_default();
-                    if n.is_empty() { return Err("search expect-actual requires NAME".into()); }
-                    Ok(Subcommand::ExpectActual { name: n })
-                }
-                o => Err(format!("unknown search subcommand '{o}'. Available: docs, semantic, summarize, cache-stats, imports, annotated, find-test, expect-actual")),
             }
         }
         "edit" => {
