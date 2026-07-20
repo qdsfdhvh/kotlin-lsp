@@ -1,5 +1,14 @@
 ## 0.30.0 (2026-07-19)
 
+## 0.30.1 (2026-07-20)
+
+### fix(search): restore `kotlin-lsp search <query>` shorthand (#216)
+
+- In v0.30.0 the CLI parser rejected `kotlin-lsp search "query"` (required `search semantic <query>`)
+  while the help text and bundled SKILL.md documented the shorthand form.
+- Unrecognized search subcommands are now treated as semantic search queries instead of erroring.
+- `search docs <query>` and `search semantic <query>` continue to work.
+
 ### feat(lsp): --agent flag for AI coding agent startup (#209)
 
 - `kotlin-lsp --agent` starts with agent-optimized defaults (no diagnostics, semantic tokens, inlay hints, code actions, folding, formatting, etc.)
