@@ -441,3 +441,91 @@ fn skills_parses_as_subcommand() {
         other => panic!("expected Skills, got {other:?}"),
     }
 }
+
+// ── search subcommand ────────────────────────────────────────────────────────────
+
+#[test]
+fn search_shorthand_parses_query() {
+    let args = parse(&["search", "login view model"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login view model");
+            assert_eq!(limit, 20); // default
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_semantic_explicit_parses_query() {
+    let args = parse(&["search", "semantic", "login view model"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login view model");
+            assert_eq!(limit, 20);
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_requires_query() {
+    let err = parse(&["search"]).unwrap_err();
+    assert!(err.contains("QUERY"), "got: {err}");
+}
+
+#[test]
+fn search_shorthand_parses_limit() {
+    let args = parse(&["search", "login", "--limit", "5"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login");
+            assert_eq!(limit, 5);
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_semantic_explicit_parses_limit() {
+    let args = parse(&["search", "semantic", "login", "--limit", "10"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login");
+            assert_eq!(limit, 10);
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_docs_subcommand_parses_query() {
+    let args = parse(&["search", "docs", "view model"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Docs { query } => {
+            assert_eq!(query, "view model");
+        }
+        other => panic!("expected Docs, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_summarize_is_top_level_not_nested() {
+    // `summarize` is a top-level subcommand, not a `search` subcommand.
+    // `kotlin-lsp search summarize Name` treats "summarize" as a semantic query.
+    let args = parse(&["search", "summarize", "LoginViewModel"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, .. } => {
+            assert_eq!(query, "summarize");
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
