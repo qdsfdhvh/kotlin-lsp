@@ -386,6 +386,45 @@ fn fast_refs(name: &str, root: &Path) -> Vec<CliResult> {
     locs_to_results(locs, name, "")
 }
 
+// ── Capabilities ────────────────────────────────────────────────────────────
+
+fn print_capabilities(json: bool) {
+    let caps = serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "schemaVersion": 1,
+        "commands": {
+            "search": { "description": "Semantic search with TF-IDF ranking over symbols", "flags": ["--limit", "--json", "--root", "--fast", "--smart"] },
+            "docs": { "description": "Search symbols by name or signature", "flags": ["--limit", "--json", "--root"] },
+            "find": { "description": "Find definition location by name", "flags": ["--limit", "--json", "--root", "--fast", "--smart", "--absolute", "--relative", "--module", "--source-set", "--kind"] },
+            "refs": { "description": "Find references by name", "flags": ["--limit", "--json", "--root", "--fast", "--smart", "--absolute", "--relative", "--module", "--source-set", "--kind"] },
+            "hover": { "description": "Get hover information at a position", "flags": ["--json", "--root", "--dot", "--eol"] },
+            "complete": { "description": "Get completions at a position", "flags": ["--json", "--root", "--dot", "--eol", "--no-stdlib"] },
+            "context": { "description": "One-stop agent context at a position", "flags": ["--json", "--root", "--dot", "--eol"] },
+            "call": { "description": "Call hierarchy", "subcommands": ["hierarchy"], "flags": ["--json", "--root"] },
+            "type": { "description": "Type hierarchy", "subcommands": ["hierarchy", "sealed"], "flags": ["--json", "--root", "--subtypes", "--supertypes", "--graph"] },
+            "check": { "description": "Check syntax errors", "flags": ["--root"] },
+            "index": { "description": "Index workspace", "flags": ["--root", "--no-stdlib"] },
+            "index-jars": { "description": "Index JAR sources", "flags": ["--root"] },
+            "tool": { "description": "Tool commands (bench, code-action)", "subcommands": ["bench", "code-action"], "flags": ["--json", "--root"] },
+            "edit": { "description": "Edit commands (batch, imports, organize, insert, new-file)", "subcommands": ["batch", "imports", "organize", "insert", "new-file"], "flags": ["--json", "--root", "--dry-run", "--in-place"] },
+            "format": { "description": "Format Kotlin files", "subcommands": ["check", "apply"], "flags": ["--root"] },
+            "module": { "description": "Module commands (list, deps, files, packages)", "subcommands": ["list", "deps", "files", "packages"], "flags": ["--json", "--root"] },
+            "android": { "description": "Android resource commands (activities, composables)", "subcommands": ["activities", "composables"], "flags": ["--json", "--root"] },
+            "skills": { "description": "Agent skill management (list, read)", "subcommands": ["list", "read"], "flags": ["--root"] },
+            "capabilities": { "description": "Machine-readable CLI capability manifest", "flags": ["--json"] },
+        }
+    });
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&caps).unwrap_or_default()
+        );
+    } else {
+        println!("kotlin-lsp capabilities --json");
+        println!("  Output machine-readable JSON manifest");
+    }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub(crate) async fn run(args: CliArgs) {
@@ -1303,6 +1342,9 @@ pub(crate) async fn run(args: CliArgs) {
         }
         Subcommand::SummaryCacheStats => {
             crate::cli::summary_cache::run_summary_cache_stats().await;
+        }
+        Subcommand::Capabilities => {
+            print_capabilities(json);
         }
         Subcommand::FindTest { file, line, col } => {
             crate::cli::find_test::run_find_test(&file, line, col, json).await;

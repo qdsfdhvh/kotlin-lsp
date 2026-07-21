@@ -294,6 +294,8 @@ pub(crate) enum Subcommand {
     },
     /// Show AI summary cache statistics.
     SummaryCacheStats,
+    /// Expose machine-readable CLI capability manifest.
+    Capabilities,
     /// Show Gradle dependencies parsed from build.gradle.kts / libs.versions.toml.
     GradleDeps,
 }
@@ -1351,6 +1353,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 .ok_or("docs requires a QUERY argument")?;
             Ok(Subcommand::Docs { query })
         }
+        "capabilities" => Ok(Subcommand::Capabilities),
         "summary-cache" => Ok(Subcommand::SummaryCacheStats),
         "type-hierarchy" => {
             eprintln!("[WARN] 'type-hierarchy' is deprecated; use 'type hierarchy'");
@@ -1560,6 +1563,7 @@ fn is_subcommand(value: &str) -> bool {
             | "extract-sources"
             | "cache"
             | "docs"
+            | "capabilities"
             | "check"
             | "context"
             | "call"
