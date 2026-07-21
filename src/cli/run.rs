@@ -1260,6 +1260,7 @@ pub(crate) async fn run(args: CliArgs) {
         }
         Subcommand::Call { sub } => match sub {
             CallSub::Hierarchy {
+                name,
                 file,
                 line,
                 col,
@@ -1267,7 +1268,11 @@ pub(crate) async fn run(args: CliArgs) {
                 outgoing,
                 depth: _depth,
             } => {
-                run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
+                if let Some(sym) = name {
+                    run_call_hierarchy_by_name(&sym, incoming, outgoing, json).await;
+                } else {
+                    run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
+                }
             }
         },
         Subcommand::Impact { file, line, col } => {
@@ -1906,6 +1911,61 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize
 }
 
 // ── call-hierarchy ────────────────────────────────────────────────────────────
+
+/// Look up a symbol by name and run call hierarchy from its location.
+async fn run_call_hierarchy_by_name(name: &str, incoming: bool, outgoing: bool, json: bool) {
+    let root = resolve_root(None);
+    let index = build_index(&root, false).await;
+    let engine = WorkspaceQueryEngine::new(index.clone());
+    let filters = ResultFilters::default();
+    let results = smart_find(&engine, name, &root, &filters);
+    if results.is_empty() {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({"error": format!("No symbol found for '{name}'") })
+            );
+        } else {
+            eprintln!("No symbol found for '{name}'");
+        }
+        return;
+    }
+    if results.len() > 1 {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "error": format!("Ambiguous symbol '{name}' matches {} candidates", results.len()),
+                    "candidates": results.iter().take(20).map(|r| serde_json::json!({
+                        "name": r.name,
+                        "kind": r.kind,
+                        "file": r.file,
+                        "line": r.line,
+                        "col": r.col,
+                    })).collect::<Vec<_>>()
+                })
+            );
+        } else {
+            eprintln!(
+                "{} is ambiguous ({} matches). Try --json to see candidates.",
+                name,
+                results.len()
+            );
+        }
+        return;
+    }
+    let target = &results[0];
+    let target_file = PathBuf::from(&target.file);
+    run_call_hierarchy(
+        &target_file,
+        target.line,
+        target.col,
+        incoming,
+        outgoing,
+        json,
+    )
+    .await;
+}
 
 async fn run_call_hierarchy(
     file: &Path,

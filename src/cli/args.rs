@@ -338,6 +338,8 @@ pub(crate) enum TypeSub {
 #[derive(Debug, Clone)]
 pub(crate) enum CallSub {
     Hierarchy {
+        /// When Some, resolve this symbol name to a location before computing hierarchy.
+        name: Option<String>,
         file: PathBuf,
         line: u32,
         col: u32,
@@ -879,6 +881,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let (file, line, col) = parse_file_line_col(positionals, "callers")?;
             Ok(Subcommand::Call {
                 sub: CallSub::Hierarchy {
+                    name: None,
                     file,
                     line,
                     col,
@@ -898,6 +901,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let (file, line, col) = parse_file_line_col(positionals, "callees")?;
             Ok(Subcommand::Call {
                 sub: CallSub::Hierarchy {
+                    name: None,
                     file,
                     line,
                     col,
@@ -1214,6 +1218,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let (file, line, col) = parse_file_line_col(positionals, "call-hierarchy")?;
             Ok(Subcommand::Call {
                 sub: CallSub::Hierarchy {
+                    name: None,
                     file,
                     line,
                     col,
@@ -1236,10 +1241,17 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     })
                 }
                 "hierarchy" => {
-                    let remaining = positionals[1..].to_vec();
-                    let (file, line, col) = parse_file_line_col(remaining, "call hierarchy")?;
+                    let pos = &positionals[1..];
+                    let (name, file, line, col) = match pos.len() {
+                        1 => (Some(pos[0].clone()), PathBuf::new(), 0u32, 0u32),
+                        _ => {
+                            let (f, l, c) = parse_file_line_col(pos.to_vec(), "call hierarchy")?;
+                            (None, f, l, c)
+                        }
+                    };
                     Ok(Subcommand::Call {
                         sub: CallSub::Hierarchy {
+                            name,
                             file,
                             line,
                             col,
@@ -1547,6 +1559,7 @@ fn is_subcommand(value: &str) -> bool {
             | "sources"
             | "extract-sources"
             | "cache"
+            | "docs"
             | "check"
             | "context"
             | "call"
