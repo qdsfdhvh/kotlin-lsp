@@ -561,7 +561,6 @@ fn call_hierarchy_by_name_parses_symbol() {
             CallSub::Hierarchy { name, .. } => {
                 assert_eq!(name.as_deref(), Some("AuthViewModel"));
             }
-            other => panic!("expected Hierarchy, got {other:?}"),
         },
         other => panic!("expected Call, got {other:?}"),
     }
@@ -586,7 +585,6 @@ fn call_hierarchy_positional_parses_file_line_col() {
                 assert_eq!(*line, 42);
                 assert_eq!(*col, 10);
             }
-            other => panic!("expected Hierarchy, got {other:?}"),
         },
         other => panic!("expected Call, got {other:?}"),
     }
