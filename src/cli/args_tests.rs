@@ -591,3 +591,18 @@ fn call_hierarchy_positional_parses_file_line_col() {
         other => panic!("expected Call, got {other:?}"),
     }
 }
+
+// ── capabilities (#220) ────────────────────────────────────────────────────────
+
+#[test]
+fn capabilities_parses_as_subcommand() {
+    let args = parse(&["capabilities"]).unwrap().unwrap();
+    assert!(matches!(args.subcommand, Subcommand::Capabilities));
+}
+
+#[test]
+fn capabilities_json_flag_is_accepted() {
+    // --json should not cause a parse error
+    let args = parse(&["capabilities", "--json"]).unwrap().unwrap();
+    assert!(matches!(args.subcommand, Subcommand::Capabilities));
+}

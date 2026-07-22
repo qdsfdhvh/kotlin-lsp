@@ -16,6 +16,7 @@ kotlin-lsp context Foo.kt 42 10        # def + sig + doc + refs
 kotlin-lsp complete Foo.kt 42 --dot    # completions
 
 # ── groups ──
+kotlin-lsp docs "parse"               # KDoc search (top-level alias)
 kotlin-lsp search "login"            # semantic search (shorthand)
 kotlin-lsp search semantic "login"  # semantic search (explicit)
 kotlin-lsp search summarize User      # symbol summary
@@ -29,6 +30,7 @@ kotlin-lsp edit new activity Login    # file from template
 kotlin-lsp tool code-action F.kt 1 1  # list code actions
 kotlin-lsp tool inspect Foo.kt        # file diagnostics
 kotlin-lsp tool bench                 # performance
+kotlin-lsp capabilities --json        # CLI capability manifest
 kotlin-lsp tool doctor                # system health
 kotlin-lsp call hierarchy F.kt 42 10  # call chains
 kotlin-lsp type hierarchy User        # super/subtype tree
