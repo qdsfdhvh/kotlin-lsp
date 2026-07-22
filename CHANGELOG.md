@@ -1,5 +1,22 @@
 ## 0.30.0 (2026-07-19)
 
+## 0.30.2 (2026-07-22)
+
+### feat(call-hierarchy): accept symbol name in addition to file/line/col (#221)
+
+- `kotlin-lsp call hierarchy <name>` resolves unique symbols directly.
+- Ambiguous symbols report candidates in JSON or text.
+- Existing file/line/col positional form is backward compatible.
+
+### fix(docs): restore `docs` as a top-level alias for `search docs` (#221)
+
+- `kotlin-lsp docs <query>` now works, matching the --help output.
+
+### feat(capabilities): machine-readable CLI capability manifest (#221)
+
+- `kotlin-lsp capabilities --json` outputs a stable JSON manifest with version,
+  commands, flags, and subcommands.
+
 ## 0.30.1 (2026-07-20)
 
 ### fix(search): restore `kotlin-lsp search <query>` shorthand (#216)
