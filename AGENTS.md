@@ -106,6 +106,7 @@ Quick reference:
 | Callees tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --outgoing` |
 | Impact analysis | `kotlin-lsp impact <FILE> <LINE> <COL>` |
 | Semantic search | `kotlin-lsp search <QUERY>` |
+| KDoc search | `kotlin-lsp docs <QUERY>` |
 | Symbol overview | `kotlin-lsp search summarize <NAME>` |
 | Find tests | `kotlin-lsp search find-test <FILE> <LINE> <COL>` |
 | KMP expect/actual | `kotlin-lsp search expect-actual <NAME>` |
@@ -113,6 +114,7 @@ Quick reference:
 | Android resources | `kotlin-lsp android activities / composables` |
 | Format check | `kotlin-lsp format check <FILE>...` |
 | Format apply | `kotlin-lsp format apply <FILE>...` |
+| Capabilities | `kotlin-lsp capabilities --json` |
 | File inspect | `kotlin-lsp inspect <FILE>` |
 | JSON output | `--json` |
 

@@ -529,3 +529,78 @@ fn search_summarize_is_top_level_not_nested() {
         other => panic!("expected Search, got {other:?}"),
     }
 }
+
+// ── docs top-level alias (#219) ────────────────────────────────────────────────
+
+#[test]
+fn docs_top_level_parses_query() {
+    let args = parse(&["docs", "StateFlow"]).unwrap().unwrap();
+    match &args.subcommand {
+        Subcommand::Docs { query } => {
+            assert_eq!(query, "StateFlow");
+        }
+        other => panic!("expected Docs, got {other:?}"),
+    }
+}
+
+#[test]
+fn docs_requires_query() {
+    let err = parse(&["docs"]).unwrap_err();
+    assert!(err.contains("QUERY"), "got: {err}");
+}
+
+// ── call hierarchy by name (#218) ─────────────────────────────────────────────
+
+#[test]
+fn call_hierarchy_by_name_parses_symbol() {
+    let args = parse(&["call", "hierarchy", "AuthViewModel"])
+        .unwrap()
+        .unwrap();
+    match &args.subcommand {
+        Subcommand::Call { sub } => match sub {
+            CallSub::Hierarchy { name, .. } => {
+                assert_eq!(name.as_deref(), Some("AuthViewModel"));
+            }
+        },
+        other => panic!("expected Call, got {other:?}"),
+    }
+}
+
+#[test]
+fn call_hierarchy_positional_parses_file_line_col() {
+    let args = parse(&["call", "hierarchy", "src/Foo.kt", "42", "10"])
+        .unwrap()
+        .unwrap();
+    match &args.subcommand {
+        Subcommand::Call { sub } => match sub {
+            CallSub::Hierarchy {
+                name,
+                file,
+                line,
+                col,
+                ..
+            } => {
+                assert!(name.is_none());
+                assert_eq!(file, &std::path::PathBuf::from("src/Foo.kt"));
+                assert_eq!(*line, 42);
+                assert_eq!(*col, 10);
+            }
+        },
+        other => panic!("expected Call, got {other:?}"),
+    }
+}
+
+// ── capabilities (#220) ────────────────────────────────────────────────────────
+
+#[test]
+fn capabilities_parses_as_subcommand() {
+    let args = parse(&["capabilities"]).unwrap().unwrap();
+    assert!(matches!(args.subcommand, Subcommand::Capabilities));
+}
+
+#[test]
+fn capabilities_json_flag_is_accepted() {
+    // --json should not cause a parse error
+    let args = parse(&["capabilities", "--json"]).unwrap().unwrap();
+    assert!(matches!(args.subcommand, Subcommand::Capabilities));
+}
