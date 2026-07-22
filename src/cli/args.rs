@@ -1,4 +1,5 @@
 //! CLI argument parsing via lexopt.
+//
 
 use std::path::PathBuf;
 
