@@ -8,16 +8,17 @@ use tree_sitter::{Node, Parser, Query, QueryCursor};
 
 use crate::indexer::NodeExt;
 use crate::queries::{
-    self, KIND_ANNOTATION_TYPE_DECL, KIND_CALLABLE_REF, KIND_CALL_EXPR, KIND_CALL_SUFFIX,
-    KIND_CLASS_DECL, KIND_CTOR_DECL, KIND_DELEGATION_SPEC, KIND_ENUM_CONSTANT, KIND_ENUM_DECL,
-    KIND_EQ, KIND_EXTENDS_INTERFACES, KIND_FIELD_DECL, KIND_FUN, KIND_FUN_DECL, KIND_IDENTIFIER,
-    KIND_IMPORT_ALIAS, KIND_IMPORT_DECL, KIND_IMPORT_HEADER, KIND_IMPORT_LIST,
-    KIND_INHERITANCE_SPEC, KIND_INHERITANCE_SPECS, KIND_INTERFACE_DECL, KIND_LAMBDA_LIT,
-    KIND_METHOD_DECL, KIND_MODIFIERS, KIND_MOD_FINAL, KIND_MOD_STATIC, KIND_NAV_EXPR,
-    KIND_OBJECT_DECL, KIND_PACKAGE_DECL, KIND_PACKAGE_HEADER, KIND_PROP_DECL, KIND_PROP_DELEGATE,
-    KIND_PROTOCOL_DECL, KIND_RECORD_DECL, KIND_SCOPED_IDENT, KIND_SIMPLE_IDENT, KIND_STATEMENTS,
-    KIND_SUPERCLASS, KIND_SUPER_INTERFACES, KIND_TYPE_IDENT, KIND_USER_TYPE, KIND_VALUE_ARG,
-    KIND_VALUE_ARGS, KIND_VAR_DECL, KIND_VAR_DECLARATOR, KIND_WILDCARD_IMPORT, KOTLIN_DEFINITIONS,
+    self, KIND_ANNOTATION, KIND_ANNOTATION_TYPE_DECL, KIND_CALLABLE_REF, KIND_CALL_EXPR,
+    KIND_CALL_SUFFIX, KIND_CLASS_DECL, KIND_CTOR_DECL, KIND_DELEGATION_SPEC, KIND_ENUM_CONSTANT,
+    KIND_ENUM_DECL, KIND_EQ, KIND_EXTENDS_INTERFACES, KIND_FIELD_DECL, KIND_FUN, KIND_FUN_BODY,
+    KIND_FUN_DECL, KIND_FUN_VALUE_PARAMS, KIND_IDENTIFIER, KIND_IMPORT_ALIAS, KIND_IMPORT_DECL,
+    KIND_IMPORT_HEADER, KIND_IMPORT_LIST, KIND_INHERITANCE_SPEC, KIND_INHERITANCE_SPECS,
+    KIND_INTERFACE_DECL, KIND_LAMBDA_LIT, KIND_METHOD_DECL, KIND_MODIFIERS, KIND_MOD_FINAL,
+    KIND_MOD_STATIC, KIND_NAV_EXPR, KIND_OBJECT_DECL, KIND_PACKAGE_DECL, KIND_PACKAGE_HEADER,
+    KIND_PARAMETER, KIND_PROP_DECL, KIND_PROP_DELEGATE, KIND_PROTOCOL_DECL, KIND_RECORD_DECL,
+    KIND_RPAREN, KIND_SCOPED_IDENT, KIND_SIMPLE_IDENT, KIND_STATEMENTS, KIND_SUPERCLASS,
+    KIND_SUPER_INTERFACES, KIND_TYPE_IDENT, KIND_USER_TYPE, KIND_VALUE_ARG, KIND_VALUE_ARGS,
+    KIND_VAR_DECL, KIND_VAR_DECLARATOR, KIND_WILDCARD_IMPORT, KOTLIN_DEFINITIONS,
     SWIFT_DEFINITIONS,
 };
 use crate::StrExt;
@@ -607,6 +608,99 @@ fn is_annotation_function_type_error(node: &Node, bytes: &[u8]) -> bool {
         || (trimmed.contains('@') && trimmed.contains('(') && trimmed.contains(':') && !trimmed.contains("->"))
 }
 
+/// Finds the exact cascade emitted for a valid block-body declaration whose annotated
+/// function-type parameter itself accepts a function type (#224).
+///
+/// tree-sitter consumes the inner `(T) -> Unit` as annotation arguments, leaving a
+/// `) ->` ERROR, a missing declaration `)`, the body `{`, and its closing `}` as
+/// cascade debris. Only those nodes are suppressed; errors inside the body remain visible.
+fn nested_annotated_function_type_false_positives(
+    root: Node,
+    bytes: &[u8],
+) -> std::collections::HashSet<usize> {
+    let mut false_positives = std::collections::HashSet::new();
+    let mut stack = vec![root];
+
+    while let Some(node) = stack.pop() {
+        if node.kind() == KIND_FUN_DECL && node.has_error() {
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            let parameters = children
+                .iter()
+                .find(|child| child.kind() == KIND_FUN_VALUE_PARAMS);
+            let body = children.iter().find(|child| child.kind() == KIND_FUN_BODY);
+
+            if let (Some(parameters), Some(body)) = (parameters, body) {
+                let mut parameter_cursor = parameters.walk();
+                let mut has_nested_annotated_parameter = false;
+                for parameter in parameters
+                    .children(&mut parameter_cursor)
+                    .filter(|child| child.kind() == KIND_PARAMETER)
+                {
+                    let text = parameter.utf8_text(bytes).unwrap_or("");
+                    let arrow_count = text.matches("->").count();
+                    let mut parameter_stack = vec![parameter];
+                    let mut has_annotation = false;
+                    let mut dangling_outer_arrows = Vec::new();
+                    while let Some(descendant) = parameter_stack.pop() {
+                        has_annotation |= descendant.kind() == KIND_ANNOTATION;
+                        if descendant.is_error()
+                            && descendant.utf8_text(bytes).unwrap_or("").trim() == ") ->"
+                        {
+                            dangling_outer_arrows.push(descendant.id());
+                        }
+                        let mut descendant_cursor = descendant.walk();
+                        for child in descendant.children(&mut descendant_cursor) {
+                            parameter_stack.push(child);
+                        }
+                    }
+                    if has_annotation && !dangling_outer_arrows.is_empty() && arrow_count >= 2 {
+                        has_nested_annotated_parameter = true;
+                        false_positives.extend(dangling_outer_arrows);
+                    }
+                }
+
+                if has_nested_annotated_parameter {
+                    let mut parameters_cursor = parameters.walk();
+                    for child in parameters.children(&mut parameters_cursor) {
+                        if child.is_missing() && child.kind() == KIND_RPAREN {
+                            false_positives.insert(child.id());
+                        }
+                    }
+
+                    let body_start = body.start_byte();
+                    let mut declaration_stack = vec![node];
+                    while let Some(descendant) = declaration_stack.pop() {
+                        if descendant.is_error()
+                            && descendant.end_byte() <= body_start
+                            && descendant.utf8_text(bytes).unwrap_or("").trim() == "{"
+                        {
+                            false_positives.insert(descendant.id());
+                        }
+                        let mut descendant_cursor = descendant.walk();
+                        for child in descendant.children(&mut descendant_cursor) {
+                            declaration_stack.push(child);
+                        }
+                    }
+
+                    if let Some(next) = node.next_named_sibling() {
+                        if next.is_error() && next.utf8_text(bytes).unwrap_or("").trim() == "}" {
+                            false_positives.insert(next.id());
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+
+    false_positives
+}
+
 /// Returns the interface name if this `function_declaration` is actually a misparse
 /// of `[modifiers] fun interface Foo { ... }`.
 ///
@@ -844,6 +938,8 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
     // Pre-check: detect fun-interface misparse anywhere in the tree.
     // Its cascading false positives can appear at any depth.
     let has_fun_interface_misparse = has_any_fun_interface_in_tree(&root, bytes);
+    let nested_function_type_false_positives =
+        nested_annotated_function_type_false_positives(root, bytes);
 
     let mut errors = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -880,6 +976,9 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
             break;
         }
 
+        if nested_function_type_false_positives.contains(&node.id()) {
+            continue;
+        }
         if node.is_missing() {
             let range = ts_to_lsp(node.range());
             let key = (range.start.line, range.start.character);
