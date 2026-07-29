@@ -1,4 +1,17 @@
-## 0.30.0 (2026-07-19)
+## 0.30.3 (2026-07-29)
+
+### fix(check): accept nested annotated function types (#225)
+
+- `kotlin-lsp check` no longer reports four false syntax errors for valid multi-line
+  block-body declarations such as `@Composable ((Int) -> Unit) -> Unit`.
+- Genuine syntax errors in the same signature, function body, and following declarations
+  remain visible.
+
+### ci(windows): install runtime search tools from official releases (#225)
+
+- Windows CI downloads pinned official `ripgrep` and `fd` release assets instead of
+  depending on the Chocolatey community feed.
+- Runtime-tool installation now fails fast if either executable is unavailable.
 
 ## 0.30.2 (2026-07-22)
 
@@ -25,6 +38,8 @@
   while the help text and bundled SKILL.md documented the shorthand form.
 - Unrecognized search subcommands are now treated as semantic search queries instead of erroring.
 - `search docs <query>` and `search semantic <query>` continue to work.
+
+## 0.30.0 (2026-07-19)
 
 ### feat(lsp): --agent flag for AI coding agent startup (#209)
 
