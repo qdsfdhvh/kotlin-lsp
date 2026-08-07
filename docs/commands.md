@@ -77,9 +77,10 @@ kotlin-lsp cache stats                # cache info
 | `cache stats` | Cache diagnostics |
 | `gradle-deps` | Parsed Gradle dependencies |
 
-## Deprecated aliases
+## Removed flat aliases
 
-Old names still work with `[WARN]`. Prefer the new grouped names.
+Old flat names were removed from the parser (v0.30.2+); invoking them prints
+`unknown subcommand`. Use the grouped names below.
 
 | Old | New |
 |-----|-----|

@@ -115,7 +115,7 @@ Quick reference:
 | Format check | `kotlin-lsp format check <FILE>...` |
 | Format apply | `kotlin-lsp format apply <FILE>...` |
 | Capabilities | `kotlin-lsp capabilities --json` |
-| File inspect | `kotlin-lsp inspect <FILE>` |
+| File inspect | `kotlin-lsp tool inspect <FILE>` |
 | JSON output | `--json` |
 
 ## Merge Rules

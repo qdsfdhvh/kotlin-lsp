@@ -141,17 +141,17 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Extract sources | `kotlin-lsp extract-sources [lib...]` |
 | Source roots | `kotlin-lsp sources` |
 | Cache stats | `kotlin-lsp cache stats` |
-| Doctor | `kotlin-lsp doctor [--json]` |
+| Doctor | `kotlin-lsp tool doctor [--json]` |
 | Workspace overview | `kotlin-lsp tool workspace` |
 | Snapshot | `kotlin-lsp tool snapshot` |
 | Symbol graph | `kotlin-lsp tool graph` |
-| Batch query | `echo '[...]' \| kotlin-lsp query --json` |
-| File inspect | `kotlin-lsp inspect <file>` |
-| Tokens (debug) | `kotlin-lsp tokens <file>` |
+| Batch query | `echo '[...]' \| kotlin-lsp tool query --json` |
+| File inspect | `kotlin-lsp tool inspect <file>` |
+| Tokens (debug) | `kotlin-lsp tool tokens <file>` |
 | Parse tree (debug) | `kotlin-lsp tool tree <file>` |
 | New file | `kotlin-lsp edit new <template> <name>` |
 | Benchmark | `kotlin-lsp tool bench` |
-| Agent skills | `kotlin-lsp skills list \| read <name>` |
+| Agent skills | `kotlin-lsp tool skills list \| read <name>` |
 
 Full command reference → references/commands.md
 
