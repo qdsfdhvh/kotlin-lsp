@@ -1,3 +1,32 @@
+## Unreleased
+
+### fix(cli): no more nested-tokio-runtime panics in docs/search docs/module packages (#227)
+
+- `kotlin-lsp docs <query>`, `search docs <query>` and `module packages [name]`
+  aborted with `Cannot start a runtime from within a runtime` (exit 134) because
+  they each created a fresh tokio runtime inside the main runtime.
+- The four index-backed query commands (`docs`, `imports-of`, `annotated`,
+  `module packages`) are now async and await the shared runtime, so they return
+  results instead of aborting the process.
+
+### fix(help): `--help` now advertises only invocable commands (#228)
+
+- The `search` group members documented in docs/commands.md and SKILL.md
+  (`summarize`, `cache-stats`, `imports`, `annotated`, `find-test`,
+  `expect-actual`) are now real commands instead of silently falling through to
+  a semantic search for the subcommand word.
+- Removed flat aliases (`summarize`, `imports-of`, `annotated`, `find-test`,
+  `expect-actual`, `summary-cache`, `organize-imports`, `batch-imports`,
+  `inject`, `inspect`, `skills`, `refs-at`, `benchmark`, `tokens`, `tree`, …)
+  from `--help`; the grouped forms (`search …`, `edit …`, `tool …`) are listed
+  instead. Duplicate entries for `inspect`/`benchmark`/`tree` removed.
+- `--help` now also lists previously-missing invocable commands: `gradle-deps`,
+  `tool doctor`, `tool tokens`, `capabilities`, `impact`, `sources`,
+  `extract-sources`, `cache stats`, `type sealed`, and every `search`/`edit`/`tool`
+  member. `tool tokens` now honors `--resolve`/`--phases`/`--tree` flags.
+- Every top-level command shown in `--help` is now accepted by the parser, and
+  every accepted command is listed.
+
 ## 0.30.3 (2026-07-29)
 
 ### fix(check): accept nested annotated function types (#225)

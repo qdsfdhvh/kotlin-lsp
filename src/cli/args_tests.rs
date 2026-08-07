@@ -516,17 +516,86 @@ fn search_docs_subcommand_parses_query() {
 }
 
 #[test]
-fn search_summarize_is_top_level_not_nested() {
-    // `summarize` is a top-level subcommand, not a `search` subcommand.
-    // `kotlin-lsp search summarize Name` treats "summarize" as a semantic query.
+fn search_summarize_is_a_search_member() {
+    // `search summarize <name>` is the canonical symbol-summary form
+    // (docs/commands.md). It must NOT fall through to a semantic search.
     let args = parse(&["search", "summarize", "LoginViewModel"])
         .unwrap()
         .unwrap();
-    match args.subcommand {
-        Subcommand::Search { query, .. } => {
-            assert_eq!(query, "summarize");
+    match &args.subcommand {
+        Subcommand::Summarize { name, .. } => {
+            assert_eq!(name, "LoginViewModel");
         }
-        other => panic!("expected Search, got {other:?}"),
+        other => panic!("expected Summarize, got {other:?}"),
+    }
+}
+
+// ── search group members (#228) ────────────────────────────────────────────
+
+#[test]
+fn search_cache_stats_parses() {
+    let args = parse(&["search", "cache-stats"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::SummaryCacheStats => {}
+        other => panic!("expected SummaryCacheStats, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_imports_parses_name() {
+    let args = parse(&["search", "imports", "UserRepo"]).unwrap().unwrap();
+    match &args.subcommand {
+        Subcommand::ImportsOf { name } => {
+            assert_eq!(name, "UserRepo");
+        }
+        other => panic!("expected ImportsOf, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_imports_requires_name() {
+    let err = parse(&["search", "imports"]).unwrap_err();
+    assert!(err.contains("NAME"), "got: {err}");
+}
+
+#[test]
+fn search_annotated_parses_annotation() {
+    let args = parse(&["search", "annotated", "Composable"])
+        .unwrap()
+        .unwrap();
+    match &args.subcommand {
+        Subcommand::Annotated { annotation } => {
+            assert_eq!(annotation, "Composable");
+        }
+        other => panic!("expected Annotated, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_find_test_parses_position() {
+    let args = parse(&["search", "find-test", "Foo.kt", "10", "4"])
+        .unwrap()
+        .unwrap();
+    match &args.subcommand {
+        Subcommand::FindTest { file, line, col } => {
+            assert_eq!(file.to_string_lossy(), "Foo.kt");
+            assert_eq!(*line, 10);
+            assert_eq!(*col, 4);
+        }
+        other => panic!("expected FindTest, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_expect_actual_parses_name() {
+    let args = parse(&["search", "expect-actual", "formatTime"])
+        .unwrap()
+        .unwrap();
+    match &args.subcommand {
+        Subcommand::ExpectActual { name } => {
+            assert_eq!(name, "formatTime");
+        }
+        other => panic!("expected ExpectActual, got {other:?}"),
     }
 }
 

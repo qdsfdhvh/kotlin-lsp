@@ -1326,7 +1326,7 @@ pub(crate) async fn run(args: CliArgs) {
                 crate::cli::modules::run_module_files(&module, json);
             }
             ModuleSub::Packages { package } => {
-                crate::cli::symbol_queries::run_package_deps(&package, json);
+                crate::cli::symbol_queries::run_package_deps(&package, json).await;
             }
         },
         Subcommand::Summarize {
@@ -1468,13 +1468,13 @@ pub(crate) async fn run(args: CliArgs) {
             }
         },
         Subcommand::ImportsOf { name } => {
-            crate::cli::symbol_queries::run_imports_of(&name, json);
+            crate::cli::symbol_queries::run_imports_of(&name, json).await;
         }
         Subcommand::Annotated { annotation } => {
-            crate::cli::symbol_queries::run_annotated(&annotation, json);
+            crate::cli::symbol_queries::run_annotated(&annotation, json).await;
         }
         Subcommand::Docs { query } => {
-            crate::cli::symbol_queries::run_docs(&query, json);
+            crate::cli::symbol_queries::run_docs(&query, json).await;
         }
         Subcommand::Search { query, limit } => {
             crate::cli::search::run_search(&query, json, limit).await;

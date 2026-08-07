@@ -6,10 +6,9 @@ use std::path::PathBuf;
 
 // ── imports-of ──────────────────────────────────────────────────────────────
 
-pub(crate) fn run_imports_of(name: &str, json: bool) {
+pub(crate) async fn run_imports_of(name: &str, json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let index = rt.block_on(crate::cli::run::build_index(&root, false));
+    let index = crate::cli::run::build_index(&root, false).await;
 
     let mut importing_files: Vec<String> = Vec::new();
 
@@ -45,10 +44,9 @@ pub(crate) fn run_imports_of(name: &str, json: bool) {
 
 // ── annotated ───────────────────────────────────────────────────────────────
 
-pub(crate) fn run_annotated(annotation: &str, json: bool) {
+pub(crate) async fn run_annotated(annotation: &str, json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let index = rt.block_on(crate::cli::run::build_index(&root, false));
+    let index = crate::cli::run::build_index(&root, false).await;
 
     // Use pre-built annotation edge index (O(1) lookup) instead of
     // scanning all files' symbol details with string contains.
@@ -91,10 +89,9 @@ pub(crate) fn run_annotated(annotation: &str, json: bool) {
 
 // ── package-deps ────────────────────────────────────────────────────────────
 
-pub(crate) fn run_package_deps(package: &str, json: bool) {
+pub(crate) async fn run_package_deps(package: &str, json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let index = rt.block_on(crate::cli::run::build_index(&root, false));
+    let index = crate::cli::run::build_index(&root, false).await;
 
     let mut deps: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -136,10 +133,9 @@ pub(crate) fn run_package_deps(package: &str, json: bool) {
 
 // ── docs ─────────────────────────────────────────────────────────────────────
 
-pub(crate) fn run_docs(query: &str, json: bool) {
+pub(crate) async fn run_docs(query: &str, json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let index = rt.block_on(crate::cli::run::build_index(&root, false));
+    let index = crate::cli::run::build_index(&root, false).await;
 
     let mut results: Vec<serde_json::Value> = Vec::new();
     let query_lower = query.to_lowercase();
