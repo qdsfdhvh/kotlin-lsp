@@ -77,6 +77,8 @@ cargo clippy -- -D warnings
     - **Deprecation policy:** keep old names in `is_subcommand()` + `build_subcommand()` for ≤1 release with `eprintln!("[WARN] ...")`. Remove the registration in the NEXT release.
     - **Alias cleanup:** remove `code_action` (underscore variant), remove all deprecated commands that are ≥2 releases old.
 
+12. **Install from GitHub, never local compile** — When installing or updating `kotlin-lsp` on a machine, always download the pre-built binary from GitHub Releases (`https://github.com/qdsfdhvh/kotlin-lsp/releases`). Never use `cargo build --release && cp target/release/kotlin-lsp ~/.local/bin/` — this bypasses the release pipeline (CI signing, checksum verification, cross-platform testing). For local development, `cargo build` is fine for running tests and checks, but the installed binary must come from the release tag.
+
 ## CLI Reference
 
 See **[docs/commands.md](docs/commands.md)** for the full command reference.
@@ -103,6 +105,8 @@ Quick reference:
 | Callers tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --incoming` |
 | Callees tree | `kotlin-lsp call hierarchy <FILE> <LINE> <COL> --outgoing` |
 | Impact analysis | `kotlin-lsp impact <FILE> <LINE> <COL>` |
+| Semantic search | `kotlin-lsp search <QUERY>` |
+| KDoc search | `kotlin-lsp docs <QUERY>` |
 | Symbol overview | `kotlin-lsp search summarize <NAME>` |
 | Find tests | `kotlin-lsp search find-test <FILE> <LINE> <COL>` |
 | KMP expect/actual | `kotlin-lsp search expect-actual <NAME>` |
@@ -110,6 +114,7 @@ Quick reference:
 | Android resources | `kotlin-lsp android activities / composables` |
 | Format check | `kotlin-lsp format check <FILE>...` |
 | Format apply | `kotlin-lsp format apply <FILE>...` |
+| Capabilities | `kotlin-lsp capabilities --json` |
 | File inspect | `kotlin-lsp inspect <FILE>` |
 | JSON output | `--json` |
 

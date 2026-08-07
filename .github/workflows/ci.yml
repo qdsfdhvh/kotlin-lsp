@@ -58,11 +58,37 @@ jobs:
       - name: Install runtime tools (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # choco is preinstalled on windows-latest runners.
-          choco install -y --no-progress ripgrep fd
-          # Make sure the newly-installed tools are on PATH for subsequent steps.
-          Add-Content $env:GITHUB_PATH 'C:\ProgramData\chocolatey\bin'
+          $tools = Join-Path $env:RUNNER_TEMP 'kotlin-lsp-runtime-tools'
+          $downloads = Join-Path $tools 'downloads'
+          New-Item -ItemType Directory -Force -Path $downloads | Out-Null
+
+          # Download pinned official release assets instead of relying on the
+          # Chocolatey community feed, which may return success after a 503.
+          gh release download 15.2.0 `
+            --repo BurntSushi/ripgrep `
+            --pattern 'ripgrep-15.2.0-x86_64-pc-windows-msvc.zip' `
+            --dir $downloads
+          gh release download v10.4.2 `
+            --repo sharkdp/fd `
+            --pattern 'fd-v10.4.2-x86_64-pc-windows-msvc.zip' `
+            --dir $downloads
+
+          Expand-Archive (Join-Path $downloads 'ripgrep-15.2.0-x86_64-pc-windows-msvc.zip') -DestinationPath $tools
+          Expand-Archive (Join-Path $downloads 'fd-v10.4.2-x86_64-pc-windows-msvc.zip') -DestinationPath $tools
+
+          $rg = Get-ChildItem $tools -Recurse -Filter rg.exe | Select-Object -First 1
+          $fd = Get-ChildItem $tools -Recurse -Filter fd.exe | Select-Object -First 1
+          if (-not $rg -or -not $fd) {
+            throw 'Failed to locate downloaded rg.exe or fd.exe'
+          }
+
+          & $rg.FullName --version
+          & $fd.FullName --version
+          Add-Content $env:GITHUB_PATH $rg.DirectoryName
+          Add-Content $env:GITHUB_PATH $fd.DirectoryName
 
       - name: rustfmt
         run: cargo fmt --all -- --check

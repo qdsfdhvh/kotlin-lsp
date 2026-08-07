@@ -1,4 +1,5 @@
 //! CLI argument parsing via lexopt.
+//
 
 use std::path::PathBuf;
 
@@ -294,6 +295,8 @@ pub(crate) enum Subcommand {
     },
     /// Show AI summary cache statistics.
     SummaryCacheStats,
+    /// Expose machine-readable CLI capability manifest.
+    Capabilities,
     /// Show Gradle dependencies parsed from build.gradle.kts / libs.versions.toml.
     GradleDeps,
 }
@@ -338,6 +341,8 @@ pub(crate) enum TypeSub {
 #[derive(Debug, Clone)]
 pub(crate) enum CallSub {
     Hierarchy {
+        /// When Some, resolve this symbol name to a location before computing hierarchy.
+        name: Option<String>,
         file: PathBuf,
         line: u32,
         col: u32,
@@ -759,40 +764,27 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let sub = positionals.first().cloned().unwrap_or_default();
             match sub.as_str() {
                 "docs" => {
-                    let query = positionals.get(1).cloned().ok_or("search docs requires QUERY")?;
+                    let query = positionals
+                        .get(1)
+                        .cloned()
+                        .ok_or("search docs requires QUERY")?;
                     Ok(Subcommand::Docs { query })
                 }
-                "semantic" | "" => {
-                    let query = positionals.get(1).cloned().ok_or("search semantic requires QUERY")?;
+                "semantic" => {
+                    let query = positionals.get(1).cloned().ok_or("search requires QUERY")?;
                     let limit = parsed.limit.unwrap_or(20);
                     Ok(Subcommand::Search { query, limit })
                 }
-                "summarize" => {
-                    let name = positionals.get(1).cloned().unwrap_or_default();
-                    if name.is_empty() { return Err("search summarize requires NAME".into()); }
-                    let expand = positionals.contains(&"--expand".to_string());
-                    Ok(Subcommand::Summarize { name, expand, cached: parsed.cached })
+                "" => Err("search requires QUERY".into()),
+                // Treat unrecognized subcommand as a semantic search query
+                // so `kotlin-lsp search <query>` works as documented in help text and SKILL.md
+                o => {
+                    let limit = parsed.limit.unwrap_or(20);
+                    Ok(Subcommand::Search {
+                        query: o.to_string(),
+                        limit,
+                    })
                 }
-                "cache-stats" => Ok(Subcommand::SummaryCacheStats),
-                "imports" => {
-                    let name = positionals.get(1).cloned().ok_or("search imports requires NAME")?;
-                    Ok(Subcommand::ImportsOf { name })
-                }
-                "annotated" => {
-                    let a = positionals.get(1).cloned().ok_or("search annotated requires ANNOTATION")?;
-                    Ok(Subcommand::Annotated { annotation: a })
-                }
-                "find-test" => {
-                    let r = positionals[1..].to_vec();
-                    let (f, l, c) = parse_file_line_col(r, "search find-test")?;
-                    Ok(Subcommand::FindTest { file: f, line: l, col: c })
-                }
-                "expect-actual" => {
-                    let n = positionals.get(1).cloned().unwrap_or_default();
-                    if n.is_empty() { return Err("search expect-actual requires NAME".into()); }
-                    Ok(Subcommand::ExpectActual { name: n })
-                }
-                o => Err(format!("unknown search subcommand '{o}'. Available: docs, semantic, summarize, cache-stats, imports, annotated, find-test, expect-actual")),
             }
         }
         "edit" => {
@@ -892,6 +884,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let (file, line, col) = parse_file_line_col(positionals, "callers")?;
             Ok(Subcommand::Call {
                 sub: CallSub::Hierarchy {
+                    name: None,
                     file,
                     line,
                     col,
@@ -911,6 +904,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let (file, line, col) = parse_file_line_col(positionals, "callees")?;
             Ok(Subcommand::Call {
                 sub: CallSub::Hierarchy {
+                    name: None,
                     file,
                     line,
                     col,
@@ -1227,6 +1221,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             let (file, line, col) = parse_file_line_col(positionals, "call-hierarchy")?;
             Ok(Subcommand::Call {
                 sub: CallSub::Hierarchy {
+                    name: None,
                     file,
                     line,
                     col,
@@ -1249,10 +1244,17 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     })
                 }
                 "hierarchy" => {
-                    let remaining = positionals[1..].to_vec();
-                    let (file, line, col) = parse_file_line_col(remaining, "call hierarchy")?;
+                    let pos = &positionals[1..];
+                    let (name, file, line, col) = match pos.len() {
+                        1 => (Some(pos[0].clone()), PathBuf::new(), 0u32, 0u32),
+                        _ => {
+                            let (f, l, c) = parse_file_line_col(pos.to_vec(), "call hierarchy")?;
+                            (None, f, l, c)
+                        }
+                    };
                     Ok(Subcommand::Call {
                         sub: CallSub::Hierarchy {
+                            name,
                             file,
                             line,
                             col,
@@ -1352,6 +1354,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 .ok_or("docs requires a QUERY argument")?;
             Ok(Subcommand::Docs { query })
         }
+        "capabilities" => Ok(Subcommand::Capabilities),
         "summary-cache" => Ok(Subcommand::SummaryCacheStats),
         "type-hierarchy" => {
             eprintln!("[WARN] 'type-hierarchy' is deprecated; use 'type hierarchy'");
@@ -1560,6 +1563,8 @@ fn is_subcommand(value: &str) -> bool {
             | "sources"
             | "extract-sources"
             | "cache"
+            | "docs"
+            | "capabilities"
             | "check"
             | "context"
             | "call"

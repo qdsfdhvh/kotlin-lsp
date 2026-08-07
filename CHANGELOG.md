@@ -1,3 +1,98 @@
+## 0.30.3 (2026-07-29)
+
+### fix(check): accept nested annotated function types (#225)
+
+- `kotlin-lsp check` no longer reports four false syntax errors for valid multi-line
+  block-body declarations such as `@Composable ((Int) -> Unit) -> Unit`.
+- Genuine syntax errors in the same signature, function body, and following declarations
+  remain visible.
+
+### ci(windows): install runtime search tools from official releases (#225)
+
+- Windows CI downloads pinned official `ripgrep` and `fd` release assets instead of
+  depending on the Chocolatey community feed.
+- Runtime-tool installation now fails fast if either executable is unavailable.
+
+## 0.30.2 (2026-07-22)
+
+### feat(call-hierarchy): accept symbol name in addition to file/line/col (#221)
+
+- `kotlin-lsp call hierarchy <name>` resolves unique symbols directly.
+- Ambiguous symbols report candidates in JSON or text.
+- Existing file/line/col positional form is backward compatible.
+
+### fix(docs): restore `docs` as a top-level alias for `search docs` (#221)
+
+- `kotlin-lsp docs <query>` now works, matching the --help output.
+
+### feat(capabilities): machine-readable CLI capability manifest (#221)
+
+- `kotlin-lsp capabilities --json` outputs a stable JSON manifest with version,
+  commands, flags, and subcommands.
+
+## 0.30.1 (2026-07-20)
+
+### fix(search): restore `kotlin-lsp search <query>` shorthand (#216)
+
+- In v0.30.0 the CLI parser rejected `kotlin-lsp search "query"` (required `search semantic <query>`)
+  while the help text and bundled SKILL.md documented the shorthand form.
+- Unrecognized search subcommands are now treated as semantic search queries instead of erroring.
+- `search docs <query>` and `search semantic <query>` continue to work.
+
+## 0.30.0 (2026-07-19)
+
+### feat(lsp): --agent flag for AI coding agent startup (#209)
+
+- `kotlin-lsp --agent` starts with agent-optimized defaults (no diagnostics, semantic tokens, inlay hints, code actions, folding, formatting, etc.)
+- `initializationOptions.features` for fine-grained control
+
+### feat(composable): multi-file @Composable call graph (#204)
+
+- `find_composables_multi()` scans multiple files and detects cross-file calls.
+- New `external_calls` field on `ComposableInfo`.
+
+### feat(check): --when-exhaustive flag (#201)
+
+- Lightweight CST-level scan for non-exhaustive `when` expressions.
+- `kotlin-lsp check --when-exhaustive Foo.kt`
+
+### feat(lsp): index compaction (#205)
+
+- `compact_stale_entries()` on `did_close` and `shutdown`.
+- Removes files no longer on disk from the index.
+
+### feat(query): agent batch query — implementations, subclasses (#203)
+
+- `tool query` now accepts `implementations`, `subclasses` types.
+- JSON-in/JSON-out: `echo '[{"type":"subclasses","name":"Result"}]' | kotlin-lsp tool query --json`
+
+### perf(stdlib): O(1) HashMap-backed symbol lookup (#210)
+
+- Replaces O(n) linear scan in `hover()` with lazy-init HashMap index.
+
+### feat(lsp): FeatureToggles via initializationOptions (#202)
+
+- Clients can disable features: `{ features: { diagnostics: false, ... } }`.
+- Default: all true (full IDE mode).
+
+### chore(cli): remove 43 deprecated CLI aliases from is_subcommand (#211)
+
+- `--help` no longer shows `organize-imports`, `code-action`, `benchmark`, etc.
+- Old names still work internally but are hidden.
+
+### fix(install): cargo detection + tmp trap (#200)
+
+- Detects toolchain-direct cargo binary to avoid rustup proxy issues.
+- Fixes `tmp: unbound variable` on script exit.
+
+### docs
+
+- All docs updated to grouped command names (#212).
+- `AGENTS.md`: CLI grouping rules, CI monitoring patterns, post-change doc checklist, development flow with LSP.
+
+### tests
+
+- 1,259 → 1,301 (+42)
 ## 0.29.0 (2026-07-19)
 
 ### feat(gradle): plugin detection + config-aware deps + android block (#191)

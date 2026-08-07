@@ -2944,3 +2944,88 @@ fun render(
         data.syntax_errors
     );
 }
+
+// ── false positive syntax error regression tests ─────────────────────────
+
+#[test]
+fn fp_multiline_block_body_nested_annotated_function_type() {
+    let src = r#"
+@Target(AnnotationTarget.TYPE)
+annotation class Composable
+
+fun e(
+    content: @Composable ((Int) -> Unit) -> Unit,
+) {
+    content {}
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "expected no false positive for nested annotated function type, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_nested_annotated_function_type_does_not_hide_later_error() {
+    let src = r#"
+@Target(AnnotationTarget.TYPE)
+annotation class Composable
+
+fun e(
+    content: @Composable ((Int) -> Unit) -> Unit,
+) {
+    content {}
+}
+
+val broken =
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert_eq!(
+        data.syntax_errors.len(),
+        1,
+        "expected the unrelated syntax error to remain, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_nested_annotated_function_type_does_not_hide_signature_error() {
+    let src = r#"
+@Target(AnnotationTarget.TYPE)
+annotation class Composable
+
+fun e(
+    content: @Composable ((Int) -> Unit) -> Unit,
+    broken:,
+) {
+    content {}
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        !data.syntax_errors.is_empty(),
+        "expected the malformed sibling parameter to remain visible"
+    );
+}
+
+#[test]
+fn fp_nested_annotated_function_type_does_not_hide_body_error() {
+    let src = r#"
+@Target(AnnotationTarget.TYPE)
+annotation class Composable
+
+fun e(
+    content: @Composable ((Int) -> Unit) -> Unit,
+) {
+    content {}
+    val broken =
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        !data.syntax_errors.is_empty(),
+        "expected the malformed block body to remain visible"
+    );
+}

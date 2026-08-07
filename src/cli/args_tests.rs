@@ -441,3 +441,166 @@ fn skills_parses_as_subcommand() {
         other => panic!("expected Skills, got {other:?}"),
     }
 }
+
+// ── search subcommand ────────────────────────────────────────────────────────────
+
+#[test]
+fn search_shorthand_parses_query() {
+    let args = parse(&["search", "login view model"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login view model");
+            assert_eq!(limit, 20); // default
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_semantic_explicit_parses_query() {
+    let args = parse(&["search", "semantic", "login view model"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login view model");
+            assert_eq!(limit, 20);
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_requires_query() {
+    let err = parse(&["search"]).unwrap_err();
+    assert!(err.contains("QUERY"), "got: {err}");
+}
+
+#[test]
+fn search_shorthand_parses_limit() {
+    let args = parse(&["search", "login", "--limit", "5"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login");
+            assert_eq!(limit, 5);
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_semantic_explicit_parses_limit() {
+    let args = parse(&["search", "semantic", "login", "--limit", "10"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, limit } => {
+            assert_eq!(query, "login");
+            assert_eq!(limit, 10);
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_docs_subcommand_parses_query() {
+    let args = parse(&["search", "docs", "view model"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Docs { query } => {
+            assert_eq!(query, "view model");
+        }
+        other => panic!("expected Docs, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_summarize_is_top_level_not_nested() {
+    // `summarize` is a top-level subcommand, not a `search` subcommand.
+    // `kotlin-lsp search summarize Name` treats "summarize" as a semantic query.
+    let args = parse(&["search", "summarize", "LoginViewModel"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, .. } => {
+            assert_eq!(query, "summarize");
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+// ── docs top-level alias (#219) ────────────────────────────────────────────────
+
+#[test]
+fn docs_top_level_parses_query() {
+    let args = parse(&["docs", "StateFlow"]).unwrap().unwrap();
+    match &args.subcommand {
+        Subcommand::Docs { query } => {
+            assert_eq!(query, "StateFlow");
+        }
+        other => panic!("expected Docs, got {other:?}"),
+    }
+}
+
+#[test]
+fn docs_requires_query() {
+    let err = parse(&["docs"]).unwrap_err();
+    assert!(err.contains("QUERY"), "got: {err}");
+}
+
+// ── call hierarchy by name (#218) ─────────────────────────────────────────────
+
+#[test]
+fn call_hierarchy_by_name_parses_symbol() {
+    let args = parse(&["call", "hierarchy", "AuthViewModel"])
+        .unwrap()
+        .unwrap();
+    match &args.subcommand {
+        Subcommand::Call { sub } => match sub {
+            CallSub::Hierarchy { name, .. } => {
+                assert_eq!(name.as_deref(), Some("AuthViewModel"));
+            }
+        },
+        other => panic!("expected Call, got {other:?}"),
+    }
+}
+
+#[test]
+fn call_hierarchy_positional_parses_file_line_col() {
+    let args = parse(&["call", "hierarchy", "src/Foo.kt", "42", "10"])
+        .unwrap()
+        .unwrap();
+    match &args.subcommand {
+        Subcommand::Call { sub } => match sub {
+            CallSub::Hierarchy {
+                name,
+                file,
+                line,
+                col,
+                ..
+            } => {
+                assert!(name.is_none());
+                assert_eq!(file, &std::path::PathBuf::from("src/Foo.kt"));
+                assert_eq!(*line, 42);
+                assert_eq!(*col, 10);
+            }
+        },
+        other => panic!("expected Call, got {other:?}"),
+    }
+}
+
+// ── capabilities (#220) ────────────────────────────────────────────────────────
+
+#[test]
+fn capabilities_parses_as_subcommand() {
+    let args = parse(&["capabilities"]).unwrap().unwrap();
+    assert!(matches!(args.subcommand, Subcommand::Capabilities));
+}
+
+#[test]
+fn capabilities_json_flag_is_accepted() {
+    // --json should not cause a parse error
+    let args = parse(&["capabilities", "--json"]).unwrap().unwrap();
+    assert!(matches!(args.subcommand, Subcommand::Capabilities));
+}
