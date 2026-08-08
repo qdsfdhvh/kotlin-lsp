@@ -23,7 +23,7 @@ kotlin-lsp search summarize User      # symbol summary
 kotlin-lsp search docs "parse"        # KDoc search
 kotlin-lsp search imports UserRepo     # who imports this
 kotlin-lsp edit rename Foo.kt 42 10 X # rename symbol
-kotlin-lsp edit import Foo.kt         # add missing imports
+kotlin-lsp edit imports Foo.kt       # add missing imports
 kotlin-lsp edit organize Foo.kt       # clean imports
 kotlin-lsp edit inject Foo.kt         # resolve types
 kotlin-lsp edit new activity Login    # file from template
@@ -77,9 +77,10 @@ kotlin-lsp cache stats                # cache info
 | `cache stats` | Cache diagnostics |
 | `gradle-deps` | Parsed Gradle dependencies |
 
-## Deprecated aliases
+## Removed flat aliases
 
-Old names still work with `[WARN]`. Prefer the new grouped names.
+Old flat names were removed from the parser (v0.30.2+); invoking them prints
+`unknown subcommand`. Use the grouped names below.
 
 | Old | New |
 |-----|-----|

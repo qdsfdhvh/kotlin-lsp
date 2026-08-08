@@ -762,18 +762,53 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }
         "search" => {
             let sub = positionals.first().cloned().unwrap_or_default();
+            let rest = positionals.get(1..).unwrap_or(&[]);
             match sub.as_str() {
                 "docs" => {
-                    let query = positionals
-                        .get(1)
-                        .cloned()
-                        .ok_or("search docs requires QUERY")?;
+                    let query = rest.first().cloned().ok_or("search docs requires QUERY")?;
                     Ok(Subcommand::Docs { query })
                 }
                 "semantic" => {
-                    let query = positionals.get(1).cloned().ok_or("search requires QUERY")?;
+                    let query = rest.first().cloned().ok_or("search requires QUERY")?;
                     let limit = parsed.limit.unwrap_or(20);
                     Ok(Subcommand::Search { query, limit })
+                }
+                "summarize" => {
+                    let name = rest.first().cloned().unwrap_or_default();
+                    if name.is_empty() || name == "help" {
+                        return Err("search summarize requires a symbol name".to_string());
+                    }
+                    Ok(Subcommand::Summarize {
+                        name,
+                        expand: parsed.expand > 0,
+                        cached: parsed.cached,
+                    })
+                }
+                "cache-stats" => Ok(Subcommand::SummaryCacheStats),
+                "imports" => {
+                    let name = rest
+                        .first()
+                        .cloned()
+                        .ok_or("search imports requires a NAME argument")?;
+                    Ok(Subcommand::ImportsOf { name })
+                }
+                "annotated" => {
+                    let annotation = rest
+                        .first()
+                        .cloned()
+                        .ok_or("search annotated requires an ANNOTATION argument")?;
+                    Ok(Subcommand::Annotated { annotation })
+                }
+                "find-test" => {
+                    let (file, line, col) = parse_file_line_col(rest.to_vec(), "search find-test")?;
+                    Ok(Subcommand::FindTest { file, line, col })
+                }
+                "expect-actual" => {
+                    let name = rest
+                        .first()
+                        .cloned()
+                        .ok_or("search expect-actual requires a NAME argument")?;
+                    Ok(Subcommand::ExpectActual { name })
                 }
                 "" => Err("search requires QUERY".into()),
                 // Treat unrecognized subcommand as a semantic search query
@@ -831,7 +866,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
             match sub.as_str() {
                 "tokens" => {
                     let f = PathBuf::from(rem.first().cloned().ok_or("tool tokens requires FILE")?);
-                    Ok(Subcommand::Tokens { file: f, cst_only: false, resolve: false, phases: false, show_tree: false })
+                    Ok(Subcommand::Tokens { file: f, cst_only, resolve, phases, show_tree })
                 }
                 "tree" => {
                     let f = PathBuf::from(rem.first().cloned().ok_or("tool tree requires FILE")?);
@@ -1588,8 +1623,8 @@ fn print_version() {
     println!("kotlin-lsp {}", env!("CARGO_PKG_VERSION"));
 }
 
-fn print_help() {
-    println!(
+fn help_text() -> String {
+    format!(
         "kotlin-lsp {} — Kotlin/Java symbol navigation
 
 USAGE:
@@ -1602,45 +1637,63 @@ grep-friendly), and `--json` emits compact JSON (no pretty-print). Pipe to
 
 SUBCOMMANDS:
     find <name>                        Find declarations of a symbol
-    skills <list|read>               List or read bundled agent skills
     refs <name> [explain]              Find references to a symbol
     hover <file> <line> <col>          Show type/doc info at a position
     complete <file> <line> [col]       Show completion candidates
     context <file> <line> <col>        Definition + signature + refs summary
-    rename <file> <line> <col> <name>  Rename symbol across all files
-    refs-at <file> <line> <col>        Show references at a specific position
     check <file>...                    Check syntax errors without LSP
+    impact <file> <line> <col>         Impact analysis: what depends on this?
+    index [--root <dir>]               Index workspace (auto-detect build system)
+    index-jars [root]                  Index JAR/class files for navigation
+    sources                            List auto-discovered source roots
+    extract-sources [lib...]           Unpack *-sources.jar files
+    cache stats                        Show disk cache statistics
+    gradle-deps                        Show parsed Gradle dependencies
+    docs <query>                       Search symbols by name or signature (alias of `search docs`)
+    capabilities                       List CLI capabilities (use --json)
+
     call hierarchy <file> <line> <col>   Show callers/callees for symbol at position
+    call hierarchy <name>                Show callers/callees for a symbol by name
     type hierarchy <name>                Show subtypes or supertypes
-    module list                           List all project modules
-    module deps <name>                    Show module dependencies
-    module files <name>                   List files in a module
-    module packages [name]                Show package-level import dependencies
-    android activities                    List Android activities from AndroidManifest
-    android composables <file>            Find @Composable functions
-    imports-of <name>                     Show files importing the given symbol
-    annotated <name>                      Find symbols annotated with @name
-    docs <query>                          Search symbols by name or signature
-    organize-imports <file>...            Sort, dedup, and remove unused imports
-    inject <file>                         Batch-resolve referenced type signatures
-    index-jars [root]                     Index JAR/class files for navigation
-    index [--root <dir>]                  Index workspace (auto-detect build system)
-    cache stats                           Show disk cache statistics
-    batch-imports <file>                  Batch add missing imports (from rules)
-    impact <file> <line> <col>            Impact analysis: what depends on this?
-    summarize <name>                      Show rich summary for a symbol
-    find-test <file> <line> <col>         Find related test files
-    expect-actual <name>                  Find KMP expect/actual declarations
-    inspect <file>                        Display detailed file diagnostics
-    benchmark                             Run LSP operation benchmarks
-    tree <file>                           Dump tree-sitter parse tree (debug)
-    inspect <file>                     Display detailed file diagnostics
-    benchmark                          Run LSP operation benchmarks
-    tree <file>                        Dump tree-sitter parse tree (debug)
-    format check <file/dir>...          Check formatting violations (like spotlessCheck)
-    format apply <file/dir>...         Apply formatting in-place (like spotlessApply)
-    search <query>                    Semantic search with TF-IDF ranking over symbols
-    summary-cache                     Show AI summary cache statistics
+    type sealed <name>                   Show sealed subclasses
+    module list                          List all project modules
+    module deps <name>                   Show module dependencies
+    module files <name>                  List files in a module
+    module packages [name]               Show package-level import dependencies
+    android activities                   List Android activities from AndroidManifest
+    android composables <file>           Find @Composable functions
+    format check <file/dir>...           Check formatting violations (like spotlessCheck)
+    format apply <file/dir>...          Apply formatting in-place (like spotlessApply)
+
+    search <query>                    Semantic search with TF-IDF ranking
+    search semantic <query>           Semantic search (explicit)
+    search docs <query>               Search symbols by name or signature (KDoc)
+    search summarize <name>           Show rich summary for a symbol
+    search cache-stats                Show AI summary cache statistics
+    search imports <name>             Show files importing the given symbol
+    search annotated <name>           Find symbols annotated with @name
+    search find-test <file> <line> <col>  Find related test files
+    search expect-actual <name>       Find KMP expect/actual declarations
+
+    edit rename <file> <line> <col> <name>  Rename symbol across all files
+    edit batch <rule-json>             Apply batch edit rules
+    edit imports <file>                Batch add missing imports (from rules)
+    edit inject <file>                 Batch-resolve referenced type signatures
+    edit insert <file> <line>          Insert a snippet at a line
+    edit new <template> <name>         Create a new file from a template
+    edit organize <file>...            Sort, dedup, and remove unused imports
+
+    tool tokens <file>                 Show per-phase token breakdown (debug)
+    tool tree <file>                   Dump tree-sitter parse tree (debug)
+    tool inspect <file>                Display detailed file diagnostics
+    tool graph                         Export symbol graph
+    tool snapshot                      Snapshot workspace symbols
+    tool bench                         Run LSP operation benchmarks
+    tool doctor                        System health diagnostics
+    tool workspace                     Workspace overview
+    tool query                         Batch symbol queries (--json)
+    tool skills <list|read>            List or read bundled agent skills
+    tool code-action <file> <line> <col>  List code actions at a position
 
 OPTIONS:
     --fast              Use rg/fd only; never load index (default when no cache)
@@ -1702,9 +1755,9 @@ EXAMPLES:
     kotlin-lsp complete src/Foo.kt 42 --dot --no-stdlib --json
     kotlin-lsp context src/Foo.kt 42 10
     kotlin-lsp check src/Foo.kt
-    kotlin-lsp organize-imports src/Foo.kt
-    kotlin-lsp insert src/Foo.kt 42 --after --content \"println(value)\" --in-place
-    kotlin-lsp batch rules.json --dry-run
+    kotlin-lsp edit organize src/Foo.kt
+    kotlin-lsp edit insert src/Foo.kt 42 --after --content \"println(value)\" --in-place
+    kotlin-lsp edit batch rules.json --dry-run
     kotlin-lsp index --root ./android
     kotlin-lsp index-jars ~/.gradle/caches
     kotlin-lsp sources --root ./android
@@ -1713,14 +1766,215 @@ EXAMPLES:
     kotlin-lsp extract-sources androidx.compose org.jetbrains.kotlin
     kotlin-lsp extract-sources --dry-run
     kotlin-lsp extract-sources --output ~/my-sources androidx.compose
-    kotlin-lsp tokens src/Foo.kt
-    kotlin-lsp tokens --resolve src/Foo.kt
-    kotlin-lsp tokens src/Foo.kt --tree
-    kotlin-lsp tree src/Foo.kt
+    kotlin-lsp tool tokens src/Foo.kt
+    kotlin-lsp tool tokens --resolve src/Foo.kt
+    kotlin-lsp tool tokens src/Foo.kt --tree
+    kotlin-lsp tool tree src/Foo.kt
 
 Full command reference: https://github.com/qdsfdhvh/kotlin-lsp/blob/main/docs/commands.md",
         env!("CARGO_PKG_VERSION")
-    );
+    )
+}
+
+fn print_help() {
+    println!("{}", help_text());
+}
+
+/// Raw SUBCOMMANDS lines from the help text — the single command table used
+/// by `print_help`, the capabilities manifest, and the consistency tests.
+/// Each line is `<cmd> [member] <placeholders>␣␣<description>`; the double
+/// space before the description makes the table machine-parseable (the
+/// command part and the description column). Derived from `help_text()` so
+/// the manifest cannot drift from what the parser is verified against
+/// (issues #228, #231).
+pub(crate) fn help_command_lines() -> Vec<String> {
+    help_text()
+        .split("SUBCOMMANDS:")
+        .nth(1)
+        .expect("help text has a SUBCOMMANDS section")
+        .split("OPTIONS:")
+        .next()
+        .expect("help text has an OPTIONS section")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Machine-readable capability manifest. Generated from `help_command_lines()`
+/// — the same command table `--help` prints and the consistency tests verify —
+/// so it cannot drift from the parser or `--help` (issue #231). Flags are
+/// stable per-command metadata kept separately.
+pub(crate) fn capabilities_manifest() -> serde_json::Value {
+    use std::collections::{BTreeSet, HashMap};
+
+    let flags: HashMap<&str, &[&str]> = [
+        (
+            "find",
+            &[
+                "--limit",
+                "--json",
+                "--root",
+                "--fast",
+                "--smart",
+                "--absolute",
+                "--relative",
+                "--module",
+                "--source-set",
+                "--kind",
+                "--owner",
+                "--flat",
+            ] as &[&str],
+        ),
+        (
+            "refs",
+            &[
+                "--limit",
+                "--json",
+                "--root",
+                "--fast",
+                "--smart",
+                "--absolute",
+                "--relative",
+                "--module",
+                "--source-set",
+                "--kind",
+                "--owner",
+                "--flat",
+            ],
+        ),
+        ("hover", &["--json", "--root"]),
+        (
+            "complete",
+            &["--json", "--root", "--dot", "--eol", "--no-stdlib"],
+        ),
+        ("context", &["--json", "--root", "--expand"]),
+        ("check", &["--json", "--root"]),
+        ("impact", &["--json", "--root"]),
+        ("index", &["--root", "--gradle", "--no-stdlib"]),
+        ("index-jars", &["--root"]),
+        ("sources", &["--root"]),
+        (
+            "extract-sources",
+            &["--root", "--gradle-home", "--output", "--dry-run"],
+        ),
+        ("cache", &["--root"]),
+        ("gradle-deps", &["--root", "--gradle"]),
+        ("docs", &["--limit", "--json", "--root"]),
+        ("capabilities", &["--json"]),
+        ("call", &["--json", "--root", "--incoming", "--outgoing"]),
+        (
+            "type",
+            &["--json", "--root", "--subtypes", "--supertypes", "--graph"],
+        ),
+        ("module", &["--json", "--root"]),
+        ("android", &["--json", "--root"]),
+        ("format", &["--root"]),
+        (
+            "search",
+            &[
+                "--limit", "--json", "--root", "--fast", "--smart", "--cached", "--expand",
+            ],
+        ),
+        (
+            "edit",
+            &[
+                "--json",
+                "--root",
+                "--dry-run",
+                "--in-place",
+                "--apply",
+                "--before",
+                "--after",
+                "--content",
+                "--package",
+                "--dir",
+            ],
+        ),
+        (
+            "tool",
+            &[
+                "--json",
+                "--root",
+                "--expand",
+                "--verbose",
+                "--resolve",
+                "--phases",
+                "--tree",
+                "--cst-only",
+            ],
+        ),
+    ]
+    .into_iter()
+    .collect();
+
+    let mut members: HashMap<String, Vec<String>> = HashMap::new();
+    let mut descriptions: HashMap<String, String> = HashMap::new();
+    for line in help_command_lines() {
+        // `<cmd> [member] <placeholders>␣␣<description>` — the double space is
+        // the unambiguous boundary between the command part and description.
+        let (cmd_part, desc) = match line.split_once("  ") {
+            Some((c, d)) => (c, d.trim().to_string()),
+            None => (line.as_str(), String::new()),
+        };
+        let tokens: Vec<&str> = cmd_part.split_whitespace().collect();
+        let cmd = tokens[0].to_string();
+        if !desc.is_empty() {
+            descriptions
+                .entry(cmd.clone())
+                .or_insert_with(|| desc.clone());
+        }
+        // Group members: a second command-part token that is not a placeholder
+        // (`<…>` / `[…]).
+        if let Some(second) = tokens.get(1) {
+            if !second.starts_with('<') && !second.starts_with('[') {
+                members
+                    .entry(cmd.clone())
+                    .or_default()
+                    .push(second.to_string());
+            }
+        }
+    }
+
+    let mut commands: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    for line in help_command_lines() {
+        let cmd_part = line
+            .split_once("  ")
+            .map(|(c, _)| c)
+            .unwrap_or(line.as_str());
+        let cmd = cmd_part
+            .split_whitespace()
+            .next()
+            .expect("help line starts with a command")
+            .to_string();
+        commands.entry(cmd.clone()).or_insert_with(|| {
+            serde_json::json!({
+                "description": descriptions.get(&cmd).cloned().unwrap_or_default(),
+                "flags": flags.get(cmd.as_str()).map(|f| f.to_vec()).unwrap_or_default(),
+            })
+        });
+    }
+    for (cmd, subs) in &members {
+        let mut seen = BTreeSet::new();
+        let uniq: Vec<String> = subs
+            .iter()
+            .filter(|s| seen.insert((*s).clone()))
+            .cloned()
+            .collect();
+        if let Some(entry) = commands.get_mut(cmd) {
+            entry
+                .as_object_mut()
+                .expect("manifest entry is an object")
+                .insert("subcommands".into(), serde_json::json!(uniq));
+        }
+    }
+
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "schemaVersion": 1,
+        "commands": commands,
+    })
 }
 
 fn build_semantic_insert(
