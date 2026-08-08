@@ -5,14 +5,14 @@ on:
   # merge commit). Pushing to a feature branch that has an open PR would
   # otherwise trigger CI twice — once for push and once for pull_request —
   # so we deliberately don't list branches under `push:` other than main.
+  #
+  # No paths-ignore: the main-rules ruleset requires these 3 checks on every
+  # PR, and skipping CI for docs-only PRs made them unmergeable (checks never
+  # appeared). Docs PRs pay the CI cost; the ruleset gate stays satisfiable.
   push:
     branches: [main]
     tags: ["v*"]
   pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'skills/**'
   workflow_dispatch:
 
 # A new push to the same PR (or branch) cancels any in-flight run for it.
