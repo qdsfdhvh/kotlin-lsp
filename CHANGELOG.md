@@ -1,4 +1,4 @@
-## Unreleased
+## 0.30.4 (2026-08-08)
 
 ### fix(cli): no more nested-tokio-runtime panics in docs/search docs/module packages (#227)
 
