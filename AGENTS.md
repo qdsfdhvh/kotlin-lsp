@@ -90,11 +90,16 @@ tests. Highlights:
 - **PR-only flow, squash-merge, CI green on all 3 platforms before merging,
   run-before-push gate** — [`git-workflow/RULE.md`](.agents/rules/git-workflow/RULE.md)
 - **Releases**: bump Cargo.toml → CHANGELOG → release PR → tag `vX.Y.Z` →
-  tag-triggered 6-platform build → GitHub Release. Tag safety and steps:
+  tag-triggered 5-platform build (darwin-x86_64 dropped 2026-08) → GitHub
+  Release. Tag safety and steps:
   [`releasing/RULE.md`](.agents/rules/releasing/RULE.md)
 - **CI monitoring via pi-loop**: watch PR CI with
   `MonitorCreate(command="gh pr checks --watch <PR>", onDone="Report CI results")`,
   or poll with a bounded loop. Auto-merge only after all three platforms pass.
+- **PR merge → post-merge cleanup**: never end a session on a stale feature
+  branch — after squash-merge, `git checkout main && git pull && git branch -d
+  <topic>` in the same session. Full lifecycle:
+  `.agents/skills/pr-lifecycle/SKILL.md`
 
 ## Local planning
 

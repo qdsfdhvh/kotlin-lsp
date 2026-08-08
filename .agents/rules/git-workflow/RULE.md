@@ -24,6 +24,10 @@
 4. Wait for CI green on ALL three platforms (ubuntu / macos / windows) before
    merging — never merge on a subset.
 5. Merge with squash + delete branch.
+6. **Post-merge cleanup — same session, never deferred**: `git checkout main
+   && git pull && git branch -d <topic>`, then verify `git status` is clean
+   and `git log origin/main..main` is empty. Full procedure:
+   `.agents/skills/pr-lifecycle/SKILL.md` § 4.
 
 ## Local gate before push (rule 8)
 
@@ -46,4 +50,5 @@ find src tests -name '*.rs' | xargs rustfmt --edition 2021 --check   # fmt proxy
 ## Related
 
 - `releasing/RULE.md` — tag creation (the one legitimate tag write) and release flow
+- `.agents/skills/pr-lifecycle/SKILL.md` — full PR lifecycle incl. post-merge cleanup
 - `.githooks/pre-commit` — the enforced gate

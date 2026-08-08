@@ -1,9 +1,10 @@
 # Releasing
 
 > Routed from [`INDEX.md`](../INDEX.md). A release is a tag push: the
-> tag-triggered `release.yml` workflow builds 6 platform binaries and creates
-> the GitHub Release. Tag writes are governed by `git-workflow/RULE.md` § Hard
-> bans — a tag must never be created twice, deleted, or force-pushed.
+> tag-triggered `release.yml` workflow builds 5 platform binaries (darwin-x86_64
+> dropped 2026-08) and creates the GitHub Release. Tag writes are governed by
+> `git-workflow/RULE.md` § Hard bans — a tag must never be created twice,
+> deleted, or force-pushed.
 
 ## Version numbering
 
@@ -24,8 +25,11 @@
    && git pull`.
 5. Verify the tag does not exist (`git tag -l vX.Y.Z`), then create and push:
    `git tag vX.Y.Z && git push origin vX.Y.Z` — this triggers `release.yml`.
-6. Confirm the release workflow completes and all 6 assets
-   (linux/darwin/windows × x86_64/aarch64) are on the GitHub Release.
+6. Confirm the release workflow completes and all 5 assets
+   (linux × x86_64/aarch64, windows × x86_64/aarch64, darwin-aarch64) are on
+   the GitHub Release. darwin-x86_64 was dropped in 2026-08 (no users); Intel
+   Macs fall back to running the aarch64 build under Rosetta or building from
+   source.
 7. **Update the local machine's installed binary from the new Release asset**
    — download the platform tarball/zip (`install.sh`, or
    `kotlin-lsp-darwin-aarch64.tar.gz` etc.), verify `--version` shows the new
@@ -60,5 +64,5 @@ Release workflow runs are listed with `gh run list --workflow=release.yml`.
 ## Related
 
 - `git-workflow/RULE.md` — PR flow and tag hard bans
-- `.github/workflows/release.yml` — the tag-triggered 6-platform build
+- `.github/workflows/release.yml` — the tag-triggered platform build
 - `docs/commands.md` — user-facing docs kept in sync with the CLI surface

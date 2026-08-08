@@ -13,6 +13,7 @@ Rule paths are relative to `.agents/rules/` unless prefixed.
 |---|---|
 | **Any CLI change** — adding/renaming/removing a subcommand, editing `--help`, `is_subcommand()`, `build_subcommand()`, or any command documentation (`docs/commands.md`, `skills/kotlin-lsp/SKILL.md`) | `cli-surface-consistency/RULE.md` |
 | **Any git write** — commit, push, branch, PR, merge, worktree, tag | `git-workflow/RULE.md` (§ Hard bans are unrecoverable) |
+| **PR lifecycle** — CI monitoring, merge, post-merge cleanup (checkout main, pull, delete branch) | `.agents/skills/pr-lifecycle/SKILL.md` |
 | **Release** — version bump in `Cargo.toml`, CHANGELOG, tag `v*`, release PR, CI monitoring | `releasing/RULE.md` |
 | **Multi-step work** — task_plan.md / findings.md / progress.md planning files | `local-planning.md` |
 | Fixing `kotlin-lsp check` false positives | AGENTS.md rule 9 (test-first, `fp_*` regression test) |
@@ -32,6 +33,6 @@ Rule paths are relative to `.agents/rules/` unless prefixed.
 
 ## Related
 
-- Skills live in `.agents/skills/` (e.g. `rust-perf/` for profiling).
+- Skills live in `.agents/skills/` — `rust-perf/` (profiling), `pr-lifecycle/` (CI + merge + post-merge cleanup).
 - Published agent skill for downstream Kotlin projects: `skills/kotlin-lsp/SKILL.md`.
 - CLI reference: `docs/commands.md`.
