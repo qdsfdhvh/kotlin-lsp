@@ -176,7 +176,7 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
     if root_exists {
         println!("[✓] workspace root exists");
     } else {
-        println!("[✗] workspace root does not exist: {}", root.display());
+        println!("[!] workspace root does not exist: {}", root.display());
         all_ok = false;
     }
 
@@ -312,6 +312,9 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
     if all_ok {
         println!("All checks passed.");
     } else {
-        println!("Some checks failed — see [✗] items above.");
+        println!("Some checks failed — see [!] items above.");
+        // Failures must surface in the exit code, not just the summary: a
+        // calling agent treats rc=0 as healthy (issue #237).
+        std::process::exit(1);
     }
 }
