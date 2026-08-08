@@ -1,3 +1,37 @@
+## 0.30.6 (2026-08-08)
+
+### fix(module list): only real include(...) calls declare modules (#233)
+
+- Lines like `includeGroupAndSubgroups("androidx")` (a dependency-repository
+  helper) and `includeBuild(...)` start with "include" but are NOT modules;
+  the old `starts_with("include")` match turned Maven group ids into `(0
+  files)` rows at non-existent `<repo>/<group-id>` paths, with duplicates.
+- `module list` now matches only `include(...)`, dedupes repeated includes,
+  and returns exactly the modules the build declares (kataris: 80 → 67 rows).
+
+### fix(doctor): healthy sources cache, empty index cache, exit code, markers (#234 #237)
+
+- The library-sources check counted `*.jar` files, but `extract-sources`
+  unpacks jars into directories — a correctly seeded cache always reported
+  `[!]`. Doctor now accepts unpacked source files (.kt/.java/.swift) as
+  extracted.
+- An empty (0 KB) or missing index cache now reports `[!]` and fails the
+  summary instead of showing a green check while `find`/`refs` silently have
+  no index.
+- Failed checks now exit 1 (was exit 0), and the summary points at the real
+  `[!]` marker (it previously referenced `[✗]`, which only one line emitted).
+
+### ci(docs): remove paths-ignore so docs-only PRs can merge
+
+- The main-rules ruleset requires 3 checks on every PR, but CI skipped
+  docs-only PRs — their checks never appeared and they could never merge.
+
+### docs(agents): post-release local upgrade from the GitHub Release asset
+
+- releasing/RULE.md step 7 + AGENTS.md rule 8: after publishing, upgrade the
+  local binary from the new Release asset (download → verify --version →
+  replace), never by local compile.
+
 ## 0.30.5 (2026-08-08)
 
 ### fix(capabilities): manifest generated from the help table, not hand-written (#231)
