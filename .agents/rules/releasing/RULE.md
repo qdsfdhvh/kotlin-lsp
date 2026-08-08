@@ -26,6 +26,12 @@
    `git tag vX.Y.Z && git push origin vX.Y.Z` — this triggers `release.yml`.
 6. Confirm the release workflow completes and all 6 assets
    (linux/darwin/windows × x86_64/aarch64) are on the GitHub Release.
+7. **Update the local machine's installed binary from the new Release asset**
+   — download the platform tarball/zip (`install.sh`, or
+   `kotlin-lsp-darwin-aarch64.tar.gz` etc.), verify `--version` shows the new
+   tag, then replace the installed binary (e.g. `~/.cargo/bin/kotlin-lsp`).
+   Keep a backup of the previous version until the new one smoke-tests clean.
+   NEVER rebuild locally for the installed binary.
 
 ## Hard rules
 
@@ -35,7 +41,10 @@
   (`cargo build --release && cp …`) — install from the GitHub Release asset
   (`install.sh`, or the platform tarball). Local builds bypass the release
   pipeline (CI signing, checksum verification, cross-platform testing).
-- ✅ The installed binary must come from the release tag.
+- ✅ After every release, upgrade any local machine's installed `kotlin-lsp`
+  from the new Release asset (step 7 above), never from a local build.
+- ✅ The installed binary must come from the release tag, and `--version`
+  must match the release.
 
 ## CI monitoring
 
