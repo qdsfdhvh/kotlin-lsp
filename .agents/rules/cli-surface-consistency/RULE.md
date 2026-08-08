@@ -23,6 +23,15 @@
      broken instructions for every downstream agent.
   `AGENTS.md`'s quick-reference table counts too if it mentions the command.
 
+- ❌ NEVER hand-edit `capabilities --json`. The manifest is GENERATED from the
+  help table (`args::capabilities_manifest()`, derived from
+  `help_command_lines()`), so it is consistent with `--help` and the parser by
+  construction (issue #231 — the old hand-written manifest omitted 25 working
+  commands and listed 3 the parser rejected). Keep the help-table format
+  machine-parseable: each SUBCOMMANDS line is
+  `<cmd> [member] <placeholders>␣␣<description>` with TWO spaces before the
+  description; the `help_command_parts_are_structural` test enforces this.
+
 - ❌ NEVER add a new top-level subcommand. New commands go under an existing
   group (`search` / `edit` / `tool` / `call` / `type` / `module` / `android` /
   `format`) — see AGENTS.md rule 11. A group with no home means the command is
@@ -59,6 +68,7 @@
 - [ ] `is_subcommand()` gate updated (added / removed / renamed)
 - [ ] `build_subcommand()` handler updated (same change)
 - [ ] `print_help()` updated — every line invocable, no duplicates, no stale names
+- [ ] `capabilities --json` regenerated (automatic — verify it lists the change)
 - [ ] `docs/commands.md` group / top-level / removed-aliases tables updated
 - [ ] `skills/kotlin-lsp/SKILL.md` command names updated (flat → grouped)
 - [ ] `cargo test --bin kotlin-lsp args::tests::help_` green
@@ -86,9 +96,12 @@ consistency tests exist so that failure mode cannot come back silently.
 
 ## Related
 
-- `src/cli/args.rs` — `is_subcommand()`, `build_subcommand()`, `help_text()`
+- `src/cli/args.rs` — `is_subcommand()`, `build_subcommand()`, `help_text()`,
+  `help_command_lines()`, `capabilities_manifest()`
 - `src/cli/args_tests.rs` — `help_advertises_only_invocable_commands`,
-  `help_group_members_parse`
+  `help_group_members_parse`, `help_command_parts_are_structural`,
+  `capabilities_manifest_matches_help`
+- `src/cli/run.rs` — `print_capabilities` (prints the generated manifest)
 - `docs/commands.md` — command reference (kept in sync by rule 11's
   post-change documentation check)
 - `skills/kotlin-lsp/SKILL.md` — published agent skill

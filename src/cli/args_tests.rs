@@ -604,21 +604,21 @@ fn search_expect_actual_parses_name() {
 // must be advertised. These tests fail the build when the parser gate
 // (is_subcommand), the handlers (build_subcommand) and the help text drift.
 
-/// Tokenized lines from the SUBCOMMANDS section of --help.
+/// Tokenized COMMAND parts of the SUBCOMMANDS section of --help. The
+/// description column (after the first double space) is excluded so a
+/// description word like `List` is never mistaken for a member.
 fn help_subcommand_lines() -> Vec<Vec<String>> {
-    let text = help_text();
-    let section = text
-        .split("SUBCOMMANDS:")
-        .nth(1)
-        .expect("help text has a SUBCOMMANDS section")
-        .split("OPTIONS:")
-        .next()
-        .expect("help text has an OPTIONS section");
-    section
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .map(|l| l.split_whitespace().map(String::from).collect::<Vec<_>>())
+    help_command_lines()
+        .iter()
+        .filter_map(|l| {
+            let cmd_part = l.split_once("  ").map(|(c, _)| c).unwrap_or(l.as_str());
+            let tokens: Vec<String> = cmd_part.split_whitespace().map(String::from).collect();
+            if tokens.is_empty() {
+                None
+            } else {
+                Some(tokens)
+            }
+        })
         .collect()
 }
 
@@ -689,8 +689,91 @@ fn help_group_members_parse() {
     }
 }
 
-// ── docs top-level alias (#219) ────────────────────────────────────────────────
+// ── capabilities manifest == --help (#231) ───────────────────────────────────
 
+#[test]
+fn help_command_parts_are_structural() {
+    // The capabilities manifest parses each help line as
+    // `<cmd> [member] <placeholders>␣␣<description>`. A command part that
+    // contains a bare word after the member (a token that is neither `<…>`
+    // nor `[…]) means the double-space description boundary is missing, and
+    // the manifest would mis-parse the line (issue #231).
+    for line in help_command_lines() {
+        let cmd_part = line
+            .split_once("  ")
+            .map(|(c, _)| c)
+            .unwrap_or(line.as_str());
+        let tokens: Vec<&str> = cmd_part.split_whitespace().collect();
+        assert!(!tokens.is_empty(), "empty help line: {line:?}");
+        let rest: &[&str] =
+            if tokens.len() >= 2 && !tokens[1].starts_with('<') && !tokens[1].starts_with('[') {
+                &tokens[2..] // member present
+            } else {
+                &tokens[1..]
+            };
+        for tok in rest {
+            assert!(
+                tok.starts_with('<') || tok.starts_with('['),
+                "help line command part has a non-placeholder word '{tok}' in '{cmd_part}' — use two spaces before the description"
+            );
+        }
+    }
+}
+
+#[test]
+fn capabilities_manifest_matches_help() {
+    // The machine-readable manifest must expose exactly the same command
+    // surface as --help, in both directions: nothing missing, nothing the
+    // parser rejects. The manifest is generated from help_command_lines(),
+    // so this test fails when either side drifts.
+    let caps = capabilities_manifest();
+    let commands = caps["commands"]
+        .as_object()
+        .expect("manifest has a commands object");
+
+    // Groups = commands whose manifest entry lists subcommands. A bare help
+    // line (`search <query>`) is the same command family as its group key.
+    let groups: std::collections::BTreeSet<&String> = commands
+        .iter()
+        .filter(|(_, v)| v.get("subcommands").is_some())
+        .map(|(k, _)| k)
+        .collect();
+
+    let mut help_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for line in help_subcommand_lines() {
+        let cmd = &line[0];
+        if line
+            .get(1)
+            .map(|s| !s.starts_with('<') && !s.starts_with('['))
+            .unwrap_or(false)
+        {
+            help_set.insert(format!("{cmd} {}", line[1]));
+        } else if !groups.contains(cmd) {
+            help_set.insert(cmd.clone());
+        }
+    }
+
+    let mut caps_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for (cmd, info) in commands {
+        if let Some(subs) = info.get("subcommands").and_then(|s| s.as_array()) {
+            for s in subs {
+                caps_set.insert(format!(
+                    "{cmd} {}",
+                    s.as_str().expect("subcommand is a string")
+                ));
+            }
+        } else {
+            caps_set.insert(cmd.clone());
+        }
+    }
+
+    assert_eq!(
+        help_set, caps_set,
+        "capabilities --json and --help disagree — the manifest is generated from help_command_lines(), keep them consistent"
+    );
+}
+
+// ── docs top-level alias (#219) ────────────────────────────────────────────────
 #[test]
 fn docs_top_level_parses_query() {
     let args = parse(&["docs", "StateFlow"]).unwrap().unwrap();
