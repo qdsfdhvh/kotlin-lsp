@@ -36,11 +36,13 @@ Apply to every code change, no exceptions:
 7. **No daemon mode** — Keep CLI simple. No background processes, no Unix
    sockets, no IPC. Each invocation is self-contained. Performance wins come
    from cache optimisations, not daemons.
-8. **Install from GitHub, never local compile** — installing or updating
+8. **Install from GitHub, never local compile** — installing **or updating**
    `kotlin-lsp` on a machine always downloads the pre-built binary from GitHub
    Releases (`https://github.com/qdsfdhvh/kotlin-lsp/releases`). Never
    `cargo build --release && cp target/release/kotlin-lsp …` — that bypasses
-   the release pipeline. Local `cargo build` is fine for tests/checks.
+   the release pipeline. Local `cargo build` is fine for tests/checks only;
+   after every release, upgrade the local binary from the new Release asset
+   (see `releasing/RULE.md` step 7) and verify `--version` matches the tag.
 9. **Post-change documentation check** — any change affecting CLI commands,
    output format, architecture, or developer workflows must update the
    matching docs in the same change: `docs/commands.md`,

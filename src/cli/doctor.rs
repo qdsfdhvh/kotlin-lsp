@@ -203,15 +203,25 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
     let sources_dir = home().map(|h| h.join(".kotlin-lsp").join("sources"));
     let sources_extracted = match &sources_dir {
         Some(d) if d.exists() => {
-            let count = count_files(d, ".jar");
-            if count > 0 {
-                println!("[✓] {} library source jars extracted", count);
+            let jars = count_files(d, ".jar");
+            // extract-sources unpacks jars into directories, so a seeded cache
+            // holds source files, not jars (issue #234). Accept either form.
+            let source_files = ["kt", "java", "swift"]
+                .iter()
+                .map(|ext| count_files(d, ext))
+                .sum::<usize>();
+            if jars > 0 {
+                println!("[✓] {} library source jars extracted", jars);
+                true
+            } else if source_files > 0 {
+                println!(
+                    "[✓] library sources extracted ({} source files)",
+                    source_files
+                );
                 true
             } else {
-                println!(
-                    "[!] library sources directory exists but no jars found: {}",
-                    d.display()
-                );
+                println!("[!] library sources directory is empty: {}", d.display());
+                println!("     run `kotlin-lsp extract-sources` to populate it");
                 false
             }
         }
@@ -236,24 +246,31 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
     if let Some(cd) = &cache_dir {
         if cd.exists() {
             let size = dir_size(cd);
-            println!("[✓] index cache: {} ({} KB)", cd.display(), size / 1024);
-            if verbose {
-                if let Ok(entries) = std::fs::read_dir(cd) {
-                    for e in entries.flatten() {
-                        let path = e.path();
-                        if path.is_dir() {
-                            let sz = dir_size(&path);
-                            println!(
-                                "     └─ {} ({} KB)",
-                                path.file_name().unwrap_or_default().to_string_lossy(),
-                                sz / 1024
-                            );
+            if size > 0 {
+                println!("[✓] index cache: {} ({} KB)", cd.display(), size / 1024);
+                if verbose {
+                    if let Ok(entries) = std::fs::read_dir(cd) {
+                        for e in entries.flatten() {
+                            let path = e.path();
+                            if path.is_dir() {
+                                let sz = dir_size(&path);
+                                println!(
+                                    "     └─ {} ({} KB)",
+                                    path.file_name().unwrap_or_default().to_string_lossy(),
+                                    sz / 1024
+                                );
+                            }
                         }
                     }
                 }
+            } else {
+                println!("[!] index cache is empty (0 KB): {}", cd.display());
+                println!("     run `kotlin-lsp index` to build one");
+                all_ok = false;
             }
         } else {
             println!("[!] no index cache found (run `kotlin-lsp index` to build one)");
+            all_ok = false;
             if verbose {
                 println!("     expected: {}", cd.display());
             }

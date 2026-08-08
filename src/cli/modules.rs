@@ -144,8 +144,14 @@ fn find_project_root() -> PathBuf {
 fn discover_modules_in_root(root: &Path) -> Vec<ModuleInfo> {
     let mut modules = Vec::new();
 
-    // Parse settings.gradle.kts for include() calls.
-    let included = parse_settings(root);
+    // Parse settings.gradle.kts for include() calls. Dedupe so a module listed
+    // twice (e.g. via a plugin helper repeated per block) is reported once
+    // (issue #233).
+    let mut seen = std::collections::HashSet::new();
+    let included: Vec<String> = parse_settings(root)
+        .into_iter()
+        .filter(|m| seen.insert(m.clone()))
+        .collect();
 
     // For each included module, find its directory and parse build.gradle.kts.
     for module_name in &included {
@@ -202,7 +208,12 @@ fn parse_settings(root: &Path) -> Vec<String> {
             // Match: include(":module") or include(":module1", ":module2")
             for line in content.lines() {
                 let trimmed = line.trim();
-                if trimmed.starts_with("include") {
+                // Only real `include(...)` calls declare modules. Lines that
+                // merely start with "include" — includeBuild(...) and plugin
+                // helpers like includeGroupAndSubgroups("androidx") — are NOT
+                // modules; matching them leaks dependency group ids into the
+                // module list with non-existent paths (issue #233).
+                if trimmed.starts_with("include(") {
                     modules.extend(extract_module_names(trimmed));
                 }
             }
@@ -345,5 +356,59 @@ mod tests {
         let sets = detect_source_sets(dir.path());
         assert!(sets.contains(&"main".to_string()));
         assert!(sets.contains(&"test".to_string()));
+    }
+
+    // ── module list must not leak dependency group ids (#233) ──────────────
+
+    #[test]
+    fn parse_settings_ignores_include_group_and_subgroups() {
+        // Regression for #233: plugin helpers like
+        // `includeGroupAndSubgroups("androidx")` start with "include" but are
+        // dependency group ids, not modules. Only real `include(...)` calls
+        // declare modules.
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("settings.gradle.kts"),
+            r#"rootProject.name = "sample"
+include(":app")
+include(":core:data")
+pluginManagement {
+    repositories {
+        includeGroupAndSubgroups("androidx")
+        includeGroupAndSubgroups("com.android")
+        includeGroupAndSubgroups("com.google")
+        includeGroupAndSubgroups("org.chromium")
+    }
+}
+includeBuild("build-logic")
+"#,
+        )
+        .unwrap();
+        let modules = parse_settings(dir.path());
+        assert_eq!(
+            modules,
+            vec![":app".to_string(), ":core:data".to_string()],
+            "group ids from includeGroupAndSubgroups and includeBuild must not appear as modules, got: {modules:?}"
+        );
+    }
+
+    #[test]
+    fn discover_modules_dedupes_repeated_includes() {
+        // Regression for #233: a module listed more than once (e.g. the same
+        // helper block repeated per build type) must be reported once.
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("app/src/main/kotlin")).unwrap();
+        std::fs::write(
+            dir.path().join("settings.gradle.kts"),
+            "include(\":app\")\ninclude(\":app\")\n",
+        )
+        .unwrap();
+        let modules = discover_modules_in_root(dir.path());
+        let names: Vec<&str> = modules.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec![":app"],
+            "duplicate includes must be deduped, got: {names:?}"
+        );
     }
 }
