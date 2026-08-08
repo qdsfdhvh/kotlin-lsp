@@ -1623,8 +1623,8 @@ fn print_version() {
     println!("kotlin-lsp {}", env!("CARGO_PKG_VERSION"));
 }
 
-fn print_help() {
-    println!(
+fn help_text() -> String {
+    format!(
         "kotlin-lsp {} — Kotlin/Java symbol navigation
 
 USAGE:
@@ -1773,7 +1773,208 @@ EXAMPLES:
 
 Full command reference: https://github.com/qdsfdhvh/kotlin-lsp/blob/main/docs/commands.md",
         env!("CARGO_PKG_VERSION")
-    );
+    )
+}
+
+fn print_help() {
+    println!("{}", help_text());
+}
+
+/// Raw SUBCOMMANDS lines from the help text — the single command table used
+/// by `print_help`, the capabilities manifest, and the consistency tests.
+/// Each line is `<cmd> [member] <placeholders>␣␣<description>`; the double
+/// space before the description makes the table machine-parseable (the
+/// command part and the description column). Derived from `help_text()` so
+/// the manifest cannot drift from what the parser is verified against
+/// (issues #228, #231).
+pub(crate) fn help_command_lines() -> Vec<String> {
+    help_text()
+        .split("SUBCOMMANDS:")
+        .nth(1)
+        .expect("help text has a SUBCOMMANDS section")
+        .split("OPTIONS:")
+        .next()
+        .expect("help text has an OPTIONS section")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Machine-readable capability manifest. Generated from `help_command_lines()`
+/// — the same command table `--help` prints and the consistency tests verify —
+/// so it cannot drift from the parser or `--help` (issue #231). Flags are
+/// stable per-command metadata kept separately.
+pub(crate) fn capabilities_manifest() -> serde_json::Value {
+    use std::collections::{BTreeSet, HashMap};
+
+    let flags: HashMap<&str, &[&str]> = [
+        (
+            "find",
+            &[
+                "--limit",
+                "--json",
+                "--root",
+                "--fast",
+                "--smart",
+                "--absolute",
+                "--relative",
+                "--module",
+                "--source-set",
+                "--kind",
+                "--owner",
+                "--flat",
+            ] as &[&str],
+        ),
+        (
+            "refs",
+            &[
+                "--limit",
+                "--json",
+                "--root",
+                "--fast",
+                "--smart",
+                "--absolute",
+                "--relative",
+                "--module",
+                "--source-set",
+                "--kind",
+                "--owner",
+                "--flat",
+            ],
+        ),
+        ("hover", &["--json", "--root"]),
+        (
+            "complete",
+            &["--json", "--root", "--dot", "--eol", "--no-stdlib"],
+        ),
+        ("context", &["--json", "--root", "--expand"]),
+        ("check", &["--json", "--root"]),
+        ("impact", &["--json", "--root"]),
+        ("index", &["--root", "--gradle", "--no-stdlib"]),
+        ("index-jars", &["--root"]),
+        ("sources", &["--root"]),
+        (
+            "extract-sources",
+            &["--root", "--gradle-home", "--output", "--dry-run"],
+        ),
+        ("cache", &["--root"]),
+        ("gradle-deps", &["--root", "--gradle"]),
+        ("docs", &["--limit", "--json", "--root"]),
+        ("capabilities", &["--json"]),
+        ("call", &["--json", "--root", "--incoming", "--outgoing"]),
+        (
+            "type",
+            &["--json", "--root", "--subtypes", "--supertypes", "--graph"],
+        ),
+        ("module", &["--json", "--root"]),
+        ("android", &["--json", "--root"]),
+        ("format", &["--root"]),
+        (
+            "search",
+            &[
+                "--limit", "--json", "--root", "--fast", "--smart", "--cached", "--expand",
+            ],
+        ),
+        (
+            "edit",
+            &[
+                "--json",
+                "--root",
+                "--dry-run",
+                "--in-place",
+                "--apply",
+                "--before",
+                "--after",
+                "--content",
+                "--package",
+                "--dir",
+            ],
+        ),
+        (
+            "tool",
+            &[
+                "--json",
+                "--root",
+                "--expand",
+                "--verbose",
+                "--resolve",
+                "--phases",
+                "--tree",
+                "--cst-only",
+            ],
+        ),
+    ]
+    .into_iter()
+    .collect();
+
+    let mut members: HashMap<String, Vec<String>> = HashMap::new();
+    let mut descriptions: HashMap<String, String> = HashMap::new();
+    for line in help_command_lines() {
+        // `<cmd> [member] <placeholders>␣␣<description>` — the double space is
+        // the unambiguous boundary between the command part and description.
+        let (cmd_part, desc) = match line.split_once("  ") {
+            Some((c, d)) => (c, d.trim().to_string()),
+            None => (line.as_str(), String::new()),
+        };
+        let tokens: Vec<&str> = cmd_part.split_whitespace().collect();
+        let cmd = tokens[0].to_string();
+        if !desc.is_empty() {
+            descriptions
+                .entry(cmd.clone())
+                .or_insert_with(|| desc.clone());
+        }
+        // Group members: a second command-part token that is not a placeholder
+        // (`<…>` / `[…]).
+        if let Some(second) = tokens.get(1) {
+            if !second.starts_with('<') && !second.starts_with('[') {
+                members
+                    .entry(cmd.clone())
+                    .or_default()
+                    .push(second.to_string());
+            }
+        }
+    }
+
+    let mut commands: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    for line in help_command_lines() {
+        let cmd_part = line
+            .split_once("  ")
+            .map(|(c, _)| c)
+            .unwrap_or(line.as_str());
+        let cmd = cmd_part
+            .split_whitespace()
+            .next()
+            .expect("help line starts with a command")
+            .to_string();
+        commands.entry(cmd.clone()).or_insert_with(|| {
+            serde_json::json!({
+                "description": descriptions.get(&cmd).cloned().unwrap_or_default(),
+                "flags": flags.get(cmd.as_str()).map(|f| f.to_vec()).unwrap_or_default(),
+            })
+        });
+    }
+    for (cmd, subs) in &members {
+        let mut seen = BTreeSet::new();
+        let uniq: Vec<String> = subs
+            .iter()
+            .filter(|s| seen.insert((*s).clone()))
+            .cloned()
+            .collect();
+        if let Some(entry) = commands.get_mut(cmd) {
+            entry
+                .as_object_mut()
+                .expect("manifest entry is an object")
+                .insert("subcommands".into(), serde_json::json!(uniq));
+        }
+    }
+
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "schemaVersion": 1,
+        "commands": commands,
+    })
 }
 
 fn build_semantic_insert(

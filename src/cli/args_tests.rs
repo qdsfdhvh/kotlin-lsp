@@ -599,8 +599,181 @@ fn search_expect_actual_parses_name() {
     }
 }
 
-// ── docs top-level alias (#219) ────────────────────────────────────────────────
+// ── help/parser consistency (#228) ─────────────────────────────────────────
+// --help must advertise ONLY invocable commands, and every invocable command
+// must be advertised. These tests fail the build when the parser gate
+// (is_subcommand), the handlers (build_subcommand) and the help text drift.
 
+/// Tokenized COMMAND parts of the SUBCOMMANDS section of --help. The
+/// description column (after the first double space) is excluded so a
+/// description word like `List` is never mistaken for a member.
+fn help_subcommand_lines() -> Vec<Vec<String>> {
+    help_command_lines()
+        .iter()
+        .filter_map(|l| {
+            let cmd_part = l.split_once("  ").map(|(c, _)| c).unwrap_or(l.as_str());
+            let tokens: Vec<String> = cmd_part.split_whitespace().map(String::from).collect();
+            if tokens.is_empty() {
+                None
+            } else {
+                Some(tokens)
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn help_advertises_only_invocable_commands() {
+    // Regression for #228: --help advertised 12 top-level subcommands the
+    // parser rejected ("unknown subcommand"). Every advertised top-level
+    // word must be present in the is_subcommand() gate.
+    for line in help_subcommand_lines() {
+        let cmd = line[0].as_str();
+        assert!(
+            is_subcommand(cmd),
+            "--help advertises '{cmd}' but the parser rejects it — add it to is_subcommand() or remove it from print_help()"
+        );
+    }
+}
+
+#[test]
+fn help_group_members_parse() {
+    // Every `<group> <member> …` line in --help must parse (not error) with
+    // placeholder arguments filled in. Catches advertised group members the
+    // parser does not implement and members that were never registered.
+    //
+    // The `search` group needs a stronger check: its catch-all treats any
+    // unknown member as a semantic-search query, so `search bogus` *parses*.
+    // Each advertised search member must resolve to its intended variant
+    // instead of silently falling through (the #228 failure mode).
+    let extra_args: &[(&str, &str, &[&str])] = &[(
+        "edit",
+        "insert",
+        &["--after", "--content", "X"], // required flags omitted from the help line
+    )];
+    for line in help_subcommand_lines() {
+        let cmd = line[0].as_str();
+        let member = line.get(1).map(|s| s.as_str()).unwrap_or("");
+        // `search <query>` / `docs <query>` are top-level-arg forms, not group
+        // members; covered by help_advertises_only_invocable_commands.
+        if member.is_empty() || member.starts_with('<') || member.starts_with('[') {
+            continue;
+        }
+        let mut args: Vec<String> = vec![cmd.to_string(), member.to_string()];
+        for tok in &line[2..] {
+            // "1" works for every placeholder: filenames, symbol names, and
+            // the numeric <line>/<col> positionals ("X" would fail the parse).
+            // `<file>...`/`<file/dir>...` are variadic placeholders — same dummy.
+            if tok.starts_with('<') || tok.ends_with("...") {
+                args.push("1".to_string());
+            }
+        }
+        if let Some((_, _, extra)) = extra_args
+            .iter()
+            .find(|(c, m, _)| *c == cmd && *m == member)
+        {
+            args.extend(extra.iter().map(|s| s.to_string()));
+        }
+        let joined = args.join(" ");
+        let parsed = parse(&args.iter().map(String::as_str).collect::<Vec<_>>())
+            .unwrap_or_else(|e| panic!("--help advertises '{joined}' but parsing failed: {e}"))
+            .unwrap_or_else(|| panic!("--help advertises '{joined}' but the parser rejected it"));
+        if cmd == "search" && member != "semantic" {
+            // semantic (and the bare <query> shorthand) are the only search
+            // members whose intended result IS Subcommand::Search.
+            assert!(
+                !matches!(parsed.subcommand, Subcommand::Search { .. }),
+                "--help advertises 'search {member}' but it falls through to a semantic search — implement it in build_subcommand() or remove it from print_help()"
+            );
+        }
+    }
+}
+
+// ── capabilities manifest == --help (#231) ───────────────────────────────────
+
+#[test]
+fn help_command_parts_are_structural() {
+    // The capabilities manifest parses each help line as
+    // `<cmd> [member] <placeholders>␣␣<description>`. A command part that
+    // contains a bare word after the member (a token that is neither `<…>`
+    // nor `[…]) means the double-space description boundary is missing, and
+    // the manifest would mis-parse the line (issue #231).
+    for line in help_command_lines() {
+        let cmd_part = line
+            .split_once("  ")
+            .map(|(c, _)| c)
+            .unwrap_or(line.as_str());
+        let tokens: Vec<&str> = cmd_part.split_whitespace().collect();
+        assert!(!tokens.is_empty(), "empty help line: {line:?}");
+        let rest: &[&str] =
+            if tokens.len() >= 2 && !tokens[1].starts_with('<') && !tokens[1].starts_with('[') {
+                &tokens[2..] // member present
+            } else {
+                &tokens[1..]
+            };
+        for tok in rest {
+            assert!(
+                tok.starts_with('<') || tok.starts_with('['),
+                "help line command part has a non-placeholder word '{tok}' in '{cmd_part}' — use two spaces before the description"
+            );
+        }
+    }
+}
+
+#[test]
+fn capabilities_manifest_matches_help() {
+    // The machine-readable manifest must expose exactly the same command
+    // surface as --help, in both directions: nothing missing, nothing the
+    // parser rejects. The manifest is generated from help_command_lines(),
+    // so this test fails when either side drifts.
+    let caps = capabilities_manifest();
+    let commands = caps["commands"]
+        .as_object()
+        .expect("manifest has a commands object");
+
+    // Groups = commands whose manifest entry lists subcommands. A bare help
+    // line (`search <query>`) is the same command family as its group key.
+    let groups: std::collections::BTreeSet<&String> = commands
+        .iter()
+        .filter(|(_, v)| v.get("subcommands").is_some())
+        .map(|(k, _)| k)
+        .collect();
+
+    let mut help_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for line in help_subcommand_lines() {
+        let cmd = &line[0];
+        if line
+            .get(1)
+            .map(|s| !s.starts_with('<') && !s.starts_with('['))
+            .unwrap_or(false)
+        {
+            help_set.insert(format!("{cmd} {}", line[1]));
+        } else if !groups.contains(cmd) {
+            help_set.insert(cmd.clone());
+        }
+    }
+
+    let mut caps_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for (cmd, info) in commands {
+        if let Some(subs) = info.get("subcommands").and_then(|s| s.as_array()) {
+            for s in subs {
+                caps_set.insert(format!(
+                    "{cmd} {}",
+                    s.as_str().expect("subcommand is a string")
+                ));
+            }
+        } else {
+            caps_set.insert(cmd.clone());
+        }
+    }
+
+    assert_eq!(
+        help_set, caps_set,
+        "capabilities --json and --help disagree — the manifest is generated from help_command_lines(), keep them consistent"
+    );
+}
+
+// ── docs top-level alias (#219) ────────────────────────────────────────────────
 #[test]
 fn docs_top_level_parses_query() {
     let args = parse(&["docs", "StateFlow"]).unwrap().unwrap();
