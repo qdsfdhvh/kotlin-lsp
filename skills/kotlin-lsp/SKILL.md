@@ -88,7 +88,7 @@ kotlin-lsp edit new <template> <Name>
 kotlin-lsp tool bench
 kotlin-lsp tool doctor [--json]
 kotlin-lsp tool inspect <file>
-kotlin-lsp tool snapshot
+kotlin-lsp tool snapshot [--include-libraries] [--limit <n>]
 kotlin-lsp tool graph --json
 kotlin-lsp tool code-action <file> <line> <col>
 
@@ -143,7 +143,7 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Cache stats | `kotlin-lsp cache stats` |
 | Doctor | `kotlin-lsp tool doctor [--json]` |
 | Workspace overview | `kotlin-lsp tool workspace` |
-| Snapshot | `kotlin-lsp tool snapshot` |
+| Snapshot | `kotlin-lsp tool snapshot` (workspace symbols; add `--include-libraries` for the ~/.kotlin-lsp/sources library cache, `--limit <n>` to cap) |
 | Symbol graph | `kotlin-lsp tool graph` |
 | Batch query | `echo '[...]' \| kotlin-lsp tool query --json` |
 | File inspect | `kotlin-lsp tool inspect <file>` |

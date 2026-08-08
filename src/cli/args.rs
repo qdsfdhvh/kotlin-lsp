@@ -281,11 +281,18 @@ pub(crate) enum Subcommand {
     /// Export full symbol graph (calls, inheritance, imports).
     SymbolGraph,
     /// Export complete workspace snapshot as JSON (symbols + relationships + modules).
+    ///
+    /// Defaults to workspace-only symbols; `~/.kotlin-lsp/sources` library
+    /// symbols are only included with `--include-libraries` (issue #242).
     Snapshot {
         /// Filter by symbol kind (comma-separated: class,fun,interface...)
         filter_kind: Option<String>,
         /// Exclude relationship graph from output (symbols only).
         exclude_relationships: bool,
+        /// Include `~/.kotlin-lsp/sources` library symbols (output can be hundreds of MB).
+        include_libraries: bool,
+        /// Cap the number of symbols in the output.
+        limit: Option<usize>,
     },
     /// Semantic search: natural language query over symbol index.
     Search {
@@ -481,6 +488,7 @@ struct ParsedCliFlags {
     when_exhaustive: bool,
     name_arg: Option<String>,
     exclude_relationships: bool,
+    include_libraries: bool,
     cached: bool,
     gradle: bool,
 }
@@ -558,6 +566,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         diagnose: false,
         when_exhaustive: false,
         exclude_relationships: false,
+        include_libraries: false,
         name_arg: None,
         cached: false,
         gradle: false,
@@ -648,6 +657,9 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             }
             Some(lexopt::Arg::Long("exclude-relationships")) => {
                 parsed.exclude_relationships = true;
+            }
+            Some(lexopt::Arg::Long("include-libraries")) => {
+                parsed.include_libraries = true;
             }
             Some(lexopt::Arg::Long("gradle")) => parsed.gradle = true,
             Some(lexopt::Arg::Long("when-exhaustive")) => {
@@ -877,7 +889,12 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     Ok(Subcommand::Inspect { file: f, expand })
                 }
                 "graph" => Ok(Subcommand::SymbolGraph),
-                "snapshot" => Ok(Subcommand::Snapshot { filter_kind: None, exclude_relationships: parsed.exclude_relationships }),
+                "snapshot" => Ok(Subcommand::Snapshot {
+            filter_kind: None,
+            exclude_relationships: parsed.exclude_relationships,
+            include_libraries: parsed.include_libraries,
+            limit: parsed.limit,
+        }),
                 "bench" => Ok(Subcommand::Benchmark),
                 "doctor" => Ok(Subcommand::Doctor { verbose: parsed.verbose, json: parsed.fmt == OutputFmt::Json }),
                 "workspace" => Ok(Subcommand::Workspace),
@@ -1104,9 +1121,13 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "snapshot" => {
             let filter_kind: Option<String> = None;
             let exclude_relationships = parsed.exclude_relationships;
+            let include_libraries = parsed.include_libraries;
+            let limit = parsed.limit;
             Ok(Subcommand::Snapshot {
                 filter_kind,
                 exclude_relationships,
+                include_libraries,
+                limit,
             })
         }
         "sources" => Ok(Subcommand::Sources {
@@ -1687,7 +1708,7 @@ SUBCOMMANDS:
     tool tree <file>                   Dump tree-sitter parse tree (debug)
     tool inspect <file>                Display detailed file diagnostics
     tool graph                         Export symbol graph
-    tool snapshot                      Snapshot workspace symbols
+    tool snapshot [--include-libraries] [--limit <n>]  Snapshot workspace symbols as JSON
     tool bench                         Run LSP operation benchmarks
     tool doctor                        System health diagnostics
     tool workspace                     Workspace overview
@@ -1714,6 +1735,8 @@ OPTIONS:
     -d, --dot           (complete) Resolve col to just after the last '.' on the line
     -e, --eol           (complete) Resolve col to end of trimmed content on the line
     --no-stdlib         (complete) Skip ~/.kotlin-lsp/sources; workspace symbols only (~2s)
+    --include-libraries (snapshot) Include ~/.kotlin-lsp/sources library symbols;
+                        output can be hundreds of MB (default: workspace only)
     --relative          (find, refs) Print paths relative to --root. Auto-enabled
                         when stdout is not a TTY (typical AI agent invocation).
                         With --json, the `file` field carries the relative path
@@ -1725,7 +1748,7 @@ OPTIONS:
                         (one full path per line). Default groups by file
                         (path printed once per group, `name` omitted because
                         it's the query) — much cheaper for refs with many hits.
-    --limit <n>         (find, refs) Cap result count after filtering
+    --limit <n>         (find, refs, snapshot) Cap result count after filtering
     --kind <k>          (find, refs) Filter by symbol kind (class,fun,interface,...)
     --module <fragment> (find, refs) Keep only results whose module path contains <fragment>
     --source-set <set>  (find, refs) Keep only results in the given source set(s).
@@ -1903,6 +1926,9 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
                 "--phases",
                 "--tree",
                 "--cst-only",
+                "--include-libraries",
+                "--limit",
+                "--exclude-relationships",
             ],
         ),
     ]
