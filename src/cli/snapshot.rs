@@ -3,7 +3,7 @@
 //! `kotlin-lsp snapshot [--filter kind=class,fun] [--exclude-relationships]`
 //! Uses the full tree-sitter index for rich metadata (return_type, parameters, KDoc).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ── Output types ─────────────────────────────────────────────────────────────
 
@@ -225,7 +225,10 @@ fn is_library_path(path: &str) -> bool {
     #[allow(deprecated)]
     let home = std::env::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let lib_root = home.join(".kotlin-lsp").join("sources");
-    path.starts_with(lib_root.to_string_lossy().as_ref())
+    // Component-wise comparison (not string prefix): on Windows the caller
+    // path may mix `/` and `\` separators, and string starts_with would miss
+    // `C:\Users\x/.kotlin-lsp/sources/...` (issue #242 CI failure on windows).
+    Path::new(path).starts_with(&lib_root)
 }
 
 fn is_entry_point(name: &str, kind: &str, _pkg: &str) -> bool {

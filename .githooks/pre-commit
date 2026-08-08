@@ -6,8 +6,15 @@ set -e
 
 echo "🔍 Running pre-commit checks..."
 
-# Use toolchain binaries directly (rustup proxy has PATH issues on this machine)
-RUSTUP_TOOLCHAIN="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin"
+# Use toolchain binaries directly (rustup proxy has PATH issues on this machine).
+# Resolve dynamically so the hook also works with an isolated HOME (e.g.
+# `HOME=/tmp/gatehome git commit` to skip the ~/.kotlin-lsp/sources cache
+# during the integration tests).
+if command -v rustup >/dev/null 2>&1; then
+  RUSTUP_TOOLCHAIN="$(rustup which cargo | xargs dirname)"
+else
+  RUSTUP_TOOLCHAIN="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin"
+fi
 export PATH="$RUSTUP_TOOLCHAIN:$PATH"
 
 # Check formatting (use cargo fmt to respect rustfmt.toml ignores)
