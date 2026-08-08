@@ -31,8 +31,10 @@ cargo test --quiet || {
 }
 
 # Run clippy
+# --all-targets: also lint test code (plain `cargo clippy` skips #[cfg(test)]
+# modules, which let a clippy warning slip through to CI on 2026-08-08)
 echo "  🔎 Running clippy..."
-cargo clippy -- -D warnings || {
+cargo clippy --all-targets -- -D warnings || {
     echo "  ❌ Clippy found issues!"
     exit 1
 }

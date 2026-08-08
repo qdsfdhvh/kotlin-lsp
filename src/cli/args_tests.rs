@@ -663,9 +663,8 @@ fn help_group_members_parse() {
         for tok in &line[2..] {
             // "1" works for every placeholder: filenames, symbol names, and
             // the numeric <line>/<col> positionals ("X" would fail the parse).
-            if tok.starts_with('<') && !tok.ends_with("...") {
-                args.push("1".to_string());
-            } else if tok.ends_with("...") {
+            // `<file>...`/`<file/dir>...` are variadic placeholders — same dummy.
+            if tok.starts_with('<') || tok.ends_with("...") {
                 args.push("1".to_string());
             }
         }

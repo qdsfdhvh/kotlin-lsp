@@ -64,6 +64,18 @@
 - [ ] `cargo test --bin kotlin-lsp args::tests::help_` green
 - [ ] Manual smoke: `--help` output diffed, changed commands invoked
 
+## Consolidation targets (future work)
+
+Ungrouped or flat commands that still exist internally — group when
+refactoring (do not leave orphans at top level):
+
+- `gradle-deps`, `sealed` → candidate `gradle` / `inspect` group
+- `imports-of`, `annotated` → candidate `query` or `find` filters
+- `find-test`, `expect-actual` → candidate `find` sub-mode
+- `docs`, `summarize`, `summary-cache` → candidate `info` / `symbol` group
+- `index`, `index-jars`, `sources`, `extract-sources`, `cache` → candidate `index` group
+- `benchmark`, `doctor` → candidate `diag` group
+
 ## Rationale
 
 #228 happened because #211 removed 43 names from `is_subcommand()` only — the
