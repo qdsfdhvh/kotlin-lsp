@@ -1,3 +1,22 @@
+## 0.30.8 (2026-08-08)
+
+### fix(find): library cache no longer shadows workspace declarations (#247)
+
+- `find` dropped workspace declarations whose name also existed in the
+  extracted library sources cache (`State`, `Box`, `Result`, ...). The
+  library fast-start symbol index used `insert()`, replacing the whole
+  symbol list for a name and silently removing the workspace location.
+- Workspace declarations now stay in the results, ranked **first** (ahead
+  of library hits), and are reachable via `--source-set` / `--module`.
+
+### fix(kind): data class reports 'class', not 'struct' (#246)
+
+- `data class` was classified `struct`, so `--kind class` never matched it
+  (and Kotlin has no `struct`, so the working value was undiscoverable).
+  Data classes now report `kind: "class"` (detail stays `"data class"`).
+- Caches holding the old kind are rebuilt (CACHE_VERSION / SYMBOL_INDEX_VERSION
+  bumped).
+
 ## 0.30.7 (2026-08-08)
 
 ### fix(snapshot): workspace-only symbols; --include-libraries opt-in; dedupe relationships (#242)
