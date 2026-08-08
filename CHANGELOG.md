@@ -1,3 +1,37 @@
+## 0.30.5 (2026-08-08)
+
+### fix(capabilities): manifest generated from the help table, not hand-written (#231)
+
+- `kotlin-lsp capabilities --json` previously drifted from the parser and
+  `--help`: it omitted 25 working subcommands and listed 3 the parser rejects
+  (`skills`, `edit new-file`), and reported `subcommands: null` for `search`.
+- The manifest is now generated from the same help command table the parser
+  is verified against (`args::capabilities_manifest()`), so it cannot drift by
+  construction. The help SUBCOMMANDS table is machine-parseable:
+  `<cmd> [member] <placeholders>␣␣<description>` (two-space boundary).
+
+### test(cli): help ↔ parser ↔ manifest consistency guardrails (#228 #231)
+
+- `help_advertises_only_invocable_commands` — every `--help` top-level command
+  must be accepted by `is_subcommand()`.
+- `help_group_members_parse` — every advertised group member must parse, and
+  every `search` member must resolve to its intended variant (the catch-all
+  silently turned `search summarize`/`search annotated`/… into a semantic
+  search for the subcommand word).
+- `capabilities_manifest_matches_help` — the flattened manifest set equals the
+  `--help` set in both directions.
+- `help_command_parts_are_structural` — the help table stays machine-parseable.
+
+### docs(agents): CLI surface single-source-of-truth rules
+
+- `.agents/rules/INDEX.md` (kataris-style task→rule lookup), plus
+  `cli-surface-consistency/RULE.md`, `git-workflow/RULE.md`,
+  `releasing/RULE.md`; AGENTS.md simplified to a router (rule 13: CLI surface
+  has a single source of truth).
+- Pre-commit hook and rule 8 now run `cargo clippy --all-targets` — plain
+  `cargo clippy` skips `#[cfg(test)]` code, which let a test-code lint slip
+  through to macOS CI.
+
 ## 0.30.4 (2026-08-08)
 
 ### fix(cli): no more nested-tokio-runtime panics in docs/search docs/module packages (#227)
