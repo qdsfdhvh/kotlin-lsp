@@ -1623,8 +1623,8 @@ fn print_version() {
     println!("kotlin-lsp {}", env!("CARGO_PKG_VERSION"));
 }
 
-fn print_help() {
-    println!(
+fn help_text() -> String {
+    format!(
         "kotlin-lsp {} — Kotlin/Java symbol navigation
 
 USAGE:
@@ -1773,7 +1773,11 @@ EXAMPLES:
 
 Full command reference: https://github.com/qdsfdhvh/kotlin-lsp/blob/main/docs/commands.md",
         env!("CARGO_PKG_VERSION")
-    );
+    )
+}
+
+fn print_help() {
+    println!("{}", help_text());
 }
 
 fn build_semantic_insert(

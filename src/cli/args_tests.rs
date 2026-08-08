@@ -599,6 +599,97 @@ fn search_expect_actual_parses_name() {
     }
 }
 
+// ── help/parser consistency (#228) ─────────────────────────────────────────
+// --help must advertise ONLY invocable commands, and every invocable command
+// must be advertised. These tests fail the build when the parser gate
+// (is_subcommand), the handlers (build_subcommand) and the help text drift.
+
+/// Tokenized lines from the SUBCOMMANDS section of --help.
+fn help_subcommand_lines() -> Vec<Vec<String>> {
+    let text = help_text();
+    let section = text
+        .split("SUBCOMMANDS:")
+        .nth(1)
+        .expect("help text has a SUBCOMMANDS section")
+        .split("OPTIONS:")
+        .next()
+        .expect("help text has an OPTIONS section");
+    section
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(|l| l.split_whitespace().map(String::from).collect::<Vec<_>>())
+        .collect()
+}
+
+#[test]
+fn help_advertises_only_invocable_commands() {
+    // Regression for #228: --help advertised 12 top-level subcommands the
+    // parser rejected ("unknown subcommand"). Every advertised top-level
+    // word must be present in the is_subcommand() gate.
+    for line in help_subcommand_lines() {
+        let cmd = line[0].as_str();
+        assert!(
+            is_subcommand(cmd),
+            "--help advertises '{cmd}' but the parser rejects it — add it to is_subcommand() or remove it from print_help()"
+        );
+    }
+}
+
+#[test]
+fn help_group_members_parse() {
+    // Every `<group> <member> …` line in --help must parse (not error) with
+    // placeholder arguments filled in. Catches advertised group members the
+    // parser does not implement and members that were never registered.
+    //
+    // The `search` group needs a stronger check: its catch-all treats any
+    // unknown member as a semantic-search query, so `search bogus` *parses*.
+    // Each advertised search member must resolve to its intended variant
+    // instead of silently falling through (the #228 failure mode).
+    let extra_args: &[(&str, &str, &[&str])] = &[(
+        "edit",
+        "insert",
+        &["--after", "--content", "X"], // required flags omitted from the help line
+    )];
+    for line in help_subcommand_lines() {
+        let cmd = line[0].as_str();
+        let member = line.get(1).map(|s| s.as_str()).unwrap_or("");
+        // `search <query>` / `docs <query>` are top-level-arg forms, not group
+        // members; covered by help_advertises_only_invocable_commands.
+        if member.is_empty() || member.starts_with('<') || member.starts_with('[') {
+            continue;
+        }
+        let mut args: Vec<String> = vec![cmd.to_string(), member.to_string()];
+        for tok in &line[2..] {
+            // "1" works for every placeholder: filenames, symbol names, and
+            // the numeric <line>/<col> positionals ("X" would fail the parse).
+            if tok.starts_with('<') && !tok.ends_with("...") {
+                args.push("1".to_string());
+            } else if tok.ends_with("...") {
+                args.push("1".to_string());
+            }
+        }
+        if let Some((_, _, extra)) = extra_args
+            .iter()
+            .find(|(c, m, _)| *c == cmd && *m == member)
+        {
+            args.extend(extra.iter().map(|s| s.to_string()));
+        }
+        let joined = args.join(" ");
+        let parsed = parse(&args.iter().map(String::as_str).collect::<Vec<_>>())
+            .unwrap_or_else(|e| panic!("--help advertises '{joined}' but parsing failed: {e}"))
+            .unwrap_or_else(|| panic!("--help advertises '{joined}' but the parser rejected it"));
+        if cmd == "search" && member != "semantic" {
+            // semantic (and the bare <query> shorthand) are the only search
+            // members whose intended result IS Subcommand::Search.
+            assert!(
+                !matches!(parsed.subcommand, Subcommand::Search { .. }),
+                "--help advertises 'search {member}' but it falls through to a semantic search — implement it in build_subcommand() or remove it from print_help()"
+            );
+        }
+    }
+}
+
 // ── docs top-level alias (#219) ────────────────────────────────────────────────
 
 #[test]

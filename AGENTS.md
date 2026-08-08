@@ -19,6 +19,10 @@ for how to install, use, and maintain skills.
 
 See `.agents/rules/local-planning.md` for the local planning workflow.
 
+Before changing any CLI command, help text, or command docs, read
+`.agents/rules/cli-surface-consistency/RULE.md` — it governs the
+help↔parser↔docs contract (rule 13).
+
 ## Quick Start
 
 ### Test coverage
@@ -78,6 +82,15 @@ cargo clippy -- -D warnings
     - **Alias cleanup:** remove `code_action` (underscore variant), remove all deprecated commands that are ≥2 releases old.
 
 12. **Install from GitHub, never local compile** — When installing or updating `kotlin-lsp` on a machine, always download the pre-built binary from GitHub Releases (`https://github.com/qdsfdhvh/kotlin-lsp/releases`). Never use `cargo build --release && cp target/release/kotlin-lsp ~/.local/bin/` — this bypasses the release pipeline (CI signing, checksum verification, cross-platform testing). For local development, `cargo build` is fine for running tests and checks, but the installed binary must come from the release tag.
+
+13. **CLI surface has a single source of truth** — `--help` is a contract: agents discover capabilities from it, so it must advertise ONLY invocable commands, and every command must be advertised. When adding/renaming/removing ANY CLI command, update ALL of these in the SAME change:
+    - `is_subcommand()` — parser gate (`src/cli/args.rs`)
+    - `build_subcommand()` — handler (`src/cli/args.rs`)
+    - `print_help()` / `help_text()` — what `--help` advertises (`src/cli/args.rs`)
+    - `docs/commands.md` — command reference
+    - `skills/kotlin-lsp/SKILL.md` — agent-facing docs
+    Never remove a name from `is_subcommand()` while it is still in `print_help()` or `build_subcommand()` (that split caused #228: help advertised 12 commands the parser rejected). Never let the `search` catch-all swallow a documented member word.
+    The consistency tests in `src/cli/args_tests.rs` (`help_advertises_only_invocable_commands`, `help_group_members_parse`) fail the build on help↔parser drift — never `#[ignore]` or weaken them. See `.agents/rules/cli-surface-consistency/RULE.md` for the full checklist.
 
 ## CLI Reference
 
