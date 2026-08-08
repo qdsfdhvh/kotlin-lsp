@@ -2020,10 +2020,12 @@ impl crate::types::FileData {
 // ─── tests ───────────────────────────────────────────────────────────────────
 
 fn synthesize_data_class_copy(symbols: &mut Vec<SymbolEntry>, lines: &[String]) {
+    // data class is CLASS kind since #246 (so --kind class matches); detect it
+    // from the source line instead of a special kind.
     let data_classes: Vec<(usize, String)> = symbols
         .iter()
         .enumerate()
-        .filter(|(_, s)| s.kind == SymbolKind::STRUCT)
+        .filter(|(_, s)| s.detail.trim_start().starts_with("data class"))
         .map(|(i, s)| (i, s.name.clone()))
         .collect();
 

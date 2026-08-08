@@ -80,3 +80,44 @@ fn empty_index_works() {
     let new_defs = dashmap::DashMap::new();
     assert_eq!(populate_from_symbol_index(&idx, &new_defs).len(), 0);
 }
+
+#[test]
+fn populate_does_not_shadow_existing_workspace_definitions() {
+    // Issue #247: `find` dropped a workspace declaration whose name also
+    // existed in the library sources cache. The library fast-start symbol
+    // index used insert(), replacing the whole Vec and silently removing the
+    // workspace location. It must extend instead, keeping the workspace
+    // entry first (so find ranks workspace declarations ahead of library hits).
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let path = tmp.path().join("lib.bin");
+
+    let lib_defs = dashmap::DashMap::new();
+    lib_defs.insert("State".into(), vec![make_loc("lib/com/lib/State.kt", 1, 0)]);
+    let uris = dashmap::DashSet::new();
+    uris.insert("file:///lib/com/lib/State.kt".into());
+    save_symbol_index(&lib_defs, &uris, &path);
+    let idx = try_load_symbol_index(&path).expect("load");
+
+    // Simulate the index state after the workspace scan applied: the
+    // workspace declaration is already in `definitions`.
+    let definitions = dashmap::DashMap::new();
+    definitions.insert(
+        "State".into(),
+        vec![make_loc("src/main/kotlin/Shadow.kt", 5, 0)],
+    );
+
+    populate_from_symbol_index(&idx, &definitions);
+
+    let locs = definitions.get("State").expect("State present");
+    assert_eq!(
+        locs.len(),
+        2,
+        "workspace + library locations must both be present"
+    );
+    assert_eq!(
+        locs[0].uri.as_str(),
+        "file:///src/main/kotlin/Shadow.kt",
+        "workspace declaration must stay first (ranked ahead of library)"
+    );
+    assert_eq!(locs[1].uri.as_str(), "file:///lib/com/lib/State.kt");
+}
