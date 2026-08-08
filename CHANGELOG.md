@@ -1,3 +1,23 @@
+## 0.30.7 (2026-08-08)
+
+### fix(snapshot): workspace-only symbols; --include-libraries opt-in; dedupe relationships (#242)
+
+- `tool snapshot` emitted every symbol in the global `~/.kotlin-lsp/sources`
+  cache — a one-file project produced 773 MB / 1.27M symbols, of which exactly
+  one came from the workspace. It now covers the workspace only (library
+  symbols are what `find` already reaches through the cache).
+- `--include-libraries` restores the old behaviour deliberately, printing a
+  stderr warning that output can be hundreds of MB; `--limit <n>` caps the
+  symbol count.
+- `relationships` (calls/extends/overrides/imports) are deduplicated and
+  scoped to the workspace; library edges are never emitted.
+
+### infra(release): drop darwin-x86_64 assets
+
+- Releases now ship 5 assets (linux × x86_64/aarch64, windows ×
+  x86_64/aarch64, darwin-aarch64). Intel Macs get the arm64 build via Rosetta 2
+  (`install.sh` falls back with a hint).
+
 ## 0.30.6 (2026-08-08)
 
 ### fix(module list): only real include(...) calls declare modules (#233)
