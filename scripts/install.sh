@@ -80,7 +80,16 @@ download_binary() {
   esac
   local arch=""
   case "$uname_m" in
-    x86_64|amd64) arch="x86_64" ;;
+    x86_64|amd64)
+      if [ "$os" = "darwin" ]; then
+        # darwin-x86_64 assets were discontinued (2026-08, no users). Intel
+        # Macs get the arm64 build via Rosetta 2.
+        warn "darwin-x86_64 releases are discontinued — using the arm64 build (requires Rosetta 2: \"softwareupdate --install-rosetta\")"
+        arch="aarch64"
+      else
+        arch="x86_64"
+      fi
+      ;;
     arm64|aarch64) arch="aarch64" ;;
     *) err "unsupported architecture: $uname_m" ;;
   esac
