@@ -84,11 +84,12 @@ fn object_decl() {
 }
 #[test]
 fn data_class() {
+    // data class is a class: must answer to --kind class, not 'struct' (#246).
     assert_eq!(
         sym(&parse_kotlin("data class D(val x: Int)"), "D")
             .unwrap()
             .kind,
-        SymbolKind::STRUCT
+        SymbolKind::CLASS
     );
 }
 #[test]

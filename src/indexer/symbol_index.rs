@@ -8,7 +8,7 @@ use dashmap::{DashMap, DashSet};
 use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
-pub(super) const SYMBOL_INDEX_VERSION: u32 = 12;
+pub(super) const SYMBOL_INDEX_VERSION: u32 = 13;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(super) struct CompactLoc {
@@ -133,7 +133,10 @@ pub(super) fn populate_from_symbol_index(
                 }
             })
             .collect();
-        definitions.insert(name.clone(), tower_locs);
+        definitions
+            .entry(name.clone())
+            .or_default()
+            .extend(tower_locs);
     }
 
     need_load

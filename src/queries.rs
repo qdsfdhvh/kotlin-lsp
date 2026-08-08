@@ -233,11 +233,11 @@ use tower_lsp::lsp_types::SymbolKind;
 /// `detail_label` is shown as `DocumentSymbol::detail` (e.g. "data class").
 pub(crate) fn def_pattern_meta(pattern_index: usize) -> (SymbolKind, Option<&'static str>) {
     match pattern_index {
-        0 => (SymbolKind::ENUM, None),                 // enum class
-        1 => (SymbolKind::STRUCT, Some("data class")), // data class
-        2 => (SymbolKind::CLASS, None),                // plain class (sealed/abstract/…)
-        3 => (SymbolKind::INTERFACE, None),            // interface
-        4 => (SymbolKind::OBJECT, None),               // object
+        0 => (SymbolKind::ENUM, None),                // enum class
+        1 => (SymbolKind::CLASS, Some("data class")), // data class (#246)
+        2 => (SymbolKind::CLASS, None),               // plain class (sealed/abstract/…)
+        3 => (SymbolKind::INTERFACE, None),           // interface
+        4 => (SymbolKind::OBJECT, None),              // object
         5 => (SymbolKind::OBJECT, Some("companion object")),
         6 => (SymbolKind::CLASS, Some("typealias")), // typealias
         7 => (SymbolKind::OPERATOR, None),           // operator fun (top-level)
