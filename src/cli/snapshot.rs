@@ -3,7 +3,7 @@
 //! `kotlin-lsp snapshot [--filter kind=class,fun] [--exclude-relationships]`
 //! Uses the full tree-sitter index for rich metadata (return_type, parameters, KDoc).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ── Output types ─────────────────────────────────────────────────────────────
 
@@ -64,10 +64,21 @@ struct Relationships {
 pub(crate) async fn run_snapshot(
     _filter_kind: Option<String>,
     exclude_relationships: bool,
+    include_libraries: bool,
+    limit: Option<usize>,
     _json: bool,
 ) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+    if include_libraries {
+        eprintln!(
+            "[WARN] tool snapshot --include-libraries: indexing ~/.kotlin-lsp/sources; \
+             output may be hundreds of MB. Omit the flag for workspace-only symbols."
+        );
+    }
+    // Default to workspace-only: `no_stdlib` skips the global ~/.kotlin-lsp/sources
+    // cache so a one-file project does not emit the whole library cache (issue #242).
+    // `--include-libraries` restores the old behaviour deliberately.
+    let index = crate::cli::run::build_index(&root, !include_libraries).await;
 
     // Collect symbols with full metadata from the index
     let mut symbols: Vec<SymbolSnapshot> = Vec::new();
@@ -126,6 +137,11 @@ pub(crate) async fn run_snapshot(
         Some(collect_relationships(&index))
     };
 
+    // Cap symbols (issue #242: agents need a bound on output size).
+    if let Some(n) = limit {
+        symbols.truncate(n);
+    }
+
     // Discover modules
     let modules = crate::cli::modules::discover_modules();
 
@@ -148,43 +164,71 @@ pub(crate) async fn run_snapshot(
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn collect_relationships(index: &crate::indexer::Indexer) -> Relationships {
-    let mut calls = Vec::new();
+    // Deduplicate so the same caller/callee pair from repeated parses or
+    // multiple occurrences in one file appears exactly once (issue #242).
+    // BTreeSet also gives deterministic, sorted output.
+    let mut calls = std::collections::BTreeSet::new();
     for entry in index.call_edges.iter() {
-        for (_caller_file, caller_name) in entry.value().iter() {
-            calls.push([caller_name.clone(), entry.key().clone()]);
+        for (caller_file, caller_name) in entry.value().iter() {
+            if is_library_path(caller_file) {
+                continue;
+            }
+            calls.insert((caller_name.clone(), entry.key().clone()));
         }
     }
 
-    let mut extends = Vec::new();
+    let mut extends = std::collections::BTreeSet::new();
     for entry in index.supertypes_index.iter() {
-        for (super_name, _f, _) in entry.value().iter() {
-            extends.push([entry.key().clone(), super_name.clone()]);
+        for (super_name, file, _) in entry.value().iter() {
+            if is_library_path(file) {
+                continue;
+            }
+            extends.insert((entry.key().clone(), super_name.clone()));
         }
     }
 
-    let mut overrides = Vec::new();
+    let mut overrides = std::collections::BTreeSet::new();
     for entry in index.override_edges.iter() {
-        for (_file, class_name) in entry.value().iter() {
-            overrides.push([
+        for (file, class_name) in entry.value().iter() {
+            if is_library_path(file) {
+                continue;
+            }
+            overrides.insert((
                 format!("{}.{}", class_name, entry.key()),
                 entry.key().clone(),
-            ]);
+            ));
         }
     }
 
-    let mut imports = Vec::new();
+    let mut imports = std::collections::BTreeSet::new();
     for entry in index.import_edges.iter() {
-        for (_file, _local_name) in entry.value().iter() {
-            imports.push([_file.clone(), entry.key().clone()]);
+        for (file, _local_name) in entry.value().iter() {
+            if is_library_path(file) {
+                continue;
+            }
+            imports.insert((file.clone(), entry.key().clone()));
         }
     }
 
     Relationships {
-        calls,
-        extends,
-        overrides,
-        imports,
+        calls: calls.into_iter().map(|(a, b)| [a, b]).collect(),
+        extends: extends.into_iter().map(|(a, b)| [a, b]).collect(),
+        overrides: overrides.into_iter().map(|(a, b)| [a, b]).collect(),
+        imports: imports.into_iter().map(|(a, b)| [a, b]).collect(),
     }
+}
+
+/// True when the file lives under the global extract-sources cache
+/// (`~/.kotlin-lsp/sources`). Such files are only indexed with
+/// `--include-libraries` and never contribute workspace relationships (issue #242).
+fn is_library_path(path: &str) -> bool {
+    #[allow(deprecated)]
+    let home = std::env::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let lib_root = home.join(".kotlin-lsp").join("sources");
+    // Component-wise comparison (not string prefix): on Windows the caller
+    // path may mix `/` and `\` separators, and string starts_with would miss
+    // `C:\Users\x/.kotlin-lsp/sources/...` (issue #242 CI failure on windows).
+    Path::new(path).starts_with(&lib_root)
 }
 
 fn is_entry_point(name: &str, kind: &str, _pkg: &str) -> bool {
@@ -197,106 +241,8 @@ fn is_entry_point(name: &str, kind: &str, _pkg: &str) -> bool {
     }
     false
 }
-
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn is_entry_point_activity() {
-        assert!(is_entry_point("MainActivity", "class", ""));
-        assert!(is_entry_point("SettingsActivity", "class", ""));
-        assert!(is_entry_point("MainFragment", "class", ""));
-    }
-
-    #[test]
-    fn is_entry_point_application() {
-        assert!(is_entry_point("MyApplication", "class", ""));
-    }
-
-    #[test]
-    fn is_not_entry_point() {
-        assert!(!is_entry_point("UserRepository", "class", ""));
-        assert!(!is_entry_point("Application", "function", ""));
-        assert!(!is_entry_point("main", "function", ""));
-        assert!(!is_entry_point("", "class", ""));
-    }
-
-    #[test]
-    fn collect_relationships_empty_index() {
-        let idx = crate::indexer::Indexer::new();
-        let rels = collect_relationships(&idx);
-        assert!(rels.calls.is_empty());
-        assert!(rels.extends.is_empty());
-        assert!(rels.overrides.is_empty());
-        assert!(rels.imports.is_empty());
-    }
-
-    #[test]
-    fn collect_relationships_populated_call_edges() {
-        let idx = crate::indexer::Indexer::new();
-        idx.call_edges.insert(
-            "bar".to_string(),
-            vec![("/a.kt".to_string(), "foo".to_string())],
-        );
-        idx.call_edges.insert(
-            "baz".to_string(),
-            vec![("/a.kt".to_string(), "foo".to_string())],
-        );
-
-        let rels = collect_relationships(&idx);
-        assert_eq!(rels.calls.len(), 2);
-        assert!(rels.calls.contains(&["foo".to_string(), "bar".to_string()]));
-        assert!(rels.calls.contains(&["foo".to_string(), "baz".to_string()]));
-    }
-
-    #[test]
-    fn collect_relationships_populated_extends() {
-        let idx = crate::indexer::Indexer::new();
-        idx.supertypes_index.insert(
-            "Dog".to_string(),
-            vec![(
-                "Animal".to_string(),
-                "/a.kt".to_string(),
-                crate::types::SuperKind::Extends,
-            )],
-        );
-
-        let rels = collect_relationships(&idx);
-        assert_eq!(rels.extends.len(), 1);
-        assert!(rels
-            .extends
-            .contains(&["Dog".to_string(), "Animal".to_string()]));
-    }
-
-    #[test]
-    fn collect_relationships_populated_overrides() {
-        let idx = crate::indexer::Indexer::new();
-        idx.override_edges.insert(
-            "onCreate".to_string(),
-            vec![("/app.kt".to_string(), "MyActivity".to_string())],
-        );
-
-        let rels = collect_relationships(&idx);
-        assert_eq!(rels.overrides.len(), 1);
-        let expect = "MyActivity.onCreate".to_string();
-        assert!(rels.overrides[0].contains(&expect));
-    }
-
-    #[test]
-    fn collect_relationships_populated_imports() {
-        let idx = crate::indexer::Indexer::new();
-        idx.import_edges.insert(
-            "com.lib.Foo".to_string(),
-            vec![("/a.kt".to_string(), "Foo".to_string())],
-        );
-
-        let rels = collect_relationships(&idx);
-        assert_eq!(rels.imports.len(), 1);
-        assert!(rels
-            .imports
-            .contains(&["/a.kt".to_string(), "com.lib.Foo".to_string()]));
-    }
-}
+#[path = "snapshot_tests.rs"]
+mod tests;

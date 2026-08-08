@@ -29,6 +29,7 @@ kotlin-lsp edit inject Foo.kt         # resolve types
 kotlin-lsp edit new activity Login    # file from template
 kotlin-lsp tool code-action F.kt 1 1  # list code actions
 kotlin-lsp tool inspect Foo.kt        # file diagnostics
+kotlin-lsp tool snapshot              # workspace symbols as JSON (workspace-only)
 kotlin-lsp tool bench                 # performance
 kotlin-lsp capabilities --json        # CLI capability manifest
 kotlin-lsp tool doctor                # system health
@@ -100,7 +101,7 @@ Old flat names were removed from the parser (v0.30.2+); invoking them prints
 | `tokens` / `tree` | `tool tokens` / `tool tree` |
 | `inspect` | `tool inspect` |
 | `symbol-graph` | `tool graph` |
-| `snapshot` | `tool snapshot` |
+| `snapshot` | `tool snapshot [--include-libraries] [--limit <n>]` |
 | `benchmark` | `tool bench` |
 | `doctor` | `tool doctor` |
 | `workspace` | `tool workspace` |
@@ -123,7 +124,7 @@ Old flat names were removed from the parser (v0.30.2+); invoking them prints
 | `--json` | Machine-readable output |
 | `--relative` | Workspace-relative paths (auto when stdout piped) |
 | `--flat` | Grep-style `path:line:col: name` |
-| `--limit <n>` | Cap result count |
+| `--limit <n>` | Cap result count (find/refs/snapshot) |
 | `--kind class,fun` | Filter by symbol kind |
 | `--module <frag>` | Filter by module path |
 | `--owner <name>` | Filter by enclosing class |
@@ -135,6 +136,12 @@ Old flat names were removed from the parser (v0.30.2+); invoking them prints
 kotlin-lsp extract-sources    # one-time: unpack *-sources.jar from Gradle cache
 kotlin-lsp index-jars         # one-time: index extracted library symbols
 ```
+
+`tool snapshot` emits **workspace symbols only** by default. The extracted
+library cache (`~/.kotlin-lsp/sources`) is deliberately excluded — including it
+made a one-file project emit 773 MB of JSON (issue #242). Pass
+`--include-libraries` to include library symbols (output can be hundreds of MB;
+a warning is printed to stderr), and `--limit <n>` to cap the symbol count.
 
 ## What gets indexed
 

@@ -1352,8 +1352,17 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Snapshot {
             filter_kind,
             exclude_relationships,
+            include_libraries,
+            limit,
         } => {
-            crate::cli::snapshot::run_snapshot(filter_kind, exclude_relationships, json).await;
+            crate::cli::snapshot::run_snapshot(
+                filter_kind,
+                exclude_relationships,
+                include_libraries,
+                limit,
+                json,
+            )
+            .await;
         }
         Subcommand::Workspace => {
             crate::cli::workspace::run_workspace(json);
