@@ -80,7 +80,8 @@ tests. Highlights:
 - CLI reference: **[docs/commands.md](docs/commands.md)** — full command list.
   Quick table: find/refs/hover/complete/context/check, `call hierarchy`,
   `call diff`, `type hierarchy`, `module …`, `android …`, `format …`, `search …`,
-  `edit …`, `tool …`, `index`, `index-jars`, `cache stats`, `gradle-deps`,
+  Quick table: find/refs/hover/complete/context/check, `call hierarchy`, `call reach`,
+  `type hierarchy`, `module …`, `android …`, `format …`, `search …`,  `edit …`, `tool …`, `index`, `index-jars`, `cache stats`, `gradle-deps`,
   `docs <query>`, `capabilities --json`.
 - Test coverage: `./coverage.sh [FILE|--all]` (llvm-cov).
 - Rust skills: `cargo install cowork && cowork config install`.
