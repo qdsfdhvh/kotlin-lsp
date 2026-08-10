@@ -35,7 +35,8 @@ kotlin-lsp capabilities --json        # CLI capability manifest (incl. grammar v
 kotlin-lsp tool doctor                # system health
 kotlin-lsp call hierarchy F.kt 42 10  # call chains
 kotlin-lsp call diff HEAD~1 main boot  # call-tree diff between refs
-kotlin-lsp call reach entry --to target  # all call paths entry→targetkotlin-lsp type hierarchy User        # super/subtype tree
+kotlin-lsp call reach entry --to target  # all call paths entry→target
+kotlin-lsp type hierarchy User        # super/subtype tree
 kotlin-lsp type sealed Result         # sealed subclasses
 kotlin-lsp android composables F.kt   # composable analysis
 kotlin-lsp module list                # list modules
