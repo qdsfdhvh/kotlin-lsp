@@ -804,6 +804,63 @@ fn call_hierarchy_by_name_parses_symbol() {
                 assert_eq!(name.as_deref(), Some("AuthViewModel"));
             }
             CallSub::Diff { .. } => panic!("expected Hierarchy, got Diff"),
+            CallSub::Reach { .. } => panic!("expected Hierarchy, got Reach"),
+        },
+        other => panic!("expected Call, got {other:?}"),
+    }
+}
+
+#[test]
+fn call_reach_parses_entry_target_depth() {
+    let args = parse(&[
+        "call",
+        "reach",
+        "runCheckout",
+        "--to",
+        "sendEmail",
+        "--max-depth",
+        "5",
+    ])
+    .unwrap()
+    .unwrap();
+    match &args.subcommand {
+        Subcommand::Call { sub } => match sub {
+            CallSub::Reach {
+                entry,
+                target,
+                max_depth,
+            } => {
+                assert_eq!(entry, "runCheckout");
+                assert_eq!(target.as_deref(), Some("sendEmail"));
+                assert_eq!(*max_depth, 5);
+            }
+            CallSub::Hierarchy { .. } => panic!("expected Reach, got Hierarchy"),
+            CallSub::Diff { .. } => panic!("expected Reach, got Diff"),
+        },
+        other => panic!("expected Call, got {other:?}"),
+    }
+}
+
+#[test]
+fn call_reach_parses_without_target_uses_default_depth() {
+    let args = parse(&["call", "reach", "boot"]).unwrap().unwrap();
+    match &args.subcommand {
+        Subcommand::Call { sub } => match sub {
+            CallSub::Reach {
+                entry,
+                target,
+                max_depth,
+            } => {
+                assert_eq!(entry, "boot");
+                assert!(target.is_none());
+                assert_eq!(
+                    *max_depth,
+                    crate::cli::reach::DEFAULT_MAX_DEPTH,
+                    "default depth applies when --max-depth is omitted"
+                );
+            }
+            CallSub::Hierarchy { .. } => panic!("expected Reach, got Hierarchy"),
+            CallSub::Diff { .. } => panic!("expected Reach, got Diff"),
         },
         other => panic!("expected Call, got {other:?}"),
     }
@@ -829,6 +886,7 @@ fn call_hierarchy_positional_parses_file_line_col() {
                 assert_eq!(*col, 10);
             }
             CallSub::Diff { .. } => panic!("expected Hierarchy, got Diff"),
+            CallSub::Reach { .. } => panic!("expected Hierarchy, got Reach"),
         },
         other => panic!("expected Call, got {other:?}"),
     }

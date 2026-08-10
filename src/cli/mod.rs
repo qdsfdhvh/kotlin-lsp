@@ -26,6 +26,7 @@ mod organize_imports;
 mod output;
 mod path_meta;
 mod query_engine;
+mod reach;
 mod ref_kind;
 mod run;
 mod skills;
@@ -50,5 +51,8 @@ mod call_diff_tests;
 mod query_engine_tests;
 mod search;
 mod summary_cache;
+
+#[cfg(test)]
+mod reach_tests;
 pub(crate) use args::CliArgs;
 pub(crate) use run::run;

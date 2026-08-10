@@ -363,6 +363,13 @@ pub(crate) enum CallSub {
         ref2: String,
         entry: String,
     },
+    /// Enumerate every call path from `entry` to `target` (or all reachable
+    /// paths when `target` is None) through the workspace call graph.
+    Reach {
+        entry: String,
+        target: Option<String>,
+        max_depth: u32,
+    },
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -498,6 +505,8 @@ struct ParsedCliFlags {
     cached: bool,
     gradle: bool,
     entry: Option<String>,
+    to: Option<String>,
+    max_depth: Option<u32>,
 }
 
 fn parse_first_argument(args: &mut lexopt::Parser) -> Result<Option<std::ffi::OsString>, String> {
@@ -578,6 +587,8 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         cached: false,
         gradle: false,
         entry: None,
+        to: None,
+        max_depth: None,
     };
 
     loop {
@@ -673,6 +684,18 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Long("entry")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
                 parsed.entry = Some(value.to_string_lossy().into_owned());
+            }
+            Some(lexopt::Arg::Long("to")) => {
+                let value = args.value().map_err(|e| e.to_string())?;
+                parsed.to = Some(value.to_string_lossy().into_owned());
+            }
+            Some(lexopt::Arg::Long("max-depth")) => {
+                let value = args.value().map_err(|e| e.to_string())?;
+                let raw = value.to_string_lossy();
+                let n: u32 = raw.parse().map_err(|_| {
+                    format!("--max-depth expects a non-negative integer, got '{raw}'")
+                })?;
+                parsed.max_depth = Some(n);
             }
             Some(lexopt::Arg::Long("when-exhaustive")) => {
                 parsed.when_exhaustive = true;
@@ -1350,8 +1373,23 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                         sub: CallSub::Diff { ref1, ref2, entry },
                     })
                 }
+                "reach" => {
+                    let entry = positionals
+                        .get(1)
+                        .cloned()
+                        .ok_or("call reach requires an ENTRY function name")?;
+                    Ok(Subcommand::Call {
+                        sub: CallSub::Reach {
+                            entry,
+                            target: parsed.to.clone(),
+                            max_depth: parsed
+                                .max_depth
+                                .unwrap_or(crate::cli::reach::DEFAULT_MAX_DEPTH),
+                        },
+                    })
+                }
                 other => Err(format!(
-                    "unknown call subcommand '{}'. Available: hierarchy, sealed, diff",
+                    "unknown call subcommand '{}'. Available: hierarchy, sealed, diff, reach",
                     other
                 )),
             }
@@ -1706,7 +1744,7 @@ SUBCOMMANDS:
     call hierarchy <file> <line> <col>   Show callers/callees for symbol at position
     call hierarchy <name>                Show callers/callees for a symbol by name
     call diff <ref1> <ref2> <name>      Diff call trees between two git refs
-    type hierarchy <name>                Show subtypes or supertypes
+    call reach <entry> [--to <target>]   List all call paths from an entrypoint    type hierarchy <name>                Show subtypes or supertypes
     type sealed <name>                   Show sealed subclasses
     module list                          List all project modules
     module deps <name>                   Show module dependencies

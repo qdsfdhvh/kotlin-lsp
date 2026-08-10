@@ -1295,6 +1295,15 @@ pub(crate) async fn run(args: CliArgs) {
                 let root = resolve_root(args.root.as_deref());
                 crate::cli::call_diff::run_call_diff(&ref1, &ref2, &entry, json, &root);
             }
+            CallSub::Reach {
+                entry,
+                target,
+                max_depth,
+            } => {
+                let root = resolve_root(args.root.as_deref());
+                crate::cli::reach::run_reach(root, &entry, target.as_deref(), max_depth, json)
+                    .await;
+            }
         },
         Subcommand::Impact { file, line, col } => {
             crate::cli::impact::run_impact(&file, line, col, json).await;
