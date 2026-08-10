@@ -40,7 +40,7 @@ with an LSP transport for editor compatibility.
 ┌──────────────▼───────────────────────────────────────────┐
 │                   Parser Layer                           │
 │  (parser.rs — tree-sitter dispatch)                     │
-│  ├── queries.rs — node kind constants                   │
+│  ├── queries.rs — node kind constants (contract: docs/codebase/QUERIES.md)   │
 │  ├── str_ext.rs — string utilities                       │
 │  └── lines_ext.rs — line-based parsing                  │
 └──────────────┬───────────────────────────────────────────┘
