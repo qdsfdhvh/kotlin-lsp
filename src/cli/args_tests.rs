@@ -773,6 +773,45 @@ fn capabilities_manifest_matches_help() {
     );
 }
 
+#[test]
+fn capabilities_manifest_reports_grammar_versions() {
+    // The manifest must expose the tree-sitter grammar crate versions (baked
+    // in by build.rs) so users can attribute grammar behavior differences.
+    let caps = capabilities_manifest();
+    let grammars = caps["grammars"]
+        .as_object()
+        .expect("manifest has a grammars object");
+    for key in ["kotlin", "java", "swift"] {
+        let version = grammars
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        assert!(
+            !version.is_empty() && version != "unknown",
+            "grammar version for {key} must be baked in at build time, got {version:?}"
+        );
+    }
+}
+
+#[test]
+fn version_lines_reports_grammars_line() {
+    // `--version` contract: first line is the tool version, second line lists
+    // the tree-sitter grammar crate versions (grammar version visibility).
+    let binding = version_lines();
+    let lines: Vec<&str> = binding.lines().collect();
+    assert_eq!(lines.len(), 2, "version output has exactly two lines");
+    assert!(
+        lines[0].starts_with("kotlin-lsp "),
+        "first line is the tool version, got {:?}",
+        lines[0]
+    );
+    assert!(
+        lines[1].starts_with("grammars: kotlin "),
+        "second line reports grammar versions, got {:?}",
+        lines[1]
+    );
+}
+
 // ── docs top-level alias (#219) ────────────────────────────────────────────────
 #[test]
 fn docs_top_level_parses_query() {

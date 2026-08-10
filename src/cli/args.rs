@@ -1708,8 +1708,21 @@ fn is_subcommand(value: &str) -> bool {
 #[path = "args_tests.rs"]
 mod tests;
 
+/// Version report lines (first line is the tool version, second the tree-sitter
+/// grammar crate versions baked in by build.rs). Kept testable separately from
+/// the printing side effect.
+fn version_lines() -> String {
+    format!(
+        "kotlin-lsp {}\ngrammars: kotlin {}, java {}, swift {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("KOTLIN_LSP_GRAMMAR_KOTLIN"),
+        env!("KOTLIN_LSP_GRAMMAR_JAVA"),
+        env!("KOTLIN_LSP_GRAMMAR_SWIFT"),
+    )
+}
+
 fn print_version() {
-    println!("kotlin-lsp {}", env!("CARGO_PKG_VERSION"));
+    println!("{}", version_lines());
 }
 
 fn help_text() -> String {
@@ -2071,6 +2084,11 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
     serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
         "schemaVersion": 1,
+        "grammars": {
+            "kotlin": env!("KOTLIN_LSP_GRAMMAR_KOTLIN"),
+            "java": env!("KOTLIN_LSP_GRAMMAR_JAVA"),
+            "swift": env!("KOTLIN_LSP_GRAMMAR_SWIFT"),
+        },
         "commands": commands,
     })
 }

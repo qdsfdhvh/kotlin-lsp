@@ -31,7 +31,7 @@ kotlin-lsp tool code-action F.kt 1 1  # list code actions
 kotlin-lsp tool inspect Foo.kt        # file diagnostics
 kotlin-lsp tool snapshot              # workspace symbols as JSON (workspace-only)
 kotlin-lsp tool bench                 # performance
-kotlin-lsp capabilities --json        # CLI capability manifest
+kotlin-lsp capabilities --json        # CLI capability manifest (incl. grammar versions)
 kotlin-lsp tool doctor                # system health
 kotlin-lsp call hierarchy F.kt 42 10  # call chains
 kotlin-lsp call diff HEAD~1 main boot  # call-tree diff between refs
