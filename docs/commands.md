@@ -34,6 +34,7 @@ kotlin-lsp tool bench                 # performance
 kotlin-lsp capabilities --json        # CLI capability manifest
 kotlin-lsp tool doctor                # system health
 kotlin-lsp call hierarchy F.kt 42 10  # call chains
+kotlin-lsp call diff HEAD~1 main boot  # call-tree diff between refs
 kotlin-lsp type hierarchy User        # super/subtype tree
 kotlin-lsp type sealed Result         # sealed subclasses
 kotlin-lsp android composables F.kt   # composable analysis
@@ -54,7 +55,7 @@ kotlin-lsp cache stats                # cache info
 | **search** | `semantic`, `docs`, `summarize`, `cache-stats`, `imports`, `annotated`, `find-test`, `expect-actual` | Symbol discovery and analysis |
 | **edit** | `rename`, `batch`, `imports`, `inject`, `insert`, `new`, `organize` | Code modification |
 | **tool** | `inspect`, `graph`, `snapshot`, `bench`, `doctor`, `workspace`, `query`, `skills`, `code-action`, `tokens`, `tree` | Debug / introspection |
-| **call** | `hierarchy` | Call graph |
+| **call** | `hierarchy`, `diff` | Call graph / call-tree diff |
 | **type** | `hierarchy`, `sealed` | Type hierarchy |
 | **module** | `list`, `deps`, `files`, `packages` | Module structure |
 | **android** | `activities`, `composables` | Android resources |

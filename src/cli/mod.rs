@@ -4,6 +4,7 @@ mod android;
 mod args;
 mod batch;
 mod batch_query;
+mod call_diff;
 mod call_graph;
 mod check;
 mod complete;
@@ -43,6 +44,8 @@ mod integration_tests;
 #[cfg(test)]
 mod format_tests;
 
+#[cfg(test)]
+mod call_diff_tests;
 #[cfg(test)]
 mod query_engine_tests;
 mod search;

@@ -1291,6 +1291,10 @@ pub(crate) async fn run(args: CliArgs) {
                     run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
                 }
             }
+            CallSub::Diff { ref1, ref2, entry } => {
+                let root = resolve_root(args.root.as_deref());
+                crate::cli::call_diff::run_call_diff(&ref1, &ref2, &entry, json, &root);
+            }
         },
         Subcommand::Impact { file, line, col } => {
             crate::cli::impact::run_impact(&file, line, col, json).await;
