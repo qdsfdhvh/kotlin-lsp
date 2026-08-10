@@ -9,6 +9,7 @@ task_plan.md
 findings.md
 progress.md
 .pi/
+.pi-subagents/
 .tours/
 # Legacy cache — migrated to .cache/kotlin-lsp
 .cache/

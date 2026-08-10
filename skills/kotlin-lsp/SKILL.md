@@ -8,8 +8,12 @@ description: Use the `kotlin-lsp` CLI for precise symbol lookup in Kotlin/Java/S
 `kotlin-lsp` is a tree-sitter–backed CLI for Kotlin / Java / Swift symbol queries — no daemon, no JVM. It returns *declaration locations* and *type-aware references*, not text matches.
 
 ```bash
-kotlin-lsp --version
+kotlin-lsp --version   # tool version + tree-sitter grammar versions (kotlin/java/swift)
 ```
+
+`capabilities --json` includes a `grammars` object with the same three
+resolved grammar crate versions, so behavior differences can be attributed to
+the grammar build.
 
 ## When to use kotlin-lsp vs rg
 
