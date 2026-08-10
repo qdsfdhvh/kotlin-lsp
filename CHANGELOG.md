@@ -1,3 +1,25 @@
+## 0.31.1 (2026-08-10)
+
+### fix: 0.31.0 regressions (#259-#263, PR #264)
+
+- **--help**: rows for `call reach` and `type hierarchy` were joined onto one
+  line (missing newline in the help table); the `format apply` row is now
+  aligned. A guardrail test prevents joined help rows from shipping again.
+- **cache stats/clean**: reported `<root>/.kotlin-lsp/cache/`, a path the tool
+  never creates. Now reports the real `{root}/.cache/kotlin-lsp` and shows the
+  global library cache; `cache clean` no longer deletes the current-format
+  `~/.cache/kotlin-lsp/library-*.bin` (rebuilding it re-indexes 72k+ stdlib
+  files), only the pre-.cache legacy dir.
+- **find (fast mode)**: returned column 1 and no kind, so `--kind` filters
+  matched nothing. The column is now pinned to the symbol name and the kind is
+  inferred from the declaration keyword.
+- **call diff**: a clean working tree could report a HEAD→worktree diff built
+  from a gitignored file that shares a symbol name. Worktree snapshots now use
+  `git ls-files` (tracked only); uncommitted edits to tracked files stay
+  visible.
+- **call reach**: paths crossed the Kotlin/Swift boundary on same-named
+  functions. Paths now stay within the language of the entry's call edge.
+
 ## 0.31.0 (2026-08-10)
 
 ### feat(call): call diff — branch-aware call-tree diff between git refs (#251, #255)
