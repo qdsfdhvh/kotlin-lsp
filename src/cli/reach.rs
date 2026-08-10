@@ -176,8 +176,9 @@ pub(crate) async fn run_reach(
     target: Option<&str>,
     max_depth: u32,
     json: bool,
+    no_stdlib: bool,
 ) {
-    let index = crate::cli::run::build_index(&root, false).await;
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
     let callee_map = build_callee_map(&index);
 
     if !callee_map.contains_key(entry) {

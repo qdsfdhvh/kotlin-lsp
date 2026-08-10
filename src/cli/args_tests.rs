@@ -868,10 +868,12 @@ fn call_reach_parses_entry_target_depth() {
                 entry,
                 target,
                 max_depth,
+                no_stdlib,
             } => {
                 assert_eq!(entry, "runCheckout");
                 assert_eq!(target.as_deref(), Some("sendEmail"));
                 assert_eq!(*max_depth, 5);
+                assert!(!*no_stdlib, "--no-stdlib defaults to false");
             }
             CallSub::Hierarchy { .. } => panic!("expected Reach, got Hierarchy"),
             CallSub::Diff { .. } => panic!("expected Reach, got Diff"),
@@ -889,9 +891,11 @@ fn call_reach_parses_without_target_uses_default_depth() {
                 entry,
                 target,
                 max_depth,
+                no_stdlib,
             } => {
                 assert_eq!(entry, "boot");
                 assert!(target.is_none());
+                assert!(!*no_stdlib);
                 assert_eq!(
                     *max_depth,
                     crate::cli::reach::DEFAULT_MAX_DEPTH,
