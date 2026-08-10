@@ -357,6 +357,12 @@ pub(crate) enum CallSub {
         outgoing: bool,
         depth: u32,
     },
+    /// Diff call trees for an entrypoint between two git refs (POC: Kotlin only).
+    Diff {
+        ref1: String,
+        ref2: String,
+        entry: String,
+    },
 }
 
 /// Format sub-subcommand: check (lint-only, like spotlessCheck) or apply (in-place, like spotlessApply).
@@ -491,6 +497,7 @@ struct ParsedCliFlags {
     include_libraries: bool,
     cached: bool,
     gradle: bool,
+    entry: Option<String>,
 }
 
 fn parse_first_argument(args: &mut lexopt::Parser) -> Result<Option<std::ffi::OsString>, String> {
@@ -570,6 +577,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         name_arg: None,
         cached: false,
         gradle: false,
+        entry: None,
     };
 
     loop {
@@ -662,6 +670,10 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
                 parsed.include_libraries = true;
             }
             Some(lexopt::Arg::Long("gradle")) => parsed.gradle = true,
+            Some(lexopt::Arg::Long("entry")) => {
+                let value = args.value().map_err(|e| e.to_string())?;
+                parsed.entry = Some(value.to_string_lossy().into_owned());
+            }
             Some(lexopt::Arg::Long("when-exhaustive")) => {
                 parsed.when_exhaustive = true;
             }
@@ -1320,8 +1332,26 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                         },
                     })
                 }
+                "diff" => {
+                    let ref1 = positionals
+                        .get(1)
+                        .cloned()
+                        .ok_or("call diff requires REF1 (e.g. HEAD~1)")?;
+                    let ref2 = positionals
+                        .get(2)
+                        .cloned()
+                        .ok_or("call diff requires REF2 (e.g. main)")?;
+                    let entry = parsed
+                        .entry
+                        .clone()
+                        .or_else(|| positionals.get(3).cloned())
+                        .ok_or("call diff requires an ENTRY name (positional or --entry)")?;
+                    Ok(Subcommand::Call {
+                        sub: CallSub::Diff { ref1, ref2, entry },
+                    })
+                }
                 other => Err(format!(
-                    "unknown call subcommand '{}'. Available: hierarchy, sealed",
+                    "unknown call subcommand '{}'. Available: hierarchy, sealed, diff",
                     other
                 )),
             }
@@ -1675,6 +1705,7 @@ SUBCOMMANDS:
 
     call hierarchy <file> <line> <col>   Show callers/callees for symbol at position
     call hierarchy <name>                Show callers/callees for a symbol by name
+    call diff <ref1> <ref2> <name>      Diff call trees between two git refs
     type hierarchy <name>                Show subtypes or supertypes
     type sealed <name>                   Show sealed subclasses
     module list                          List all project modules
@@ -1886,7 +1917,10 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
         ("gradle-deps", &["--root", "--gradle"]),
         ("docs", &["--limit", "--json", "--root"]),
         ("capabilities", &["--json"]),
-        ("call", &["--json", "--root", "--incoming", "--outgoing"]),
+        (
+            "call",
+            &["--json", "--root", "--incoming", "--outgoing", "--entry"],
+        ),
         (
             "type",
             &["--json", "--root", "--subtypes", "--supertypes", "--graph"],
