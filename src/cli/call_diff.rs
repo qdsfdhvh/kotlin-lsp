@@ -21,18 +21,6 @@ use crate::cli::call_steps::{extract_functions, CallStep, FuncInfo};
 /// Max call-tree depth per ref — keeps expansion bounded on deep graphs.
 pub(crate) const DEFAULT_MAX_DEPTH: u32 = 12;
 
-/// Directories skipped when walking the working tree (calldiff `git.ts`).
-const SKIP_DIRS: [&str; 8] = [
-    "node_modules",
-    "dist",
-    "build",
-    "coverage",
-    ".git",
-    ".gradle",
-    ".idea",
-    "out",
-];
-
 // ── git helpers ──────────────────────────────────────────────────────────────
 
 fn git(args: &[&str], cwd: &Path) -> Result<String, String> {
@@ -175,7 +163,7 @@ pub(crate) fn list_source_files(
     filters: &[String],
 ) -> Result<Vec<String>, String> {
     let files = match snapshot {
-        Snapshot::Worktree => walk_worktree(cwd),
+        Snapshot::Worktree => git_tracked_source_files(cwd),
         Snapshot::Commit { ref_name } => {
             let out = git(&["ls-tree", "-r", "--name-only", ref_name], cwd)?;
             out.lines()
@@ -190,33 +178,20 @@ pub(crate) fn list_source_files(
         .collect())
 }
 
-fn walk_worktree(root: &Path) -> Vec<String> {
-    fn walk(dir: &Path, root: &Path, out: &mut Vec<String>) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') && name != "." {
-                continue;
-            }
-            let full = entry.path();
-            if full.is_dir() {
-                if SKIP_DIRS.contains(&name.as_str()) {
-                    continue;
-                }
-                walk(&full, root, out);
-            } else if name.ends_with(".kt") {
-                if let Ok(rel) = full.strip_prefix(root) {
-                    out.push(rel.to_string_lossy().replace('\\', "/"));
-                }
-            }
-        }
-    }
-    let mut out = Vec::new();
-    walk(root, root, &mut out);
-    out.sort();
-    out
+/// Worktree snapshot file list: git-tracked Kotlin sources only (issue #260).
+/// A disk walk would pick up gitignored build artifacts that declare the same
+/// symbol names as tracked files, producing a HEAD → working-tree diff on a
+/// tree `git status` reports clean. `git ls-files` (tracked only) keeps the
+/// worktree and commit snapshots on the same file set; contents are still read
+/// from disk so uncommitted edits to tracked files stay visible.
+fn git_tracked_source_files(cwd: &Path) -> Vec<String> {
+    let Ok(out) = git(&["ls-files", "-z", "--cached"], cwd) else {
+        return Vec::new();
+    };
+    out.split('\0')
+        .filter(|f| !f.is_empty() && f.ends_with(".kt"))
+        .map(str::to_string)
+        .collect()
 }
 
 fn read_snapshot_file(cwd: &Path, snapshot: &Snapshot, file: &str) -> Option<String> {

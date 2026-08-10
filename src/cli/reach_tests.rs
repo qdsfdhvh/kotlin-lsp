@@ -182,3 +182,77 @@ fn callee_map_reverses_edge_direction() {
     // c has no callers → not a key in the reversed map
     assert!(!map.contains_key("c"), "leaf c is not a caller");
 }
+
+// ── language isolation (issue #259) ──────────────────────────────────────────
+
+/// Same-named callees in Kotlin and Swift must not join: a path starting in
+/// Kotlin must not cross into Swift edges.
+#[test]
+fn paths_do_not_cross_language_boundary() {
+    let idx = Arc::new(Indexer::new());
+    // Kotlin side: entryPoint -> sharedName -> kotlinOnlyLeaf
+    let kotlin = "package a\nfun entryPoint() { sharedName() }\nfun sharedName() { kotlinOnlyLeaf() }\nfun kotlinOnlyLeaf() = 1\n";
+    // Swift side: swiftEntry -> sharedName -> swiftOnlyLeaf (same `sharedName`)
+    let swift = "func swiftEntry() { sharedName() }\nfunc sharedName() { swiftOnlyLeaf() }\nfunc swiftOnlyLeaf() -> Int { 1 }\n";
+    let kt_uri = Url::from_file_path(std::env::temp_dir().join("KtEntry.kt")).expect("uri");
+    let sw_uri = Url::from_file_path(std::env::temp_dir().join("SwiftEntry.swift")).expect("uri");
+    idx.index_content(&kt_uri, kotlin);
+    idx.index_content(&sw_uri, swift);
+
+    let map = build_callee_map(&idx);
+    // Kotlin path: entryPoint -> sharedName -> kotlinOnlyLeaf only.
+    let (paths, _) = enumerate_paths(&map, "entryPoint", None, DEFAULT_MAX_DEPTH, MAX_PATHS);
+    assert!(!paths.is_empty(), "kotlin path exists");
+    for p in &paths {
+        let names: Vec<&str> = p.iter().map(|(_, n)| n.as_str()).collect();
+        assert!(
+            !names.contains(&"swiftOnlyLeaf"),
+            "kotlin path must not reach Swift leaf: {names:?}"
+        );
+    }
+    // Swift path: swiftEntry -> sharedName -> swiftOnlyLeaf only.
+    let (paths, _) = enumerate_paths(&map, "swiftEntry", None, DEFAULT_MAX_DEPTH, MAX_PATHS);
+    assert!(!paths.is_empty(), "swift path exists");
+    for p in &paths {
+        let names: Vec<&str> = p.iter().map(|(_, n)| n.as_str()).collect();
+        assert!(
+            !names.contains(&"kotlinOnlyLeaf"),
+            "swift path must not reach Kotlin leaf: {names:?}"
+        );
+    }
+}
+
+/// With a target, the language filter still applies.
+#[test]
+fn target_path_respects_language() {
+    let idx = Arc::new(Indexer::new());
+    let kotlin = "package a\nfun entryPoint() { sharedName() }\nfun sharedName() { kotlinOnlyLeaf() }\nfun kotlinOnlyLeaf() = 1\n";
+    let swift = "func swiftEntry() { sharedName() }\nfunc sharedName() { swiftOnlyLeaf() }\nfunc swiftOnlyLeaf() -> Int { 1 }\n";
+    let kt_uri = Url::from_file_path(std::env::temp_dir().join("KtEntry2.kt")).expect("uri");
+    let sw_uri = Url::from_file_path(std::env::temp_dir().join("SwiftEntry2.swift")).expect("uri");
+    idx.index_content(&kt_uri, kotlin);
+    idx.index_content(&sw_uri, swift);
+
+    let map = build_callee_map(&idx);
+    // Kotlin entry → Swift-only target: unreachable (language boundary).
+    let (paths, _) = enumerate_paths(
+        &map,
+        "entryPoint",
+        Some("swiftOnlyLeaf"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert!(
+        paths.is_empty(),
+        "cross-language target unreachable from kotlin"
+    );
+    // Kotlin entry → Kotlin leaf: reachable.
+    let (paths, _) = enumerate_paths(
+        &map,
+        "entryPoint",
+        Some("kotlinOnlyLeaf"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert_eq!(paths.len(), 1);
+}

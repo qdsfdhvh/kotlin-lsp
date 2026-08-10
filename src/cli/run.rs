@@ -375,7 +375,81 @@ fn smart_refs(engine: &WorkspaceQueryEngine, name: &str, root: &Path) -> Vec<Cli
 fn fast_find(name: &str, root: &Path) -> Vec<CliResult> {
     let source_roots = cli_workspace_source_roots(root);
     let locs = rg_find_definition(name, Some(root), &source_roots, None);
-    locs_to_results(locs, name, "")
+    // Issue #261: the rg declaration pattern starts at the keyword (e.g.
+    // `public class`), so `--column` reports the line start, not the symbol's
+    // column, and the kind is unknown. Read each hit line to pin the column
+    // to the symbol name and infer the declaration kind, so `--kind` filters
+    // work in fast mode too.
+    locs.iter()
+        .filter_map(|loc| {
+            let file = loc.uri.to_file_path().ok()?;
+            let content = std::fs::read_to_string(&file).ok()?;
+            let line = content.lines().nth(loc.range.start.line as usize)?;
+            let (col, kind) = fast_declaration_hint(line, name);
+            let mut fixed = loc.clone();
+            fixed.range.start.character = col;
+            fixed.range.end.character = col + name.chars().count() as u32;
+            CliResult::from_location(&fixed, name, kind)
+        })
+        .collect()
+}
+
+/// Pin the declaration column to the symbol name and infer its kind from the
+/// declaration line. Returns `(0-based column, kind)` — kind is "" when the
+/// line does not look like a declaration of `name`.
+fn fast_declaration_hint(line: &str, name: &str) -> (u32, &'static str) {
+    let col = line
+        .find(name)
+        .map(|byte| line[..byte].chars().count() as u32)
+        .unwrap_or(0);
+    let trimmed = line.trim_start();
+    let mut kind = "";
+    for word in trimmed.split_whitespace() {
+        if matches!(
+            word,
+            "public"
+                | "private"
+                | "protected"
+                | "internal"
+                | "open"
+                | "abstract"
+                | "final"
+                | "static"
+                | "sealed"
+                | "data"
+                | "override"
+                | "lateinit"
+                | "companion"
+                | "suspend"
+                | "inline"
+                | "const"
+                | "fileprivate"
+                | "external"
+                | "expect"
+                | "actual"
+                | "operator"
+                | "infix"
+                | "tailrec"
+                | "annotation"
+                | "value"
+        ) {
+            continue;
+        }
+        kind = match word {
+            "class" => "class",
+            "interface" | "protocol" => "interface",
+            "object" => "object",
+            "enum" => "enum",
+            "fun" | "func" => "function",
+            "val" | "let" => "property",
+            "var" => "variable",
+            "typealias" => "class",
+            "struct" => "struct",
+            _ => "",
+        };
+        break;
+    }
+    (col, kind)
 }
 
 // ── Fast-mode refs ────────────────────────────────────────────────────────────
@@ -700,7 +774,10 @@ pub(crate) async fn run(args: CliArgs) {
 
             match sub.as_str() {
                 "stats" => {
-                    println!("Project cache: {}/.kotlin-lsp/cache/", root.display());
+                    let ws_cache_dir = ws_cache
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."));
+                    println!("Project cache: {}", ws_cache_dir.display());
                     if ws_cache.exists() {
                         if let Ok(meta) = std::fs::metadata(&ws_cache) {
                             let kb = meta.len() as f64 / 1024.0;
@@ -714,42 +791,55 @@ pub(crate) async fn run(args: CliArgs) {
                     } else {
                         println!("  Status: ❌ (no cache — run `kotlin-lsp index` first)");
                     }
-                    // Also show legacy global if present
+                    // Also show the global library cache (~/.cache/kotlin-lsp/library-*.bin).
                     let global_dir = crate::indexer::cache_dir();
                     if global_dir.exists() {
-                        let count = std::fs::read_dir(&global_dir)
-                            .map(|e| e.flatten().filter(|e| e.path().is_dir()).count())
-                            .unwrap_or(0);
-                        if count > 0 {
+                        let bins: Vec<_> = std::fs::read_dir(&global_dir)
+                            .map(|e| e.flatten().filter(|e| e.path().is_file()).collect())
+                            .unwrap_or_default();
+                        let lib_count = bins
+                            .iter()
+                            .filter(|e| e.file_name().to_string_lossy().starts_with("library-"))
+                            .count();
+                        let total_mb: f64 = bins
+                            .iter()
+                            .map(|e| {
+                                std::fs::metadata(e.path())
+                                    .map(|m| m.len() as f64)
+                                    .unwrap_or(0.0)
+                            })
+                            .sum::<f64>()
+                            / (1024.0 * 1024.0);
+                        if lib_count > 0 {
                             println!(
-                                "Legacy global cache: {} ({} entries, run `cache clean` to remove)",
-                                global_dir.display(),
-                                count
+                                "Library cache: {} ({lib_count} files, {total_mb:.1} MB)",
+                                global_dir.display()
                             );
                         }
                     }
                 }
                 "clean" => {
-                    // Clean project-local cache
-                    let project_dir = root.join(".kotlin-lsp").join("cache");
+                    // Clean project-local cache (actual location: {root}/.cache/kotlin-lsp).
+                    let project_dir = ws_cache
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .to_path_buf();
                     if project_dir.exists() {
                         std::fs::remove_dir_all(&project_dir).ok();
                         println!("Removed project cache: {}", project_dir.display());
                     }
-                    // Clean legacy global cache (old format, may exist from earlier versions)
-                    let global_dir = crate::indexer::cache_dir();
-                    if global_dir.exists() {
-                        let entries = std::fs::read_dir(&global_dir)
-                            .map(|e| e.flatten().count())
-                            .unwrap_or(0);
-                        std::fs::remove_dir_all(&global_dir).ok();
+                    // Clean legacy project-local cache (old format, pre-.cache)
+                    let legacy_project_dir = root.join(".kotlin-lsp");
+                    if legacy_project_dir.exists() {
+                        std::fs::remove_dir_all(&legacy_project_dir).ok();
                         println!(
-                            "Removed legacy global cache: {} ({} entries)",
-                            global_dir.display(),
-                            entries
+                            "Removed legacy project cache: {}",
+                            legacy_project_dir.display()
                         );
                     }
-                    if !project_dir.exists() && !global_dir.exists() {
+                    // The global library cache (~/.cache/kotlin-lsp/library-*.bin) is
+                    // current-format and expensive to rebuild — do NOT remove it here.
+                    if !project_dir.exists() && !legacy_project_dir.exists() {
                         println!("No cache found.");
                     }
                 }

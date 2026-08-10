@@ -1758,7 +1758,8 @@ SUBCOMMANDS:
     call hierarchy <file> <line> <col>   Show callers/callees for symbol at position
     call hierarchy <name>                Show callers/callees for a symbol by name
     call diff [<ref1> [<ref2>]] [<name>]   Diff call trees between git refs (git-diff style)
-    call reach <entry> [--to <target>]   List all call paths from an entrypoint    type hierarchy <name>                Show subtypes or supertypes
+    call reach <entry> [--to <target>]   List all call paths from an entrypoint
+    type hierarchy <name>                Show subtypes or supertypes
     type sealed <name>                   Show sealed subclasses
     module list                          List all project modules
     module deps <name>                   Show module dependencies
@@ -1767,7 +1768,7 @@ SUBCOMMANDS:
     android activities                   List Android activities from AndroidManifest
     android composables <file>           Find @Composable functions
     format check <file/dir>...           Check formatting violations (like spotlessCheck)
-    format apply <file/dir>...          Apply formatting in-place (like spotlessApply)
+    format apply <file/dir>...           Apply formatting in-place (like spotlessApply)
 
     search <query>                    Semantic search with TF-IDF ranking
     search semantic <query>           Semantic search (explicit)
