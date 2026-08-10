@@ -1,3 +1,42 @@
+## 0.31.0 (2026-08-10)
+
+### feat(call): call diff — branch-aware call-tree diff between git refs (#251, #255)
+
+- `call diff [<ref1> [<ref2>]] [<name>]` diffs who-calls-whom between two git
+  trees, mirroring calldiff for agentic review of call-flow rewiring.
+- Complete implementation (#255): branch-aware trees (if/else-if/else,
+  try/catch/finally, `when` arms as first-class tree nodes; nested lambdas are
+  not attributed to the outer caller), `⇄` cycle markers, and branch children
+  rendered without the continuing rail.
+- Entry inference: `--entry` is optional — exported functions whose expanded
+  call tree changed are inferred (fallback to any changed function).
+- git-diff semantics: no refs = HEAD vs working tree; one ref = that vs
+  working tree; trailing on-disk positionals are path filters; worktree
+  snapshot reads disk (SKIP_DIRS); default `--max-depth` 12.
+- CTA: text mode prints `hint: call diff --entry X` for changed entries.
+
+### feat(call): call reach — enumerate call paths from an entrypoint (#250, #257)
+
+- `call reach <entry> [--to <target>] [--max-depth N]` lists every call path
+  from an entry to a target (or all reachable paths), DFS with per-path cycle
+  protection, depth cap (default 8) and a 1000-path truncation guard.
+- `--no-stdlib` is now honored (#257) — reach previously always indexed the
+  72924-file stdlib source cache.
+
+### feat(capabilities): report tree-sitter grammar versions (#253)
+
+- `capabilities --json` gains a top-level `grammars` object
+  (`kotlin`/`java`/`swift`); `--version` prints them on a second line. Baked
+  in at build time from Cargo.lock via a new `build.rs`.
+
+### docs(codebase): per-language query & extraction contract (#252, #254, #256)
+
+- New `docs/codebase/QUERIES.md` documents the three-strategy architecture
+  (Kotlin/Swift query vs Java CST walk), mandatory symbol coverage, KIND_*
+  constant rule, ordered-pattern query contract, call-edge extraction rules
+  and a new-language checklist.
+- README / AGENTS.md / skills docs synced with the new commands.
+
 ## 0.30.8 (2026-08-08)
 
 ### fix(find): library cache no longer shadows workspace declarations (#247)
