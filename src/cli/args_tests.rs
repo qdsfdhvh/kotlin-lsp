@@ -721,6 +721,32 @@ fn help_command_parts_are_structural() {
 }
 
 #[test]
+fn help_rows_start_on_their_own_line() {
+    // Regression for #263: a missing `\n` joined the 'call reach' and
+    // 'type hierarchy' help rows onto one physical line. Each advertised
+    // command row must begin at a fresh line (4-space indent, then the
+    // command token), otherwise the description column mis-aligns and
+    // scripts that split on lines mis-parse.
+    let help = help_text();
+    for row in [
+        "call reach",
+        "call diff",
+        "type hierarchy",
+        "type sealed",
+        "format apply",
+        "format check",
+        "module list",
+        "android composables",
+    ] {
+        let marker = format!("\n    {row} ");
+        assert!(
+            help.contains(&marker),
+            "--help row '{row}' must start on its own line (issue #263)"
+        );
+    }
+}
+
+#[test]
 fn capabilities_manifest_matches_help() {
     // The machine-readable manifest must expose exactly the same command
     // surface as --help, in both directions: nothing missing, nothing the

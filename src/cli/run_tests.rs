@@ -155,3 +155,38 @@ fn apply_filters_combines_module_and_source_set() {
     let names: Vec<_> = out.iter().map(|r| r.name.as_str()).collect();
     assert_eq!(names, vec!["A"]);
 }
+
+// ── fast-mode declaration hints (issue #261) ─────────────────────────────────
+
+#[test]
+fn fast_hint_pins_column_and_kind_for_class() {
+    let (col, kind) = fast_declaration_hint(
+        "public class ExampleWidget(private val label: String) {",
+        "ExampleWidget",
+    );
+    assert_eq!(kind, "class");
+    // "public class " is 13 chars → column 14 (0-based 13).
+    assert_eq!(col, 13);
+}
+
+#[test]
+fn fast_hint_infers_function_and_property_kinds() {
+    let (col, kind) = fast_declaration_hint("    public fun render(): String = label", "render");
+    assert_eq!(kind, "function");
+    assert_eq!(col, 15); // "    public fun " = 4+7+4
+    let (_, kind) = fast_declaration_hint("val name: String = \"x\"", "name");
+    assert_eq!(kind, "property");
+    let (_, kind) = fast_declaration_hint("var counter: Int = 0", "counter");
+    assert_eq!(kind, "variable");
+}
+
+#[test]
+fn fast_hint_ignores_modifier_run_but_stops_at_non_declaration_word() {
+    // "internal" is a modifier; the next word is a declaration keyword.
+    let (col, kind) = fast_declaration_hint("internal sealed class Widget : Base()", "Widget");
+    assert_eq!(kind, "class");
+    assert!(col > 0);
+    // A non-declaration first word (a usage, not a declaration) yields an unknown kind.
+    let (_, kind) = fast_declaration_hint("return ExampleWidget()", "ExampleWidget");
+    assert_eq!(kind, "");
+}

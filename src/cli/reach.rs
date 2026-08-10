@@ -40,6 +40,29 @@ pub(crate) fn build_callee_map(index: &Indexer) -> HashMap<String, Vec<(String, 
     map
 }
 
+/// Language of a source file, from its extension. Used to keep call paths
+/// within one language (issue #259): `call_edges` keys callees by bare name,
+/// so same-named functions in different languages share a key and paths would
+/// otherwise cross the Kotlin/Java/Swift boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Lang {
+    Kotlin,
+    Java,
+    Swift,
+}
+
+fn lang_of_file(path: &str) -> Option<Lang> {
+    if path.ends_with(".kt") {
+        Some(Lang::Kotlin)
+    } else if path.ends_with(".java") {
+        Some(Lang::Java)
+    } else if path.ends_with(".swift") {
+        Some(Lang::Swift)
+    } else {
+        None
+    }
+}
+
 // ── Path enumeration ─────────────────────────────────────────────────────────
 
 /// All paths from `entry` to `target` (or all reachable paths when `target` is
@@ -66,6 +89,11 @@ pub(crate) fn enumerate_paths(
         return (paths, truncated);
     };
 
+    // Language of the entry: from any of its outgoing call edges' caller file.
+    let entry_lang = callee_map[entry]
+        .iter()
+        .find_map(|(file, _)| lang_of_file(file));
+
     let mut path = vec![(String::new(), entry.to_string())];
     let mut visited: HashSet<String> = HashSet::new();
     visited.insert(entry.to_string());
@@ -73,6 +101,7 @@ pub(crate) fn enumerate_paths(
     dfs(
         callee_map,
         entry,
+        entry_lang,
         &mut path,
         &mut visited,
         target,
@@ -89,6 +118,7 @@ pub(crate) fn enumerate_paths(
 fn dfs(
     callee_map: &HashMap<String, Vec<(String, String)>>,
     current: &str,
+    lang: Option<Lang>,
     path: &mut Vec<(String, String)>,
     visited: &mut HashSet<String>,
     target: Option<&str>,
@@ -130,6 +160,15 @@ fn dfs(
 
     let mut expanded = false;
     for (file, callee) in callees {
+        // Issue #259: only follow edges within the path's language. Same-named
+        // callees in other languages (e.g. a Kotlin `sharedName` and a Swift
+        // `sharedName`) would otherwise join into one node and cross the
+        // language boundary.
+        if let Some(lang) = lang {
+            if lang_of_file(file) != Some(lang) {
+                continue;
+            }
+        }
         if visited.contains(callee) {
             continue;
         }
@@ -139,6 +178,7 @@ fn dfs(
         dfs(
             callee_map,
             callee,
+            lang,
             path,
             visited,
             target,
