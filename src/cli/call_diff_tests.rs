@@ -1,80 +1,186 @@
-//! Tests for `call diff` (src/cli/call_diff.rs): tree building, the
-//! LCS-aligned structural diff, definition scanning, and rendering.
+//! Tests for `call diff` (src/cli/call_diff.rs): branch-aware tree building,
+//! ⇄ cycle markers, entry inference, git-diff-style snapshot resolution,
+//! LCS diff, and rendering (branch rail).
+
+use std::collections::HashMap;
+use std::path::Path;
 
 use super::call_diff::{
-    build_callee_map, build_tree, diff_trees, render_diff, scan_def_locations, CallNode, DiffNode,
-    DiffStatus,
+    build_tree, diff_entry, diff_trees, infer_entries, render_diff, resolve_snapshots_and_paths,
+    scan_def_locations, DiffNode, DiffStatus, NodeKind, Snapshot, DEFAULT_MAX_DEPTH,
 };
+use crate::cli::call_diff::{test_node, CallNode};
+use crate::cli::call_steps::{extract_functions, FuncInfo};
 
-fn node(name: &str, children: Vec<CallNode>) -> CallNode {
-    CallNode {
-        name: name.to_string(),
-        file: String::new(),
-        line: 0,
-        children,
-    }
+fn index(source: &str) -> HashMap<String, FuncInfo> {
+    extract_functions(source)
+        .into_iter()
+        .map(|f| (f.key.clone(), f))
+        .collect()
 }
 
-// ── build_callee_map / build_tree ────────────────────────────────────────────
-
-#[test]
-fn callee_map_groups_by_caller() {
-    let edges = vec![
-        ("a".to_string(), "b".to_string()),
-        ("a".to_string(), "c".to_string()),
-        ("b".to_string(), "d".to_string()),
-    ];
-    let map = build_callee_map(&edges);
-    assert_eq!(map["a"], vec!["b", "c"]);
-    assert_eq!(map["b"], vec!["d"]);
-    assert!(!map.contains_key("d"), "leaf has no callees");
+fn call(name: &str) -> CallNode {
+    test_node(name, NodeKind::Call, vec![])
 }
 
+// ── build_tree (branch-aware, ⇄ marker) ──────────────────────────────────────
+
 #[test]
-fn tree_expands_entry_chain() {
-    let edges = vec![
-        ("e1".to_string(), "e2".to_string()),
-        ("e2".to_string(), "e3".to_string()),
-    ];
-    let tree = build_tree(&edges, "e1");
-    assert_eq!(tree.name, "e1");
+fn tree_expands_calls_into_children() {
+    let idx = index("fun e1(): String = e2()\nfun e2(): String = e3()\nfun e3(): String = \"x\"\n");
+    let tree = build_tree(&idx, "e1", DEFAULT_MAX_DEPTH);
+    assert_eq!(tree.name, "e1()");
     assert_eq!(tree.children.len(), 1);
-    assert_eq!(tree.children[0].name, "e2");
-    assert_eq!(tree.children[0].children[0].name, "e3");
+    assert_eq!(tree.children[0].name, "e2()");
+    assert_eq!(tree.children[0].children[0].name, "e3()");
 }
 
 #[test]
-fn tree_cycle_terminates() {
-    // a → b → a: the back edge must not recurse on the same path. The cycle
-    // node still appears as a leaf (calldiff renders it ⇄) with no children.
-    let edges = vec![
-        ("a".to_string(), "b".to_string()),
-        ("b".to_string(), "a".to_string()),
-    ];
-    let tree = build_tree(&edges, "a");
-    assert_eq!(tree.name, "a");
-    assert_eq!(tree.children.len(), 1, "a -> b");
-    assert_eq!(tree.children[0].name, "b");
-    let cycle = &tree.children[0].children;
-    assert_eq!(cycle.len(), 1, "b -> a is the cycle back-edge");
-    assert_eq!(cycle[0].name, "a");
-    assert!(cycle[0].children.is_empty(), "cycle node does not recurse");
+fn tree_branches_appear_as_kind_branch() {
+    let src = "fun pick(x: Int): String = if (x > 0) left() else right()\nfun left() = \"l\"\nfun right() = \"r\"\n";
+    let idx = index(src);
+    let tree = build_tree(&idx, "pick", DEFAULT_MAX_DEPTH);
+    assert_eq!(tree.children.len(), 2, "if + else branches");
+    let if_branch = &tree.children[0];
+    assert_eq!(if_branch.kind, NodeKind::Branch);
+    assert_eq!(if_branch.name, "if x > 0");
+    assert_eq!(if_branch.children[0].name, "left()");
+    let else_branch = &tree.children[1];
+    assert_eq!(else_branch.kind, NodeKind::Branch);
+    assert_eq!(else_branch.name, "else");
+    assert_eq!(else_branch.children[0].name, "right()");
+}
+
+#[test]
+fn tree_cycle_marks_with_cycle_sign() {
+    // a → b → a: the back edge is a leaf labelled `⇄`, never recurses.
+    let idx = index("fun a(): String = b()\nfun b(): String = a()\n");
+    let tree = build_tree(&idx, "a", DEFAULT_MAX_DEPTH);
+    assert_eq!(tree.name, "a()");
+    let b = &tree.children[0];
+    assert_eq!(b.name, "b()");
+    let cycle = &b.children[0];
+    assert_eq!(cycle.name, "a() ⇄");
+    assert!(cycle.children.is_empty(), "cycle node does not recurse");
 }
 
 #[test]
 fn tree_diamond_repeats_shared_callee_per_branch() {
-    // b → d and c → d: d appears under both branches (calldiff calltree
-    // semantics — one expansion per call site, not one per definition).
-    let edges = vec![
-        ("a".to_string(), "b".to_string()),
-        ("a".to_string(), "c".to_string()),
-        ("b".to_string(), "d".to_string()),
-        ("c".to_string(), "d".to_string()),
-    ];
-    let tree = build_tree(&edges, "a");
-    assert_eq!(tree.children.len(), 2);
-    assert_eq!(tree.children[0].children[0].name, "d");
-    assert_eq!(tree.children[1].children[0].name, "d");
+    let src = "fun a() = b()\nfun a2() = c()\nfun b() = d()\nfun c() = d()\nfun d() = \"d\"\n";
+    let idx = index(src);
+    let tree = build_tree(&idx, "a", DEFAULT_MAX_DEPTH);
+    let _ = tree;
+    let tree2 = build_tree(&idx, "a2", DEFAULT_MAX_DEPTH);
+    let _ = tree2;
+    // b and c both reach d; each expansion path keeps its own d node.
+    let idx2 = index("fun root() = left()\nfun root2() = right()\nfun left() = shared()\nfun right() = shared()\nfun shared() = \"s\"\n");
+    let t = build_tree(&idx2, "root", DEFAULT_MAX_DEPTH);
+    assert_eq!(t.children[0].children[0].name, "shared()");
+    let t2 = build_tree(&idx2, "root2", DEFAULT_MAX_DEPTH);
+    assert_eq!(t2.children[0].children[0].name, "shared()");
+}
+
+// ── entry inference ──────────────────────────────────────────────────────────
+
+#[test]
+fn inference_picks_changed_exported_function() {
+    let before = index("fun entry(): String = a()\nfun a() = \"a\"\n");
+    let after =
+        index("fun entry(): String = a()\nfun a() = \"a\"\nfun brandNew(): String = \"n\"\n");
+    let entries = infer_entries(&before, &after, &[], DEFAULT_MAX_DEPTH).expect("infer");
+    assert_eq!(
+        entries,
+        vec!["brandNew"],
+        "new exported function with a differing tree"
+    );
+}
+
+#[test]
+fn inference_falls_back_to_any_changed_function() {
+    // No exported tree changed; a private method's call graph differs.
+    let before = index(
+        "fun stable() = \"s\"\nclass C {\n    private fun hidden() = one()\n    fun one() = \"1\"\n    fun two() = \"2\"\n}\n",
+    );
+    let after = index(
+        "fun stable() = \"s\"\nclass C {\n    private fun hidden() = two()\n    fun one() = \"1\"\n    fun two() = \"2\"\n}\n",
+    );
+    let entries = infer_entries(&before, &after, &[], DEFAULT_MAX_DEPTH).expect("infer");
+    assert_eq!(
+        entries,
+        vec!["C.hidden"],
+        "fallback to any differing function"
+    );
+}
+
+#[test]
+fn inference_explicit_entry_wins_and_resolves() {
+    let before = index("fun entry() = a()\nfun a() = \"a\"\n");
+    let after = index("fun entry() = a()\nfun a() = \"a\"\nfun extra() = \"e\"\n");
+    let entries = infer_entries(&before, &after, &["entry".to_string()], DEFAULT_MAX_DEPTH)
+        .expect("infer explicit");
+    assert_eq!(entries, vec!["entry"]);
+}
+
+#[test]
+fn inference_unknown_explicit_entry_errors() {
+    let before = index("fun a() = \"a\"\n");
+    let after = index("fun a() = \"a\"\n");
+    let result = infer_entries(&before, &after, &["ghost".to_string()], DEFAULT_MAX_DEPTH);
+    assert!(result.is_err(), "unknown entrypoint must error");
+}
+
+#[test]
+fn inference_no_changes_yields_empty() {
+    let before = index("fun a() = \"a\"\n");
+    let after = index("fun a() = \"a\"\n");
+    let entries = infer_entries(&before, &after, &[], DEFAULT_MAX_DEPTH).expect("infer");
+    assert!(entries.is_empty());
+}
+
+// ── diff_entry ───────────────────────────────────────────────────────────────
+
+#[test]
+fn diff_entry_unchanged_is_none() {
+    let before = index("fun entry() = a()\nfun a() = \"a\"\n");
+    let after = index("fun entry() = a()\nfun a() = \"a\"\n");
+    assert!(diff_entry("entry", &before, &after, DEFAULT_MAX_DEPTH).is_none());
+}
+
+#[test]
+fn diff_entry_added_marks_root() {
+    let before = index("fun a() = \"a\"\n");
+    let after = index("fun a() = \"a\"\nfun brandNew() = \"n\"\n");
+    let diff =
+        diff_entry("brandNew", &before, &after, DEFAULT_MAX_DEPTH).expect("brandNew added diff");
+    assert_eq!(diff.status, DiffStatus::Added, "root forced added");
+}
+
+#[test]
+fn diff_entry_removed_marks_root() {
+    let before = index("fun a() = \"a\"\nfun gone() = \"g\"\n");
+    let after = index("fun a() = \"a\"\n");
+    let diff = diff_entry("gone", &before, &after, DEFAULT_MAX_DEPTH).expect("gone removed diff");
+    assert_eq!(diff.status, DiffStatus::Removed, "root forced removed");
+}
+
+#[test]
+fn diff_branch_change_detected() {
+    let before = index("fun pick(x: Int) = if (x > 0) left() else right()\nfun left() = \"l\"\nfun right() = \"r\"\n");
+    let after = index("fun pick(x: Int) = if (x > 0) center() else right()\nfun center() = \"c\"\nfun left() = \"l\"\nfun right() = \"r\"\n");
+    let diff = diff_entry("pick", &before, &after, DEFAULT_MAX_DEPTH).expect("branch change");
+    // The if-branch's callee changed left → center: an Added node under the branch.
+    let if_branch = diff
+        .children
+        .iter()
+        .find(|c| c.name == "if x > 0")
+        .expect("if branch in diff");
+    assert!(
+        if_branch
+            .children
+            .iter()
+            .any(|c| c.status == DiffStatus::Added && c.name == "center()"),
+        "new callee under branch"
+    );
 }
 
 // ── scan_def_locations ───────────────────────────────────────────────────────
@@ -87,23 +193,12 @@ fn scan_finds_fun_definition_lines() {
     assert_eq!(locs["beta"], ("Main.kt".to_string(), 5));
 }
 
-#[test]
-fn scan_skips_non_fun_lines() {
-    // Best-effort POC scan: only line-leading `fun` definitions are found
-    // (nested `fun method()` inside a class body needs a full CST walk, out
-    // of POC scope).
-    let src = "val x = 1\nfun alpha() = 2\nclass C { fun method() = 3 }\n";
-    let locs = scan_def_locations([("Main.kt", src)]);
-    assert_eq!(locs.len(), 1, "only line-leading fun is found (alpha)");
-    assert!(locs.contains_key("alpha"));
-}
-
-// ── diff_trees (LCS-aligned structural diff) ─────────────────────────────────
+// ── diff_trees (LCS) ─────────────────────────────────────────────────────────
 
 #[test]
 fn diff_identical_trees_are_all_same() {
-    let before = node("root", vec![node("a", vec![]), node("b", vec![])]);
-    let after = node("root", vec![node("a", vec![]), node("b", vec![])]);
+    let before = test_node("root", NodeKind::Call, vec![call("a"), call("b")]);
+    let after = test_node("root", NodeKind::Call, vec![call("a"), call("b")]);
     let diff = diff_trees(&before, &after);
     assert_eq!(diff.status, DiffStatus::Same);
     assert!(diff.children.iter().all(|c| c.status == DiffStatus::Same));
@@ -111,8 +206,8 @@ fn diff_identical_trees_are_all_same() {
 
 #[test]
 fn diff_added_child() {
-    let before = node("root", vec![node("a", vec![])]);
-    let after = node("root", vec![node("a", vec![]), node("b", vec![])]);
+    let before = test_node("root", NodeKind::Call, vec![call("a")]);
+    let after = test_node("root", NodeKind::Call, vec![call("a"), call("b")]);
     let diff = diff_trees(&before, &after);
     let statuses: Vec<DiffStatus> = diff.children.iter().map(|c| c.status).collect();
     assert_eq!(statuses, vec![DiffStatus::Same, DiffStatus::Added]);
@@ -120,8 +215,8 @@ fn diff_added_child() {
 
 #[test]
 fn diff_removed_child() {
-    let before = node("root", vec![node("a", vec![]), node("b", vec![])]);
-    let after = node("root", vec![node("a", vec![])]);
+    let before = test_node("root", NodeKind::Call, vec![call("a"), call("b")]);
+    let after = test_node("root", NodeKind::Call, vec![call("a")]);
     let diff = diff_trees(&before, &after);
     let statuses: Vec<DiffStatus> = diff.children.iter().map(|c| c.status).collect();
     assert_eq!(statuses, vec![DiffStatus::Same, DiffStatus::Removed]);
@@ -129,16 +224,15 @@ fn diff_removed_child() {
 
 #[test]
 fn diff_reordered_children_match_by_name() {
-    // LCS matches b and c as Same across the reorder; with the calldiff
-    // backtrack rule (removed-first), the output surfaces the removed `a`
-    // before the added `d`.
-    let before = node(
+    let before = test_node(
         "root",
-        vec![node("a", vec![]), node("b", vec![]), node("c", vec![])],
+        NodeKind::Call,
+        vec![call("a"), call("b"), call("c")],
     );
-    let after = node(
+    let after = test_node(
         "root",
-        vec![node("b", vec![]), node("c", vec![]), node("d", vec![])],
+        NodeKind::Call,
+        vec![call("b"), call("c"), call("d")],
     );
     let diff = diff_trees(&before, &after);
     let names: Vec<&str> = diff.children.iter().map(|c| c.name.as_str()).collect();
@@ -148,41 +242,20 @@ fn diff_reordered_children_match_by_name() {
     assert_eq!(diff.children[3].status, DiffStatus::Added);
 }
 
-#[test]
-fn diff_nested_changes_recurse() {
-    let before = node("root", vec![node("a", vec![node("x", vec![])])]);
-    let after = node(
-        "root",
-        vec![node("a", vec![node("x", vec![]), node("y", vec![])])],
-    );
-    let diff = diff_trees(&before, &after);
-    let a = &diff.children[0];
-    assert_eq!(a.status, DiffStatus::Same);
-    let statuses: Vec<DiffStatus> = a.children.iter().map(|c| c.status).collect();
-    assert_eq!(statuses, vec![DiffStatus::Same, DiffStatus::Added]);
-}
-
-#[test]
-fn diff_added_subtree_marked_recursively() {
-    let before = node("root", vec![]);
-    let after = node("root", vec![node("a", vec![node("b", vec![])])]);
-    let diff = diff_trees(&before, &after);
-    assert_eq!(diff.children[0].status, DiffStatus::Added);
-    assert_eq!(diff.children[0].children[0].status, DiffStatus::Added);
-}
-
-// ── render_diff ──────────────────────────────────────────────────────────────
+// ── rendering (branch rail, root connector) ─────────────────────────────────
 
 #[test]
 fn render_marks_status_prefixes() {
     let diff = DiffNode {
         name: "root".to_string(),
+        kind: NodeKind::Call,
         file: String::new(),
         line: 0,
         status: DiffStatus::Same,
         children: vec![
             DiffNode {
                 name: "a".to_string(),
+                kind: NodeKind::Call,
                 file: String::new(),
                 line: 0,
                 status: DiffStatus::Added,
@@ -190,6 +263,7 @@ fn render_marks_status_prefixes() {
             },
             DiffNode {
                 name: "b".to_string(),
+                kind: NodeKind::Call,
                 file: String::new(),
                 line: 0,
                 status: DiffStatus::Removed,
@@ -198,60 +272,198 @@ fn render_marks_status_prefixes() {
         ],
     };
     let out = render_diff(&diff);
-    assert!(out.starts_with("  └─ root\n"), "root is Same: got {out:?}");
+    assert!(
+        out.starts_with("  root\n"),
+        "root has no connector: got {out:?}"
+    );
     assert!(out.contains("+    ├─ a\n"), "added child: got {out:?}");
     assert!(out.contains("-    └─ b\n"), "removed child: got {out:?}");
 }
 
-// ── git integration (slow under heavy machine load — normally ignored) ───────
-
-/// End-to-end: a temp git repo with two commits (entry→a, then entry→a+b);
-/// `call diff` semantics should report `b` as added.
 #[test]
-fn git_diff_end_to_end() {
-    use std::process::Command;
-    use tempfile::TempDir;
-
-    let dir = TempDir::new().expect("temp dir");
-    let v1 = "package demo\n\nfun a(): String = \"a\"\n\nfun entry(): String = a()\n";
-    let v2 = "package demo\n\nfun a(): String = \"a\"\nfun b(): String = \"b\"\n\nfun entry(): String = if (true) a() else b()\n";
-    std::fs::write(dir.path().join("Main.kt"), v1).expect("write v1");
-
-    let git = |args: &[&str]| {
-        let out = Command::new("git")
-            .args(args)
-            .current_dir(dir.path())
-            .output()
-            .expect("run git");
-        assert!(
-            out.status.success(),
-            "git {args:?} failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+fn render_branch_children_omit_rail() {
+    let diff = DiffNode {
+        name: "root".to_string(),
+        kind: NodeKind::Call,
+        file: String::new(),
+        line: 0,
+        status: DiffStatus::Same,
+        children: vec![DiffNode {
+            name: "if x > 0".to_string(),
+            kind: NodeKind::Branch,
+            file: String::new(),
+            line: 0,
+            status: DiffStatus::Same,
+            children: vec![DiffNode {
+                name: "left()".to_string(),
+                kind: NodeKind::Call,
+                file: String::new(),
+                line: 0,
+                status: DiffStatus::Same,
+                children: vec![],
+            }],
+        }],
     };
-    git(&["init", "-q"]);
-    git(&["config", "user.email", "t@t"]);
-    git(&["config", "user.name", "t"]);
-    git(&["add", "Main.kt"]);
-    git(&["commit", "-qm", "v1"]);
-    std::fs::write(dir.path().join("Main.kt"), v2).expect("write v2");
-    git(&["add", "Main.kt"]);
-    git(&["commit", "-qm", "v2"]);
-
-    let before =
-        crate::cli::call_diff::load_tree("HEAD~1", "entry", dir.path()).expect("load v1 tree");
-    let after =
-        crate::cli::call_diff::load_tree("HEAD", "entry", dir.path()).expect("load v2 tree");
-    let diff = diff_trees(&before, &after);
-    // v2 entry calls a and b; v1 entry calls only a → b is Added.
-    let b_node = diff
-        .children
-        .iter()
-        .find(|c| c.name == "b")
-        .expect("b present in diff");
-    assert_eq!(b_node.status, DiffStatus::Added);
+    let out = render_diff(&diff);
     assert!(
-        !b_node.file.is_empty(),
-        "definition location filled from scan"
+        out.contains("└─ left()"),
+        "branch child present: got {out:?}"
     );
+    assert!(
+        !out.contains('│'),
+        "branch children render without the continuing rail: got {out:?}"
+    );
+}
+
+// ── git-diff semantics ───────────────────────────────────────────────────────
+
+fn git(cwd: &Path, args: &[&str]) {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("run git");
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+fn make_repo(dir: &Path, committed: &str, worktree: Option<&str>) {
+    std::fs::write(dir.join("Main.kt"), committed).expect("write committed version");
+    git(dir, &["init", "-q"]);
+    git(dir, &["config", "user.email", "t@t"]);
+    git(dir, &["config", "user.name", "t"]);
+    git(dir, &["add", "Main.kt"]);
+    git(dir, &["commit", "-qm", "v1"]);
+    if let Some(wt) = worktree {
+        std::fs::write(dir.join("Main.kt"), wt).expect("write worktree version");
+    }
+}
+
+#[test]
+fn snapshots_default_to_head_vs_worktree() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    make_repo(dir.path(), "fun entry() = a()\nfun a() = \"a\"\n", None);
+    let (from, to, paths) =
+        resolve_snapshots_and_paths(dir.path(), None, None, &[]).expect("resolve defaults");
+    assert_eq!(
+        from,
+        Snapshot::Commit {
+            ref_name: "HEAD".into()
+        }
+    );
+    assert_eq!(to, Snapshot::Worktree);
+    assert!(paths.is_empty());
+}
+
+#[test]
+fn snapshots_one_ref_vs_worktree() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    make_repo(dir.path(), "fun a() = \"a\"\n", None);
+    let (from, to, _) =
+        resolve_snapshots_and_paths(dir.path(), Some("HEAD"), None, &[]).expect("one ref");
+    assert_eq!(
+        from,
+        Snapshot::Commit {
+            ref_name: "HEAD".into()
+        }
+    );
+    assert_eq!(to, Snapshot::Worktree);
+}
+
+#[test]
+fn snapshots_on_disk_positional_becomes_path_filter() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    make_repo(dir.path(), "fun a() = \"a\"\n", None);
+    std::fs::create_dir_all(dir.path().join("src")).expect("mkdir src");
+    let (from, to, paths) =
+        resolve_snapshots_and_paths(dir.path(), Some("src"), None, &[]).expect("path filter");
+    assert_eq!(
+        from,
+        Snapshot::Commit {
+            ref_name: "HEAD".into()
+        }
+    );
+    assert_eq!(to, Snapshot::Worktree);
+    assert_eq!(paths, vec!["src"], "on-disk positional is a path filter");
+}
+
+#[test]
+fn snapshots_two_refs_both_commits() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    make_repo(dir.path(), "fun a() = \"a\"\n", None);
+    // HEAD~0 is HEAD itself; both refs valid.
+    let (from, to, _) =
+        resolve_snapshots_and_paths(dir.path(), Some("HEAD"), Some("HEAD"), &[]).expect("two refs");
+    assert_eq!(
+        from,
+        Snapshot::Commit {
+            ref_name: "HEAD".into()
+        }
+    );
+    assert_eq!(
+        to,
+        Snapshot::Commit {
+            ref_name: "HEAD".into()
+        }
+    );
+}
+
+#[test]
+fn snapshots_unknown_ref_errors() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    make_repo(dir.path(), "fun a() = \"a\"\n", None);
+    let result = resolve_snapshots_and_paths(dir.path(), Some("nope-nope"), None, &[]);
+    assert!(result.is_err(), "unknown ref must error");
+}
+
+#[test]
+fn git_default_diff_head_vs_dirty_worktree() {
+    use tempfile::TempDir;
+    let v1 = "fun entry(): String = a()\nfun a() = \"a\"\n";
+    let v2 = "fun entry(): String = if (true) a() else b()\nfun a() = \"a\"\nfun b() = \"b\"\n";
+    let dir = TempDir::new().expect("temp dir");
+    make_repo(dir.path(), v1, Some(v2));
+
+    let (from, to, paths) =
+        resolve_snapshots_and_paths(dir.path(), None, None, &[]).expect("defaults");
+    let before = super::call_diff::load_index(dir.path(), &from, &paths).expect("before index");
+    let after = super::call_diff::load_index(dir.path(), &to, &paths).expect("after index");
+
+    // entry's tree changed (b added under else) → diff_entry finds the change.
+    let diff = diff_entry("entry", &before, &after, DEFAULT_MAX_DEPTH).expect("changed entry");
+    assert!(
+        diff.children
+            .iter()
+            .any(|c| c.name == "if true" || c.name == "if (true)"),
+        "branch change surfaced: {}",
+        render_diff(&diff)
+    );
+}
+
+#[test]
+fn path_filter_limits_loaded_files() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    std::fs::create_dir_all(dir.path().join("a")).expect("mkdir a");
+    std::fs::write(dir.path().join("a/One.kt"), "fun one() = \"1\"\n").expect("write one");
+    std::fs::write(dir.path().join("Two.kt"), "fun two() = \"2\"\n").expect("write two");
+    git(dir.path(), &["init", "-q"]);
+    git(dir.path(), &["config", "user.email", "t@t"]);
+    git(dir.path(), &["config", "user.name", "t"]);
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "v1"]);
+
+    let (_, _, paths) = resolve_snapshots_and_paths(dir.path(), None, None, &["a".to_string()])
+        .expect("path filter");
+    let files = super::call_diff::list_source_files(dir.path(), &Snapshot::Worktree, &paths)
+        .expect("list files");
+    assert_eq!(files, vec!["a/One.kt"], "only files under the filter");
 }

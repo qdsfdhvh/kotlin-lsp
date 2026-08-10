@@ -6,6 +6,7 @@ mod batch;
 mod batch_query;
 mod call_diff;
 mod call_graph;
+mod call_steps;
 mod check;
 mod complete;
 mod diagnose;
@@ -47,6 +48,8 @@ mod format_tests;
 
 #[cfg(test)]
 mod call_diff_tests;
+#[cfg(test)]
+mod call_steps_tests;
 #[cfg(test)]
 mod query_engine_tests;
 mod search;

@@ -76,7 +76,7 @@ kotlin-lsp search expect-actual <name>
 
 # Call graph
 kotlin-lsp call hierarchy <file> <line> <col>
-kotlin-lsp call diff <ref1> <ref2> <name>  # call-tree diff between two git refs (--entry <name> also accepted)
+kotlin-lsp call diff [<ref1> [<ref2>]] [<name>]  # call-tree diff (git-diff style; inferred entries when name omitted)
 kotlin-lsp call reach <entry> [--to <target>]  # every call path entry→target
 # Type hierarchy
 kotlin-lsp type hierarchy <Name>
@@ -126,8 +126,9 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Semantic insert | `kotlin-lsp edit insert <file> <kind>` |
 | Inject types | `kotlin-lsp edit inject <file>` |
 | Call hierarchy | `kotlin-lsp call hierarchy <file> <line> <col>` |
-| Call-tree diff | `kotlin-lsp call diff <ref1> <ref2> <name>` |
-| Call reach | `kotlin-lsp call reach <entry> [--to <target>]` — all call paths from an entrypoint || Impact analysis | `kotlin-lsp impact <file> <line> <col>` |
+| Call-tree diff | `kotlin-lsp call diff [<ref1> [<ref2>]] [<name>]` — branch-aware call-tree diff between git refs (HEAD vs worktree by default) |
+| Call reach | `kotlin-lsp call reach <entry> [--to <target>]` — all call paths from an entrypoint |
+| Impact analysis | `kotlin-lsp impact <file> <line> <col>` |
 | Type hierarchy | `kotlin-lsp type hierarchy <name>` |
 | Module list | `kotlin-lsp module list` |
 | Module deps | `kotlin-lsp module deps <name>` |

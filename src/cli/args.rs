@@ -357,11 +357,15 @@ pub(crate) enum CallSub {
         outgoing: bool,
         depth: u32,
     },
-    /// Diff call trees for an entrypoint between two git refs (POC: Kotlin only).
+    /// Diff call trees between two git refs (git-diff style: no refs →
+    /// HEAD vs working tree; one ref → that vs working tree; trailing
+    /// positionals that exist on disk are path filters). Entry optional —
+    /// inferred from exported functions when omitted.
     Diff {
-        ref1: String,
-        ref2: String,
-        entry: String,
+        /// Leading refs, optional entry name, then path filters.
+        positionals: Vec<String>,
+        entry: Option<String>,
+        max_depth: u32,
     },
     /// Enumerate every call path from `entry` to `target` (or all reachable
     /// paths when `target` is None) through the workspace call graph.
@@ -1356,21 +1360,15 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     })
                 }
                 "diff" => {
-                    let ref1 = positionals
-                        .get(1)
-                        .cloned()
-                        .ok_or("call diff requires REF1 (e.g. HEAD~1)")?;
-                    let ref2 = positionals
-                        .get(2)
-                        .cloned()
-                        .ok_or("call diff requires REF2 (e.g. main)")?;
-                    let entry = parsed
-                        .entry
-                        .clone()
-                        .or_else(|| positionals.get(3).cloned())
-                        .ok_or("call diff requires an ENTRY name (positional or --entry)")?;
+                    let positionals = positionals[1..].to_vec();
                     Ok(Subcommand::Call {
-                        sub: CallSub::Diff { ref1, ref2, entry },
+                        sub: CallSub::Diff {
+                            positionals,
+                            entry: parsed.entry.clone(),
+                            max_depth: parsed
+                                .max_depth
+                                .unwrap_or(crate::cli::call_diff::DEFAULT_MAX_DEPTH),
+                        },
                     })
                 }
                 "reach" => {
@@ -1756,7 +1754,7 @@ SUBCOMMANDS:
 
     call hierarchy <file> <line> <col>   Show callers/callees for symbol at position
     call hierarchy <name>                Show callers/callees for a symbol by name
-    call diff <ref1> <ref2> <name>      Diff call trees between two git refs
+    call diff [<ref1> [<ref2>]] [<name>]   Diff call trees between git refs (git-diff style)
     call reach <entry> [--to <target>]   List all call paths from an entrypoint    type hierarchy <name>                Show subtypes or supertypes
     type sealed <name>                   Show sealed subclasses
     module list                          List all project modules
