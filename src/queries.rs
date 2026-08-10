@@ -466,3 +466,13 @@ pub(crate) const KIND_KW_ENUM: &str = "enum";
 pub(crate) const KIND_KW_VAL: &str = "val";
 pub(crate) const KIND_BINDING_PATTERN_KIND: &str = "binding_pattern_kind";
 pub(crate) const KIND_PREFIX_EXPR: &str = "prefix_expression";
+
+// ─── Kotlin statement/expression kinds (call-steps extractor) ────────────────
+pub(crate) const KIND_IF_EXPR: &str = "if_expression";
+pub(crate) const KIND_WHEN_EXPR: &str = "when_expression";
+pub(crate) const KIND_WHEN_ENTRY: &str = "when_entry";
+pub(crate) const KIND_WHEN_CONDITION: &str = "when_condition";
+pub(crate) const KIND_TRY_EXPR: &str = "try_expression";
+pub(crate) const KIND_FINALLY_BLOCK: &str = "finally_block";
+pub(crate) const KIND_SECONDARY_CTOR: &str = "secondary_constructor";
+pub(crate) const KIND_ANON_INIT: &str = "anonymous_initializer";

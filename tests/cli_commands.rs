@@ -438,3 +438,75 @@ fn uninstall_other_input_cancels() {
     assert!(output.status.success());
     assert!(stdout.contains("Cancelled"));
 }
+
+// ── call diff (complete: git-diff defaults, inference, CTA) ─────────────────
+
+fn git_in(cwd: &Path, args: &[&str]) {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// `call diff` with no refs diffs HEAD against the dirty working tree and
+/// prints a CTA hint (text mode).
+#[test]
+fn call_diff_defaults_to_head_vs_worktree_with_cta() {
+    let dir = tempfile::tempdir().unwrap();
+    let v1 = "fun entry(): String = a()\nfun a() = \"a\"\n";
+    let v2 = "fun entry(): String = a()\nfun a() = \"a\"\nfun brandNew(): String = \"b\"\n";
+    write_fixture(dir.path(), "Main.kt", v1);
+    git_in(dir.path(), &["init", "-q"]);
+    git_in(dir.path(), &["config", "user.email", "t@t"]);
+    git_in(dir.path(), &["config", "user.name", "t"]);
+    git_in(dir.path(), &["add", "Main.kt"]);
+    git_in(dir.path(), &["commit", "-qm", "v1"]);
+    write_fixture(dir.path(), "Main.kt", v2); // dirty worktree
+
+    let out = Command::new(BIN)
+        .args(["call", "diff", "--root"])
+        .arg(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "call diff failed: {:?}", out);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("brandNew"),
+        "inferred new exported entry appears: {stdout}"
+    );
+    assert!(
+        stdout.contains("hint: call diff --entry brandNew"),
+        "CTA hint present in text mode: {stdout}"
+    );
+}
+
+/// `call diff --json` suppresses the CTA hint.
+#[test]
+fn call_diff_json_has_no_cta() {
+    let dir = tempfile::tempdir().unwrap();
+    let v1 = "fun entry(): String = a()\nfun a() = \"a\"\n";
+    let v2 = "fun entry(): String = a()\nfun a() = \"a\"\nfun brandNew(): String = \"b\"\n";
+    write_fixture(dir.path(), "Main.kt", v1);
+    git_in(dir.path(), &["init", "-q"]);
+    git_in(dir.path(), &["config", "user.email", "t@t"]);
+    git_in(dir.path(), &["config", "user.name", "t"]);
+    git_in(dir.path(), &["add", "Main.kt"]);
+    git_in(dir.path(), &["commit", "-qm", "v1"]);
+    write_fixture(dir.path(), "Main.kt", v2);
+
+    let out = Command::new(BIN)
+        .args(["call", "diff", "--json", "--root"])
+        .arg(dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "call diff --json failed: {:?}", out);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("hint:"), "no CTA in json mode: {stdout}");
+    assert!(stdout.contains("\"trees\""), "json envelope present");
+}
