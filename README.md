@@ -58,6 +58,16 @@ cargo build --release
 
 - **[docs/commands.md](docs/commands.md)** — full command reference, examples, flags
 
+Call-graph tooling for agents (tree-sitter based, no JVM):
+
+```bash
+kotlin-lsp call reach entry --to target    # every call path entry→target
+kotlin-lsp call diff                        # call-tree diff HEAD vs worktree (branch-aware, inferred entries)
+kotlin-lsp call diff main feature --entry boot
+kotlin-lsp call hierarchy F.kt 42 10        # callers / callees
+kotlin-lsp --version                        # tool + tree-sitter grammar versions
+```
+
 ---
 
 ## For AI agents
