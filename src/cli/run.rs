@@ -1309,10 +1309,18 @@ pub(crate) async fn run(args: CliArgs) {
                 entry,
                 target,
                 max_depth,
+                no_stdlib,
             } => {
                 let root = resolve_root(args.root.as_deref());
-                crate::cli::reach::run_reach(root, &entry, target.as_deref(), max_depth, json)
-                    .await;
+                crate::cli::reach::run_reach(
+                    root,
+                    &entry,
+                    target.as_deref(),
+                    max_depth,
+                    json,
+                    no_stdlib,
+                )
+                .await;
             }
         },
         Subcommand::Impact { file, line, col } => {

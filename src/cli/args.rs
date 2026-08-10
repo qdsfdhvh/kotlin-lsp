@@ -373,6 +373,8 @@ pub(crate) enum CallSub {
         entry: String,
         target: Option<String>,
         max_depth: u32,
+        /// Skip stdlib sources during indexing (default loads them).
+        no_stdlib: bool,
     },
 }
 
@@ -1383,6 +1385,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                             max_depth: parsed
                                 .max_depth
                                 .unwrap_or(crate::cli::reach::DEFAULT_MAX_DEPTH),
+                            no_stdlib: parsed.no_stdlib,
                         },
                     })
                 }
