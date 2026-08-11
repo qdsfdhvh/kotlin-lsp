@@ -527,7 +527,7 @@ pub(crate) async fn run(args: CliArgs) {
         }
         Subcommand::GradleDeps => {
             let root = resolve_root(args.root.as_deref());
-            let index = build_index_with_gradle(&root, false).await;
+            let index = build_index_with_gradle(&root, args.no_stdlib).await;
             let deps = index.gradle_deps.read().expect("gradle_deps lock");
             match deps.as_ref().and_then(|d| d.as_ref()) {
                 Some(gradle_deps) => {
@@ -919,9 +919,9 @@ pub(crate) async fn run(args: CliArgs) {
                 let out = output.as_deref();
                 let root = resolve_root_for_file(args.root.as_deref(), &file);
                 let index = if args.gradle {
-                    crate::cli::run::build_index_with_gradle(&root, false).await
+                    crate::cli::run::build_index_with_gradle(&root, args.no_stdlib).await
                 } else {
-                    crate::cli::run::build_index(&root, false).await
+                    crate::cli::run::build_index(&root, args.no_stdlib).await
                 };
                 let engine = WorkspaceQueryEngine::new(index);
                 super::batch::run_batch_imports(&file, &engine, dry_run, apply, json, out);
@@ -946,9 +946,9 @@ pub(crate) async fn run(args: CliArgs) {
                 let json = args.fmt == OutputFmt::Json;
                 let root = resolve_root_for_file(args.root.as_deref(), &file);
                 let index = if args.gradle {
-                    crate::cli::run::build_index_with_gradle(&root, false).await
+                    crate::cli::run::build_index_with_gradle(&root, args.no_stdlib).await
                 } else {
-                    crate::cli::run::build_index(&root, false).await
+                    crate::cli::run::build_index(&root, args.no_stdlib).await
                 };
                 let engine = WorkspaceQueryEngine::new(index);
                 super::insert::run_semantic_insert(
@@ -975,9 +975,9 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             let json = args.fmt == OutputFmt::Json;
             let root = resolve_root_for_file(args.root.as_deref(), &file);
-            let index = crate::cli::run::build_index(&root, false).await;
+            let index = crate::cli::run::build_index(&root, args.no_stdlib).await;
             let engine = WorkspaceQueryEngine::new(index.clone());
-            let abs_file = std::path::absolute(&file).unwrap_or_else(|_| file.to_path_buf());
+            let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
             let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid path");
             engine.index.ensure_indexed(&uri);
 
@@ -1127,7 +1127,7 @@ pub(crate) async fn run(args: CliArgs) {
             let json = args.fmt == OutputFmt::Json;
             let index = build_index(&root, true).await;
 
-            let abs_file = std::path::absolute(&file).unwrap_or_else(|_| file.to_path_buf());
+            let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
             let uri = Url::from_file_path(&abs_file).expect("valid file path");
 
             // Run parser diagnostics for the cursor position
@@ -1547,7 +1547,7 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Type { sub } => match sub {
             TypeSub::Sealed { name } => {
                 let root = resolve_root(args.root.as_deref());
-                let index = build_index(&root, false).await;
+                let index = build_index(&root, args.no_stdlib).await;
                 if json {
                     let mut result = serde_json::Map::new();
                     result.insert("name".into(), serde_json::json!(name));

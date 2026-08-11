@@ -425,6 +425,10 @@ pub(crate) struct CliArgs {
     /// When set, the indexer will parse build.gradle.kts / libs.versions.toml
     /// and index source JARs for external dependencies.
     pub gradle: bool,
+    /// `--no-stdlib`: skip `~/.kotlin-lsp/sources` when indexing. Parsed
+    /// globally; every command that builds an index honors it (issue pattern
+    /// from #257 — several commands hardcoded `false`).
+    pub no_stdlib: bool,
 }
 
 impl CliArgs {
@@ -452,6 +456,7 @@ impl CliArgs {
         let absolute = parsed.absolute;
         let flat = parsed.flat;
         let gradle = parsed.gradle;
+        let no_stdlib = parsed.no_stdlib;
         let subcommand = build_subcommand(&subcommand, parsed)?;
         Ok(Some(Self {
             subcommand,
@@ -459,6 +464,7 @@ impl CliArgs {
             fmt,
             root,
             verbose,
+            no_stdlib,
             absolute,
             flat,
             gradle,
