@@ -1,3 +1,15 @@
+## 0.31.5 (2026-08-11)
+
+### fix: call reach interface expansion + CHANGELOG gap (#285, #286; PR #287)
+
+- **call reach** (#285): a call through an interface/abstract-typed receiver
+  (`r.process()` with `r: Reader`) now expands the implementors' same-named
+  methods — the declared-type resolution (#278) keys the callee as
+  `Reader.process`, but the body lives in the implementor, so the path
+  previously stopped there.
+- **CHANGELOG** (#286): 0.31.4's section omitted PR #282 (#278-#281), the
+  substantive part of that release; restored.
+
 ## 0.31.4 (2026-08-11)
 
 ### fix: 0.31.3 regressions (#278-#281, PR #282)
