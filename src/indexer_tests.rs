@@ -2389,7 +2389,7 @@ fn java_file_populates_call_edges() {
     assert!(
         callers
             .as_ref()
-            .is_some_and(|v| v.iter().any(|(_, caller)| caller == "javaMid")),
+            .is_some_and(|v| v.iter().any(|(_, caller)| caller == "JavaHelper.javaMid")),
         "javaLeaf has javaMid as caller: {callers:?}"
     );
 }

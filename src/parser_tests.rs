@@ -3071,10 +3071,11 @@ fn enum_class_kind_label_stays_enum() {
 fn java_call_edges_extracted() {
     let src = "public final class JavaHelper {\n    public static void javaMid() {\n        javaLeaf();\n    }\n}\n";
     let edges = crate::parser::extract_call_edges(src, crate::Language::Java);
-    eprintln!("java edges: {edges:?}");
     assert!(
-        edges.iter().any(|(c, k)| c == "javaMid" && k == "javaLeaf"),
-        "java call edge javaMid -> javaLeaf present: {edges:?}"
+        edges
+            .iter()
+            .any(|(c, k)| c == "JavaHelper.javaMid" && k == "javaLeaf"),
+        "java call edge JavaHelper.javaMid -> javaLeaf present: {edges:?}"
     );
 }
 
@@ -3086,7 +3087,7 @@ fn java_kotlin_mixed_repo_paths() {
     assert!(
         kotlin_edges
             .iter()
-            .any(|(c, k)| c == "kotlinEntry" && k == "javaMid"),
+            .any(|(c, k)| c == "kotlinEntry" && k == "JavaHelper.javaMid"),
         "kotlin -> java static call edge present: {kotlin_edges:?}"
     );
 }

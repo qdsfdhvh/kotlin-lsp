@@ -9,17 +9,17 @@ use tree_sitter::{Node, Parser, Query, QueryCursor};
 use crate::indexer::NodeExt;
 use crate::queries::{
     self, KIND_ANNOTATION, KIND_ANNOTATION_TYPE_DECL, KIND_CALLABLE_REF, KIND_CALL_EXPR,
-    KIND_CALL_SUFFIX, KIND_CLASS_DECL, KIND_CTOR_DECL, KIND_DELEGATION_SPEC, KIND_ENUM_CONSTANT,
-    KIND_ENUM_DECL, KIND_EQ, KIND_EXTENDS_INTERFACES, KIND_FIELD_DECL, KIND_FUN, KIND_FUN_BODY,
-    KIND_FUN_DECL, KIND_FUN_VALUE_PARAMS, KIND_IDENTIFIER, KIND_IMPORT_ALIAS, KIND_IMPORT_DECL,
-    KIND_IMPORT_HEADER, KIND_IMPORT_LIST, KIND_INHERITANCE_SPEC, KIND_INHERITANCE_SPECS,
-    KIND_INTERFACE_DECL, KIND_LAMBDA_LIT, KIND_METHOD_DECL, KIND_METHOD_INVOCATION, KIND_MODIFIERS,
-    KIND_MOD_FINAL, KIND_MOD_STATIC, KIND_NAV_EXPR, KIND_OBJECT_DECL, KIND_PACKAGE_DECL,
-    KIND_PACKAGE_HEADER, KIND_PARAMETER, KIND_PROP_DECL, KIND_PROP_DELEGATE, KIND_PROTOCOL_DECL,
-    KIND_RECORD_DECL, KIND_RPAREN, KIND_SCOPED_IDENT, KIND_SIMPLE_IDENT, KIND_STATEMENTS,
-    KIND_SUPERCLASS, KIND_SUPER_INTERFACES, KIND_TYPE_IDENT, KIND_USER_TYPE, KIND_VALUE_ARG,
-    KIND_VALUE_ARGS, KIND_VAR_DECL, KIND_VAR_DECLARATOR, KIND_WILDCARD_IMPORT, KOTLIN_DEFINITIONS,
-    SWIFT_DEFINITIONS,
+    KIND_CALL_SUFFIX, KIND_CLASS_DECL, KIND_COMPANION_OBJ, KIND_CTOR_DECL, KIND_DELEGATION_SPEC,
+    KIND_ENUM_CONSTANT, KIND_ENUM_DECL, KIND_EQ, KIND_EXTENDS_INTERFACES, KIND_FIELD_DECL,
+    KIND_FUN, KIND_FUN_BODY, KIND_FUN_DECL, KIND_FUN_VALUE_PARAMS, KIND_IDENTIFIER,
+    KIND_IMPORT_ALIAS, KIND_IMPORT_DECL, KIND_IMPORT_HEADER, KIND_IMPORT_LIST,
+    KIND_INHERITANCE_SPEC, KIND_INHERITANCE_SPECS, KIND_INTERFACE_DECL, KIND_LAMBDA_LIT,
+    KIND_METHOD_DECL, KIND_METHOD_INVOCATION, KIND_MODIFIERS, KIND_MOD_FINAL, KIND_MOD_STATIC,
+    KIND_NAV_EXPR, KIND_OBJECT_DECL, KIND_PACKAGE_DECL, KIND_PACKAGE_HEADER, KIND_PARAMETER,
+    KIND_PROP_DECL, KIND_PROP_DELEGATE, KIND_PROTOCOL_DECL, KIND_RECORD_DECL, KIND_RPAREN,
+    KIND_SCOPED_IDENT, KIND_SIMPLE_IDENT, KIND_STATEMENTS, KIND_SUPERCLASS, KIND_SUPER_INTERFACES,
+    KIND_TYPE_IDENT, KIND_USER_TYPE, KIND_VALUE_ARG, KIND_VALUE_ARGS, KIND_VAR_DECL,
+    KIND_VAR_DECLARATOR, KIND_WILDCARD_IMPORT, KOTLIN_DEFINITIONS, SWIFT_DEFINITIONS,
 };
 use crate::StrExt;
 
@@ -2302,17 +2302,24 @@ fn find_callee_name_from_node(node: &tree_sitter::Node, source: &str) -> String 
                 return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
             }
             if kind == "navigation_expression" {
-                // Get the last identifier (method name)
-                return child
-                    .utf8_text(source.as_bytes())
-                    .unwrap_or("")
+                // Method name + best-effort receiver type (issue #267):
+                // `ExampleReader().process()` and `ExampleReader.process()`
+                // both yield `ExampleReader.process`; an unknown receiver
+                // (a local variable) yields the bare `process`. The qualified
+                // form stops same-named methods on different types from
+                // merging into one callee node.
+                let full = child.utf8_text(source.as_bytes()).unwrap_or("");
+                let method = full
                     .rsplit('.')
                     .next()
                     .unwrap_or("")
                     .split('(')
                     .next()
-                    .unwrap_or("")
-                    .to_string();
+                    .unwrap_or("");
+                if let Some(prefix) = receiver_type_prefix(full) {
+                    return format!("{prefix}.{method}");
+                }
+                return method.to_string();
             }
             return String::new();
         }
@@ -2329,19 +2336,82 @@ fn find_caller_fn_name_from_call(node: &tree_sitter::Node, source: &str) -> Opti
                 // Find the function/method name child: `simple_identifier`
                 // (Kotlin) or `identifier` (Java, issue #266).
                 let mut cursor = p.walk();
+                let mut name: Option<String> = None;
                 for child in p.children(&mut cursor) {
                     if child.kind() == "simple_identifier" || child.kind() == "identifier" {
-                        return child
+                        name = child
                             .utf8_text(source.as_bytes())
                             .ok()
                             .map(|s| s.to_string());
+                        break;
                     }
                 }
-                return None;
+                let name = name?;
+                // Qualify with the enclosing type (issue #267): same-named
+                // methods on different types would otherwise merge into one
+                // caller node in the call graph, making `call reach` report a
+                // path that does not exist. Top-level functions keep the bare
+                // name.
+                let mut up = p.parent();
+                while let Some(u) = up {
+                    if matches!(
+                        u.kind(),
+                        KIND_CLASS_DECL
+                            | KIND_OBJECT_DECL
+                            | KIND_COMPANION_OBJ
+                            | KIND_INTERFACE_DECL
+                    ) {
+                        if let Some(cls) = first_type_identifier(&u, source) {
+                            return Some(format!("{cls}.{name}"));
+                        }
+                        break;
+                    }
+                    up = u.parent();
+                }
+                return Some(name);
             }
             _ => {
                 parent = p.parent();
             }
+        }
+    }
+    None
+}
+
+/// Best-effort receiver type prefix for a navigation expression like
+/// `ExampleReader().process()` / `ExampleReader.process()` / `this.method()`.
+/// Returns `None` for unknown receivers (local variables) — the callee then
+/// stays bare-named and is not type-qualified.
+fn receiver_type_prefix(full: &str) -> Option<String> {
+    let receiver = full.split('.').next().unwrap_or("");
+    let receiver = receiver.trim();
+    if receiver.is_empty() || receiver == "this" || receiver == "super" {
+        return None;
+    }
+    // Constructor call `ExampleReader(...)` or type reference `ExampleReader`
+    // (starts uppercase) → qualify with that type. A lowercase variable
+    // receiver has no statically known type.
+    let base = receiver.split('(').next().unwrap_or(receiver).trim();
+    if base.is_empty() {
+        return None;
+    }
+    let first = base.chars().next().unwrap_or(' ');
+    if first.is_uppercase() {
+        Some(base.to_string())
+    } else {
+        None
+    }
+}
+
+/// First type-identifier/identifier child of a type-declaration node.
+fn first_type_identifier(node: &tree_sitter::Node, source: &str) -> Option<String> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "type_identifier" || child.kind() == "identifier" {
+            return child
+                .utf8_text(source.as_bytes())
+                .ok()
+                .map(|s| s.to_string());
         }
     }
     None
