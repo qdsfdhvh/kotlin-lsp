@@ -124,6 +124,11 @@ pub(crate) struct SymbolEntry {
     /// Whether the class/interface is declared with the `sealed` modifier.
     #[serde(default)]
     pub is_sealed: bool,
+    /// Whether the symbol is a `typealias` declaration. lsp-types has no
+    /// TYPE_ALIAS kind, so `--kind typealias` needs an explicit marker
+    /// (issue #269); the detail field holds source text, not this flag.
+    #[serde(default)]
+    pub is_typealias: bool,
 }
 
 impl SymbolEntry {
@@ -134,6 +139,17 @@ impl SymbolEntry {
     /// multiline declarations). Reduces coupling and avoids repeated deep field access.
     pub(crate) fn selection_start(&self) -> u32 {
         self.selection_range.start.line
+    }
+
+    /// CLI-facing kind label (`{:?}` lowercased), except typealiases get their
+    /// own `typealias` kind (issue #269): lsp-types has no TYPE_ALIAS kind, and
+    /// `--kind typealias` must match the declarations `--kind class` should not.
+    pub(crate) fn kind_label(&self) -> String {
+        if self.is_typealias {
+            "typealias".to_string()
+        } else {
+            format!("{:?}", self.kind).to_lowercase()
+        }
     }
 }
 

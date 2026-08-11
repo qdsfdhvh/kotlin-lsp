@@ -1647,6 +1647,7 @@ fn stale_keys_includes_both_qualified_aliases() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     };
     data.symbols.push(sym);
     let stale = super::stale_keys_for(&uri, &data);
@@ -1688,6 +1689,7 @@ fn stale_keys_stem_equals_sym_no_alias() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     };
     data.symbols.push(sym);
     let stale = super::stale_keys_for(&uri, &data);
@@ -2177,6 +2179,7 @@ fn fn_type_subst_matches_params_to_args() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     };
 
     let sym_data = std::sync::Arc::new(FileData {
@@ -2220,6 +2223,7 @@ fn fn_type_subst_arg_count_mismatch() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     };
 
     let sym_data = std::sync::Arc::new(FileData {
@@ -2279,6 +2283,7 @@ fn fn_type_subst_no_type_params() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     };
     let sym_data = std::sync::Arc::new(FileData {
         symbols: vec![sym],
@@ -2363,5 +2368,28 @@ fn implicit_receiver_completion_same_file_class_body() {
     assert!(
         labels.contains(&"baz"),
         "should include baz itself; got: {labels:?}"
+    );
+}
+
+// ── Java call edges through the indexer (issue #266) ─────────────────────────
+
+#[test]
+fn java_file_populates_call_edges() {
+    let idx = Arc::new(Indexer::new());
+    let uri = Url::from_file_path(std::env::temp_dir().join("JavaHelper.java")).unwrap();
+    idx.index_content(
+        &uri,
+        "public final class JavaHelper {\n    public static void javaMid() {\n        javaLeaf();\n    }\n}\n",
+    );
+    // call_edges is keyed by callee: javaLeaf → [(file, javaMid)].
+    let callers: Option<Vec<_>> = idx
+        .call_edges
+        .get("javaLeaf")
+        .map(|v| v.iter().cloned().collect());
+    assert!(
+        callers
+            .as_ref()
+            .is_some_and(|v| v.iter().any(|(_, caller)| caller == "JavaHelper.javaMid")),
+        "javaLeaf has javaMid as caller: {callers:?}"
     );
 }

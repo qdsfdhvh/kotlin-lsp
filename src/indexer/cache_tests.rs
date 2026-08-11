@@ -41,6 +41,7 @@ fn cache_entry_to_file_result_supertypes_extracted() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     });
     data.supers.push((
         0,
@@ -92,6 +93,7 @@ fn cache_entry_to_file_result_preserves_hash() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     });
 
     let entry = FileCacheEntry {
@@ -186,4 +188,38 @@ fn save_and_load_cache_roundtrip() {
             "RoundtripClass symbol missing from cache roundtrip"
         );
     });
+}
+
+// ── Tier-1 dir freshness (issue #270) ────────────────────────────────────────
+
+#[test]
+fn dir_freshness_uses_mtime_without_payload() {
+    use std::time::{Duration, SystemTime};
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let src = dir.path().join("sources");
+    std::fs::create_dir_all(&src).expect("mkdir");
+    let cache = dir.path().join("library-abc.bin");
+    std::fs::write(&cache, b"x").expect("cache file");
+
+    // Cache newer than the source dir → fresh.
+    let now = SystemTime::now();
+    let _ = std::fs::File::options()
+        .write(true)
+        .open(&cache)
+        .and_then(|f| f.set_modified(now + Duration::from_secs(60)));
+    assert!(
+        super::library_cache_dirs_fresh(std::slice::from_ref(&src), &cache),
+        "cache newer than dir is fresh"
+    );
+
+    // Source dir newer than cache → stale (and it must not deserialize — this
+    // function is pure stat; it cannot fail on a corrupt payload).
+    let _ = std::fs::File::options()
+        .write(true)
+        .open(&cache)
+        .and_then(|f| f.set_modified(now - Duration::from_secs(60)));
+    assert!(
+        !super::library_cache_dirs_fresh(std::slice::from_ref(&src), &cache),
+        "dir newer than cache is stale"
+    );
 }

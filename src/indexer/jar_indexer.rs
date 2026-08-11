@@ -243,6 +243,7 @@ pub(crate) fn symbols_to_filedata(
             detail: sym.detail.clone(),
             type_params: Vec::new(),
             extension_receiver: String::new(),
+            is_typealias: false,
             deprecated: false,
             parent_fq_name: None,
             return_type: None,

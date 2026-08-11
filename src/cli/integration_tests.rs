@@ -221,8 +221,8 @@ fn call_edges_extracted_during_indexing() {
     let entries = edges.unwrap();
     assert!(!entries.is_empty(), "should have at least 1 caller");
     assert!(
-        entries.iter().any(|(_, caller)| caller == "main"),
-        "main should call helper"
+        entries.iter().any(|(_, caller)| caller == "Foo.main"),
+        "Foo.main should call helper (issue #267: callers are type-qualified)"
     );
 }
 

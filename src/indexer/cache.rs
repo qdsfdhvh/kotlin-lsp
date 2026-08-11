@@ -21,7 +21,7 @@ use crate::types::{FileData, FileIndexResult};
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /// Bump when the serialized format changes; invalidates any older cache files.
-pub(crate) const CACHE_VERSION: u32 = 18;
+pub(crate) const CACHE_VERSION: u32 = 19;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -329,26 +329,30 @@ pub(super) fn library_cache_path(source_paths: &[String]) -> PathBuf {
 /// Limitation: edited files not in the random sample are still missed.
 /// For `~/.kotlin-lsp/sources` (populated by `extract-sources`) this is
 /// acceptable because those files are not directly edited by users.
+/// Tier-1 freshness: source directory mtimes vs cache mtime — pure `stat`,
+/// no deserialization. Issue #270: the previous flow deserialized the whole
+/// (tens-of-MB) library cache before checking freshness on every one-shot CLI
+/// invocation; the dir-mtime check is cheap and rejects stale caches without
+/// touching the payload.
+pub(super) fn library_cache_dirs_fresh(source_paths: &[PathBuf], cache_path: &Path) -> bool {
+    let cache_mtime = match std::fs::metadata(cache_path).and_then(|m| m.modified()) {
+        Ok(t) => t,
+        Err(_) => return false,
+    };
+    source_paths.iter().all(|p| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .map(|dir_mtime| cache_mtime >= dir_mtime)
+            .unwrap_or(false)
+    })
+}
+
 pub(super) fn library_cache_is_fresh(
     source_paths: &[PathBuf],
     cache_path: &Path,
     cached_entries: &HashMap<String, FileCacheEntry>,
 ) -> bool {
-    let cache_mtime = match std::fs::metadata(cache_path).and_then(|m| m.modified()) {
-        Ok(t) => t,
-        Err(_) => return false,
-    };
-    // Tier 1: directory mtime.  Detects files added or removed directly inside each source
-    // path on most filesystems (the immediate parent directory mtime changes on add/remove).
-    // Note: on Linux, modifying a file's contents does NOT update its parent directory mtime,
-    // so this tier cannot detect modifications — Tier 2 handles that case.
-    let dirs_fresh = source_paths.iter().all(|p| {
-        std::fs::metadata(p)
-            .and_then(|m| m.modified())
-            .map(|dir_mtime| cache_mtime >= dir_mtime)
-            .unwrap_or(false)
-    });
-    if !dirs_fresh {
+    if !library_cache_dirs_fresh(source_paths, cache_path) {
         return false;
     }
     // Tier 2: validate a spread sample of cached entries against on-disk mtime+size.

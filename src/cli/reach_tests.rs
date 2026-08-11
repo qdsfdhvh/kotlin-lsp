@@ -256,3 +256,83 @@ fn target_path_respects_language() {
     );
     assert_eq!(paths.len(), 1);
 }
+
+// ── Kotlin→Java paths (issue #266) ───────────────────────────────────────────
+
+/// A Kotlin entry calling a Java static method must keep following Java edges:
+/// single-language nodes are NOT filtered, only same-named multi-language
+/// ambiguity is (that is the #259 rule).
+#[test]
+fn kotlin_entry_follows_java_callees() {
+    let idx = Arc::new(Indexer::new());
+    let kotlin = "package a\nfun kotlinEntry() { JavaHelper.javaMid() }\n";
+    let java = "public final class JavaHelper {\n    public static void javaMid() {\n        javaLeaf();\n    }\n}\n";
+    let kt_uri = Url::from_file_path(std::env::temp_dir().join("KtCaller.kt")).expect("uri");
+    let java_uri = Url::from_file_path(std::env::temp_dir().join("JavaHelper.java")).expect("uri");
+    idx.index_content(&kt_uri, kotlin);
+    idx.index_content(&java_uri, java);
+
+    let map = build_callee_map(&idx);
+    let (paths, _) = enumerate_paths(
+        &map,
+        "kotlinEntry",
+        Some("javaLeaf"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert_eq!(paths.len(), 1, "kotlin entry reaches java leaf: {paths:?}");
+    let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+    assert_eq!(names, vec!["kotlinEntry", "JavaHelper.javaMid", "javaLeaf"]);
+}
+
+// ── same-named methods on different types (issue #267) ───────────────────────
+
+/// entry calls ExampleReader.process (constructor receiver), which calls
+/// readFromDisk. ExampleWriter.process (same name) calls writeToDisk. The
+/// writer's method must NOT be reachable from entry — no false-positive paths.
+#[test]
+fn same_named_methods_do_not_merge_across_types() {
+    let idx = Arc::new(Indexer::new());
+    let src = r#"
+class ExampleReader {
+    fun process() { readFromDisk() }
+    fun readFromDisk() {}
+}
+class ExampleWriter {
+    fun process() { writeToDisk() }
+    fun writeToDisk() {}
+}
+fun entry() { ExampleReader().process() }
+"#;
+    let uri = Url::from_file_path(std::env::temp_dir().join("Types.kt")).expect("uri");
+    idx.index_content(&uri, src);
+
+    let map = build_callee_map(&idx);
+    // The real path exists: entry → ExampleReader.process → readFromDisk.
+    let (paths, _) = enumerate_paths(
+        &map,
+        "entry",
+        Some("readFromDisk"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert_eq!(paths.len(), 1, "reader path found: {paths:?}");
+    let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["entry", "ExampleReader.process", "readFromDisk"]
+    );
+
+    // The false path must not exist: writeToDisk is unreachable from entry.
+    let (paths, _) = enumerate_paths(
+        &map,
+        "entry",
+        Some("writeToDisk"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert!(
+        paths.is_empty(),
+        "writer path must not be reachable: {paths:?}"
+    );
+}

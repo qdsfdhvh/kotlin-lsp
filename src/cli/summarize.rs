@@ -430,7 +430,7 @@ fn build_summary_from_index(
         Some(sym.detail.clone())
     };
 
-    let kind = format!("{:?}", sym.kind).to_lowercase();
+    let kind = sym.kind_label();
 
     // Members: look up all non-private symbols in the same file.
     let members: Vec<MemberSummary> = index
@@ -443,7 +443,7 @@ fn build_summary_from_index(
                 .filter(|s| s.visibility != crate::types::Visibility::Private)
                 .map(|s| MemberSummary {
                     name: s.name.clone(),
-                    kind: format!("{:?}", s.kind).to_lowercase(),
+                    kind: s.kind_label(),
                     signature: if s.detail.is_empty() {
                         None
                     } else {

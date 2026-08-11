@@ -532,7 +532,16 @@ impl Indexer {
             .collect();
 
         let cache_path = crate::indexer::cache::library_cache_path(&raw_paths);
-        let lib_cache = crate::indexer::cache::try_load_library_cache(&raw_paths);
+        // Issue #270: check dir mtimes (pure stat, no deserialization) before
+        // touching the tens-of-MB payload; a stale cache is rejected without
+        // ever deserializing it.
+        let dirs_fresh =
+            crate::indexer::cache::library_cache_dirs_fresh(&source_paths, &cache_path);
+        let lib_cache = if dirs_fresh {
+            crate::indexer::cache::try_load_library_cache(&raw_paths)
+        } else {
+            None
+        };
         let cache_is_fresh = match &lib_cache {
             Some(entries) => {
                 crate::indexer::cache::library_cache_is_fresh(&source_paths, &cache_path, entries)
@@ -563,6 +572,23 @@ impl Indexer {
         // then bulk-extend into DashMap in one pass. This avoids ~390K individual
         // lock acquisitions + dedup scans that plague the per-file approach.
         if cache_is_fresh {
+            // Issue #270: when the compact symbol index pre-loaded definitions,
+            // skip the bulk FileData restore entirely — library FileData loads
+            // lazily per file via `get_file` / `lazy_load_library_file`. Bulk
+            // restoring ~390K FileData (with line tables etc.) on every one-shot
+            // CLI invocation is the dominant startup cost.
+            if sym_loaded {
+                // Keep the deserialized map for lazy per-file loads and for
+                // auto-import FQN rebuilds (which read package + top-level
+                // symbols from it) without materializing 390K FileData into
+                // `self.files` on every one-shot invocation (issue #270).
+                *self.library_cache_entries.write().expect("lock") = Some(Arc::new(
+                    lib_cache.expect("cache_is_fresh implies lib_cache is Some"),
+                ));
+                self.rebuild_bare_name_cache();
+                log::debug!("Fast-start: symbol index loaded, library FileData kept lazy");
+                return;
+            }
             let lib_cache = lib_cache.unwrap();
             let total = lib_cache.len();
             log::debug!(
@@ -871,6 +897,33 @@ impl Indexer {
                 if !is_nested {
                     let fqn = format!("{}.{}", pkg, sym.name);
                     map.entry(sym.name.clone()).or_default().push(fqn);
+                }
+            }
+        }
+        // Library files kept lazy after fast start (issue #270): their
+        // FileData is not in `self.files`, but package + symbols are available
+        // from the one-shot deserialized library cache — auto-import
+        // completion must still see them.
+        if let Some(lib) = self.library_cache_entries.read().expect("lock").as_ref() {
+            for entry in lib.values() {
+                let data = &entry.file_data;
+                let pkg = match &data.package {
+                    Some(p) if !p.is_empty() => p.clone(),
+                    _ => continue,
+                };
+                let syms = &data.symbols;
+                for (i, sym) in syms.iter().enumerate() {
+                    let is_nested = syms.iter().enumerate().any(|(j, other)| {
+                        j != i
+                            && other.range.start.line <= sym.range.start.line
+                            && other.range.end.line >= sym.range.end.line
+                            && !(other.range.start.line == sym.range.start.line
+                                && other.range.end.line == sym.range.end.line)
+                    });
+                    if !is_nested {
+                        let fqn = format!("{}.{}", pkg, sym.name);
+                        map.entry(sym.name.clone()).or_default().push(fqn);
+                    }
                 }
             }
         }

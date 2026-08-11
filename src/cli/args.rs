@@ -69,7 +69,10 @@ pub(crate) enum Subcommand {
         /// Returns only workspace symbols. Much faster (~2s vs ~10s).
         no_stdlib: bool,
     },
-    Index,
+    /// Build the workspace cache; honors `--no-stdlib`.
+    Index {
+        no_stdlib: bool,
+    },
     /// Dump semantic tokens for a file (debug).
     Tokens {
         file: PathBuf,
@@ -808,7 +811,9 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         }
         "hover" => build_hover_subcommand(positionals),
         "complete" => build_complete_subcommand(positionals, dot, eol, no_stdlib),
-        "index" => Ok(Subcommand::Index),
+        "index" => Ok(Subcommand::Index {
+            no_stdlib: parsed.no_stdlib,
+        }),
         "index-jars" => {
             let root = positionals.first().map(PathBuf::from);
             Ok(Subcommand::IndexJars { root })

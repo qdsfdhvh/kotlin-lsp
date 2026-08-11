@@ -44,7 +44,7 @@ pub(crate) fn build_callee_map(index: &Indexer) -> HashMap<String, Vec<(String, 
 /// within one language (issue #259): `call_edges` keys callees by bare name,
 /// so same-named functions in different languages share a key and paths would
 /// otherwise cross the Kotlin/Java/Swift boundary.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Lang {
     Kotlin,
     Java,
@@ -158,15 +158,24 @@ fn dfs(
         return;
     };
 
+    // Issue #259 + #266: filter by language only when the current node has
+    // same-named edges in multiple languages (a Kotlin `sharedName` and a
+    // Swift `sharedName` joining into one node). A single-language node must
+    // NOT be filtered — a Kotlin entry calling a Java static method (Java-only
+    // edges) is a legal Kotlin→Java path and must survive.
+    let edge_langs: std::collections::HashSet<Lang> = callees
+        .iter()
+        .filter_map(|(f, _)| lang_of_file(f))
+        .collect();
+    let ambiguous = edge_langs.len() > 1;
+
     let mut expanded = false;
     for (file, callee) in callees {
-        // Issue #259: only follow edges within the path's language. Same-named
-        // callees in other languages (e.g. a Kotlin `sharedName` and a Swift
-        // `sharedName`) would otherwise join into one node and cross the
-        // language boundary.
-        if let Some(lang) = lang {
-            if lang_of_file(file) != Some(lang) {
-                continue;
+        if ambiguous {
+            if let Some(lang) = lang {
+                if lang_of_file(file) != Some(lang) {
+                    continue;
+                }
             }
         }
         if visited.contains(callee) {
