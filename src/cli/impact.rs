@@ -52,11 +52,14 @@ struct CallerInfo {
 pub(crate) async fn run_impact(file: &Path, line: u32, col: u32, json: bool) {
     let root = crate::cli::run::resolve_root_for_file(None, file);
     let index = crate::cli::run::build_index(&root, false).await;
-    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    // Canonicalize so the URI matches the indexer's keys (it canonicalizes
+    // file paths; a raw `absolute()` of a /tmp path yields /tmp vs the
+    // indexer's /private/tmp on macOS and misses the file).
+    let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = Url::from_file_path(&abs_file).expect("valid file path");
 
     let word = extract_word_at_position(&index, &uri, line, col);
-    if word.is_empty() {
+    if word.is_empty() || crate::str_ext::is_kotlin_keyword(&word) {
         eprintln!("No symbol at cursor");
         std::process::exit(1);
     }

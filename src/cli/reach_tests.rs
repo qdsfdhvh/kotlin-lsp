@@ -384,6 +384,12 @@ fn variable_receiver_callee_follows_unique_method() {
     let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
     assert_eq!(
         names,
-        vec!["entry", "ExampleService.handle", "send", "doSend"]
+        vec![
+            "entry",
+            "ExampleService.handle",
+            "ExampleClient.send",
+            "doSend"
+        ],
+        "receiver type resolution (issue #278) qualifies the variable receiver"
     );
 }

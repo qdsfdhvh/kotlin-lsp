@@ -47,3 +47,24 @@ fn word_at_non_word_char_returns_empty() {
     // should return the empty string.
     assert_eq!("foo + bar".word_at_utf16_col(4), "");
 }
+
+#[test]
+fn keyword_detection_covers_fun_suspend_override() {
+    assert!(crate::str_ext::is_kotlin_keyword("fun"));
+    assert!(crate::str_ext::is_kotlin_keyword("suspend"));
+    assert!(crate::str_ext::is_kotlin_keyword("override"));
+    assert!(!crate::str_ext::is_kotlin_keyword("loadThings"));
+    assert!(!crate::str_ext::is_kotlin_keyword("ExampleRepository"));
+}
+
+#[test]
+fn word_at_col_extracts_identifier_after_fun() {
+    let line = "    public suspend fun loadThings(): List<String>";
+    // 1-based col 24 = "loadThings" start → 0-based 23.
+    assert_eq!(
+        crate::StrExt::word_at_utf16_col(line, 23),
+        "loadThings",
+        "identifier after fun keyword extracts"
+    );
+    assert_eq!(crate::StrExt::word_at_utf16_col(line, 19), "fun");
+}

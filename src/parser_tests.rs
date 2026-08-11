@@ -3185,3 +3185,27 @@ fn enum_class_with_annotation_sibling() {
     let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
     assert!(names.contains(&"ExampleEnum"), "with annotation: {names:?}");
 }
+
+// ── receiver-type callee resolution (issue #278) ─────────────────────────────
+
+#[test]
+fn parameter_receiver_qualifies_callee() {
+    let src = "class ExampleClient {\n    fun send() { doSend() }\n}\nclass ExampleService {\n    fun handle(c: ExampleClient) {\n        c.send()\n    }\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    assert!(
+        edges.iter().any(|(_, k)| k == "ExampleClient.send"),
+        "variable receiver resolves via parameter type: {edges:?}"
+    );
+}
+
+#[test]
+fn local_initializer_receiver_qualifies_callee() {
+    let src =
+        "class B {\n    fun run() { work() }\n}\nfun entry() {\n    val b = B()\n    b.run()\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges.iter().any(|(_, k)| k == "B.run"),
+        "local val initializer resolves receiver type: {edges:?}"
+    );
+}

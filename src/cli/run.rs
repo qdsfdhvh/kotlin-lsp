@@ -1880,10 +1880,11 @@ async fn run_complete(
         }
     }
     let index = build_index(root, no_stdlib).await;
-    // Issue #275: completion needs library symbols for auto-import; load them
-    // here (once per process) rather than at every build_index. find/refs do
-    // not pay this cost unless a query misses.
+    // Issue #275/#281: completion needs library symbols AND the full cache
+    // (package + top-level symbols for auto-import FQNs); load both here,
+    // once per process. find/refs only load the compact symbol index.
     index.lazy_load_library_symbols();
+    index.lazy_load_library_full();
     let engine = WorkspaceQueryEngine::new(index);
     let rows = completions_at(&engine, file, line, col);
     if rows.is_empty() {
@@ -1994,7 +1995,7 @@ pub(crate) fn extract_type_names(sig: &str) -> Vec<String> {
 async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize) {
     let root = resolve_root_for_file(None, file);
     let index = build_index(&root, false).await;
-    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
 
@@ -2010,7 +2011,7 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize
             .unwrap_or_default()
     };
 
-    if word.is_empty() {
+    if word.is_empty() || crate::str_ext::is_kotlin_keyword(&word) {
         eprintln!("No symbol at cursor");
         std::process::exit(1);
     }
@@ -2146,7 +2147,7 @@ async fn run_call_hierarchy(
 ) {
     let root = resolve_root_for_file(None, file);
     let index = build_index(&root, false).await;
-    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
 
     let word: String = {
@@ -2162,7 +2163,7 @@ async fn run_call_hierarchy(
             .unwrap_or_default()
     };
 
-    if word.is_empty() {
+    if word.is_empty() || crate::str_ext::is_kotlin_keyword(&word) {
         eprintln!("No symbol at cursor");
         std::process::exit(1);
     }
@@ -2212,7 +2213,7 @@ async fn run_call_hierarchy(
 async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
     let root = resolve_root_for_file(None, file);
     let index = build_index(&root, true).await;
-    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
 
@@ -2228,7 +2229,7 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
             .unwrap_or_default()
     };
 
-    if word.is_empty() {
+    if word.is_empty() || crate::str_ext::is_kotlin_keyword(&word) {
         eprintln!("No symbol at cursor");
         std::process::exit(1);
     }
@@ -2326,7 +2327,7 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
 }
 
 async fn run_inspect(file: &Path, engine: &WorkspaceQueryEngine, json: bool, _expand: usize) {
-    let abs_file = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let data = engine.file_by_uri_str(uri.as_str());
     let package: String = data

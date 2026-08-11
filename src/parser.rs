@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::thread::LocalKey;
 use tree_sitter::StreamingIterator;
@@ -930,11 +931,12 @@ fn extract_misparsed_class_decls(
     }
 }
 
-/// Extract every `(enum )?class <Name>` from an infix_expression's identifier
-/// chain (issue #274). tree-sitter-kotlin misparses `annotation class` — and
-/// every declaration after it — as one infix_expression chain, so a chain can
-/// hold several class declarations; each `class` keyword token followed by an
-/// identifier yields one.
+/// Extract every misparsed type declaration from an infix_expression's
+/// identifier chain (issues #274, #279). tree-sitter-kotlin misparses
+/// `annotation class` — and every declaration after it — as one
+/// infix_expression chain with no proper declaration nodes. Covered keyword
+/// tokens: `class` (with `enum`/`data`/`sealed` prefixes), `object`, and
+/// `interface`, each followed by a name identifier.
 fn misparsed_class_decls(
     node: &Node,
     bytes: &[u8],
@@ -964,6 +966,18 @@ fn misparsed_class_decls(
                     SymbolKind::ENUM
                 } else {
                     SymbolKind::CLASS
+                };
+                found.push((kind, name.clone(), *sel));
+            }
+        } else if tok == "object" || tok == "interface" {
+            // `public object Target` / `public interface Target` — a name
+            // identifier must follow; `companion object` has no name and is
+            // skipped (the name token check handles it).
+            if let Some((name, sel)) = tokens.get(i + 1) {
+                let kind = if tok == "object" {
+                    SymbolKind::OBJECT
+                } else {
+                    SymbolKind::INTERFACE
                 };
                 found.push((kind, name.clone(), *sel));
             }
@@ -2373,8 +2387,11 @@ pub(crate) fn extract_call_edges(source: &str, lang: crate::Language) -> Vec<(St
 
     while let Some(node) = stack.pop() {
         if node.kind() == KIND_CALL_EXPR || node.kind() == KIND_METHOD_INVOCATION {
-            // Find the callee name (first identifier or navigation_expression)
-            let callee = find_callee_name_from_node(&node, source);
+            // Find the callee name (first identifier or navigation_expression).
+            // Variable receivers resolve through the enclosing function's local
+            // scope (parameter types + `val x = Type(...)`), issue #278.
+            let scope = local_var_types(&node, source);
+            let callee = find_callee_name_from_node_with_scope(&node, source, &scope);
             if let Some(caller) = find_caller_fn_name_from_call(&node, source) {
                 if !callee.is_empty() && !caller.is_empty() {
                     edges.push((caller, callee));
@@ -2390,8 +2407,13 @@ pub(crate) fn extract_call_edges(source: &str, lang: crate::Language) -> Vec<(St
     edges
 }
 
-/// Extract callee name from a call_expression node.
-fn find_callee_name_from_node(node: &tree_sitter::Node, source: &str) -> String {
+/// Extract callee name from a call_expression node, resolving variable
+/// receivers through the enclosing function's local scope (issue #278).
+fn find_callee_name_from_node_with_scope(
+    node: &tree_sitter::Node,
+    source: &str,
+    scope: &HashMap<String, String>,
+) -> String {
     // The first named child of call_expression is typically the callee.
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -2405,12 +2427,12 @@ fn find_callee_name_from_node(node: &tree_sitter::Node, source: &str) -> String 
                 return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
             }
             if kind == "navigation_expression" {
-                // Method name + best-effort receiver type (issue #267):
+                // Method name + best-effort receiver type:
                 // `ExampleReader().process()` and `ExampleReader.process()`
-                // both yield `ExampleReader.process`; an unknown receiver
-                // (a local variable) yields the bare `process`. The qualified
-                // form stops same-named methods on different types from
-                // merging into one callee node.
+                // yield `ExampleReader.process`; a variable receiver resolves
+                // through the local scope (`client.send()` with
+                // `client: ExampleClient` → `ExampleClient.send`). Unresolved
+                // receivers stay bare-named.
                 let full = child.utf8_text(source.as_bytes()).unwrap_or("");
                 let method = full
                     .rsplit('.')
@@ -2422,12 +2444,129 @@ fn find_callee_name_from_node(node: &tree_sitter::Node, source: &str) -> String 
                 if let Some(prefix) = receiver_type_prefix(full) {
                     return format!("{prefix}.{method}");
                 }
+                // Variable receiver: look up its declared type in the scope.
+                let receiver = full.split('.').next().unwrap_or("").trim();
+                if let Some(typ) = scope.get(receiver) {
+                    return format!("{typ}.{method}");
+                }
                 return method.to_string();
             }
             return String::new();
         }
     }
     String::new()
+}
+
+/// Local variable → declared type table for the enclosing function (issue
+/// #278): parameter types (`c: ExampleClient`) and initialized locals
+/// (`val client = ExampleClient()` / `= ExampleClient`). Call-site receiver
+/// resolution then keys the callee by the receiver's actual type instead of
+/// bare-name uniqueness.
+fn local_var_types(node: &tree_sitter::Node, source: &str) -> HashMap<String, String> {
+    let mut scope = HashMap::new();
+    // Find the enclosing function/method declaration.
+    let mut parent = node.parent();
+    let fn_node = loop {
+        let Some(p) = parent else { return scope };
+        if matches!(
+            p.kind(),
+            "function_declaration" | "class_method" | KIND_METHOD_DECL
+        ) {
+            break p;
+        }
+        parent = p.parent();
+    };
+
+    // Parameters: `(c: ExampleClient, ...)` → c → ExampleClient. Kotlin has
+    // no field names, so find function_value_parameters by kind.
+    let params_node = fn_node
+        .children(&mut fn_node.walk())
+        .find(|c| c.kind() == KIND_FUN_VALUE_PARAMS);
+    if let Some(params) = params_node {
+        let mut cur = params.walk();
+        for child in params.children(&mut cur) {
+            if child.kind() == KIND_PARAMETER {
+                let mut pc = child.walk();
+                let mut name: Option<String> = None;
+                let mut typ: Option<String> = None;
+                for pchild in child.children(&mut pc) {
+                    match pchild.kind() {
+                        "simple_identifier" | "identifier" if name.is_none() => {
+                            name = pchild
+                                .utf8_text(source.as_bytes())
+                                .ok()
+                                .map(|s| s.to_string());
+                        }
+                        "user_type" | "type_identifier" | "generic_type" if typ.is_none() => {
+                            typ = pchild
+                                .utf8_text(source.as_bytes())
+                                .ok()
+                                .map(|s| s.to_string());
+                        }
+                        _ => {}
+                    }
+                }
+                if let (Some(n), Some(t)) = (name, typ) {
+                    scope.insert(n, t);
+                }
+            }
+        }
+    }
+
+    // Locals: `val client = ExampleClient()` / `= ExampleClient` →
+    // client → ExampleClient. Walk the function body for property/variable
+    // declarations with a call_expression/type initializer.
+    let mut stack: Vec<tree_sitter::Node> = vec![fn_node];
+    while let Some(n) = stack.pop() {
+        if matches!(n.kind(), KIND_PROP_DECL | "variable_declaration") {
+            if let Some((var, typ)) = local_initializer_type(&n, source) {
+                scope.insert(var, typ);
+            }
+        }
+        let mut cur = n.walk();
+        for child in n.children(&mut cur) {
+            stack.push(child);
+        }
+    }
+
+    scope
+}
+
+/// `val client = ExampleClient()` / `var x: Type = ...` → (name, type).
+fn local_initializer_type(decl: &tree_sitter::Node, source: &str) -> Option<(String, String)> {
+    // Variable name: first simple_identifier in declaration order — `val b = B()`
+    // nests it under variable_declaration inside property_declaration, so walk
+    // the subtree (the name precedes the initializer's identifiers).
+    fn first_ident(n: &tree_sitter::Node, bytes: &[u8]) -> Option<String> {
+        if n.kind() == "simple_identifier" {
+            return n.utf8_text(bytes).ok().map(|s| s.to_string());
+        }
+        let mut cur = n.walk();
+        for c in n.children(&mut cur) {
+            if let Some(s) = first_ident(&c, bytes) {
+                return Some(s);
+            }
+        }
+        None
+    }
+    let name = first_ident(decl, source.as_bytes())?;
+    // Initializer: `= ExampleClient()` or `= ExampleClient`.
+    let text = decl.utf8_text(source.as_bytes()).ok()?;
+    if let Some(eq) = text.rfind('=') {
+        let rhs = text[eq + 1..].trim();
+        // Strip trailing call args / generics: `ExampleClient()` → ExampleClient.
+        let base = rhs.split('(').next().unwrap_or(rhs).trim();
+        if base.is_empty() || base == "null" || base == "true" || base == "false" {
+            return None;
+        }
+        let base = base.trim_end_matches("::class");
+        // Only uppercase (type-like) initializers count; lambdas/literals don't.
+        let first = base.chars().next()?;
+        if first.is_uppercase() {
+            return Some((name, base.to_string()));
+        }
+    }
+    None
 }
 
 /// Walk up from a call_expression to find the enclosing function/method declaration.
