@@ -1,3 +1,18 @@
+## 0.31.4 (2026-08-11)
+
+### fix: propagate two recurring bug patterns (PR #283, proactive)
+
+- **`--no-stdlib` is now honored by every indexed command** — `edit imports`,
+  `edit insert`, `context` and the search-family commands previously
+  hardcoded `build_index(&root, false)` (same shape as #257 / the reach and
+  index fixes), always indexing the 72k+ stdlib sources. `CliArgs.no_stdlib`
+  now flows globally; verified `edit imports --no-stdlib` triggers zero
+  stdlib indexing.
+- **File-path canonicalization** — `batch`, `find-test`, `complete` and
+  `context` used `std::path::absolute`, which on macOS yields `/tmp` where the
+  indexer stores `/private/tmp` (the #280 shape), silently missing the file.
+  They now canonicalize so URIs match indexer keys.
+
 ## 0.31.3 (2026-08-11)
 
 ### fix: 0.31.2 regressions (#273-#275, PR #276)
