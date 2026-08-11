@@ -334,7 +334,7 @@ pub(crate) fn enrich_result_kinds(results: &mut [CliResult], engine: &WorkspaceQ
                     .iter()
                     .find(|s| s.name == r.name && s.selection_range.start.line + 1 == r.line)
                 {
-                    r.kind = format!("{:?}", sym.kind).to_lowercase();
+                    r.kind = sym.kind_label();
                 }
             }
         }
@@ -443,7 +443,7 @@ fn fast_declaration_hint(line: &str, name: &str) -> (u32, &'static str) {
             "fun" | "func" => "function",
             "val" | "let" => "property",
             "var" => "variable",
-            "typealias" => "class",
+            "typealias" => "typealias",
             "struct" => "struct",
             _ => "",
         };
@@ -489,9 +489,9 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Query => {
             crate::cli::batch_query::run_query(json).await;
         }
-        Subcommand::Index => {
+        Subcommand::Index { no_stdlib } => {
             let root = resolve_root(args.root.as_deref());
-            run_index(&root, verbose).await
+            run_index(&root, verbose, no_stdlib).await
         }
         Subcommand::IndexJars { root } => {
             let root = resolve_root(root.as_deref().or(args.root.as_deref()));
@@ -1590,11 +1590,11 @@ pub(crate) async fn run(args: CliArgs) {
     }
 }
 
-async fn run_index(root: &Path, verbose: bool) {
+async fn run_index(root: &Path, verbose: bool, no_stdlib: bool) {
     if verbose {
         eprintln!("Indexing workspace: {}", root.display());
     }
-    let index = build_index(root, false).await;
+    let index = build_index(root, no_stdlib).await;
     if verbose {
         eprintln!(
             "Done: {} files, {} symbols",

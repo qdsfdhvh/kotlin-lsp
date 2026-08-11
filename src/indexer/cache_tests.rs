@@ -41,6 +41,7 @@ fn cache_entry_to_file_result_supertypes_extracted() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     });
     data.supers.push((
         0,
@@ -92,6 +93,7 @@ fn cache_entry_to_file_result_preserves_hash() {
         documentation: None,
 
         is_sealed: false,
+        is_typealias: false,
     });
 
     let entry = FileCacheEntry {

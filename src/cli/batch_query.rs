@@ -173,7 +173,7 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
                     if let Some(sym) = sym {
                         serde_json::json!({
                             "name": sym.name,
-                            "kind": format!("{:?}", sym.kind).to_lowercase(),
+                            "kind": sym.kind_label(),
                             "visibility": format!("{:?}", sym.visibility).to_lowercase(),
                             "signature": sym.detail,
                             "deprecated": sym.deprecated,

@@ -147,7 +147,7 @@ pub(crate) async fn run_docs(query: &str, json: bool) {
             if sym.detail.to_lowercase().contains(&query_lower) {
                 results.push(serde_json::json!({
                     "name": sym.name,
-                    "kind": format!("{:?}", sym.kind).to_lowercase(),
+                    "kind": sym.kind_label(),
                     "file": path.display().to_string(),
                     "line": sym.selection_range.start.line + 1,
                     "signature": sym.detail,

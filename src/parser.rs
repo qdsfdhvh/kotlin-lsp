@@ -13,12 +13,12 @@ use crate::queries::{
     KIND_ENUM_DECL, KIND_EQ, KIND_EXTENDS_INTERFACES, KIND_FIELD_DECL, KIND_FUN, KIND_FUN_BODY,
     KIND_FUN_DECL, KIND_FUN_VALUE_PARAMS, KIND_IDENTIFIER, KIND_IMPORT_ALIAS, KIND_IMPORT_DECL,
     KIND_IMPORT_HEADER, KIND_IMPORT_LIST, KIND_INHERITANCE_SPEC, KIND_INHERITANCE_SPECS,
-    KIND_INTERFACE_DECL, KIND_LAMBDA_LIT, KIND_METHOD_DECL, KIND_MODIFIERS, KIND_MOD_FINAL,
-    KIND_MOD_STATIC, KIND_NAV_EXPR, KIND_OBJECT_DECL, KIND_PACKAGE_DECL, KIND_PACKAGE_HEADER,
-    KIND_PARAMETER, KIND_PROP_DECL, KIND_PROP_DELEGATE, KIND_PROTOCOL_DECL, KIND_RECORD_DECL,
-    KIND_RPAREN, KIND_SCOPED_IDENT, KIND_SIMPLE_IDENT, KIND_STATEMENTS, KIND_SUPERCLASS,
-    KIND_SUPER_INTERFACES, KIND_TYPE_IDENT, KIND_USER_TYPE, KIND_VALUE_ARG, KIND_VALUE_ARGS,
-    KIND_VAR_DECL, KIND_VAR_DECLARATOR, KIND_WILDCARD_IMPORT, KOTLIN_DEFINITIONS,
+    KIND_INTERFACE_DECL, KIND_LAMBDA_LIT, KIND_METHOD_DECL, KIND_METHOD_INVOCATION, KIND_MODIFIERS,
+    KIND_MOD_FINAL, KIND_MOD_STATIC, KIND_NAV_EXPR, KIND_OBJECT_DECL, KIND_PACKAGE_DECL,
+    KIND_PACKAGE_HEADER, KIND_PARAMETER, KIND_PROP_DECL, KIND_PROP_DELEGATE, KIND_PROTOCOL_DECL,
+    KIND_RECORD_DECL, KIND_RPAREN, KIND_SCOPED_IDENT, KIND_SIMPLE_IDENT, KIND_STATEMENTS,
+    KIND_SUPERCLASS, KIND_SUPER_INTERFACES, KIND_TYPE_IDENT, KIND_USER_TYPE, KIND_VALUE_ARG,
+    KIND_VALUE_ARGS, KIND_VAR_DECL, KIND_VAR_DECLARATOR, KIND_WILDCARD_IMPORT, KOTLIN_DEFINITIONS,
     SWIFT_DEFINITIONS,
 };
 use crate::StrExt;
@@ -359,7 +359,7 @@ fn push_def_symbols(
     symbols: &mut Vec<SymbolEntry>,
 ) {
     for (_, (pidx, name, range, sel, type_params)) in best {
-        let (kind, _) = pattern_meta(pidx);
+        let (kind, meta_detail) = pattern_meta(pidx);
         if kind != SymbolKind::NULL {
             let visibility = vis_fn(lines, sel.start.line as usize);
             let detail = extract_detail(lines, range.start.line, range.end.line);
@@ -397,6 +397,7 @@ fn push_def_symbols(
                 visibility,
                 range,
                 selection_range: sel,
+                is_typealias: meta_detail == Some("typealias"),
                 detail,
                 type_params,
                 extension_receiver,
@@ -780,6 +781,7 @@ fn push_interface_symbol(
         documentation: extract_kdoc_from_lines(&lines, node.range().start_point.row as u32),
 
         is_sealed: false,
+        is_typealias: false,
     });
 }
 
@@ -926,6 +928,7 @@ fn extract_fun_from_error(
             documentation: extract_kdoc_from_lines(lines, err.range().start_point.row as u32),
 
             is_sealed: false,
+            is_typealias: false,
         });
     }
 }
@@ -1952,6 +1955,7 @@ impl crate::types::FileData {
                 ),
 
                 is_sealed: false,
+                is_typealias: false,
             });
         }
     }
@@ -1999,6 +2003,7 @@ impl crate::types::FileData {
                     ),
 
                     is_sealed: false,
+                    is_typealias: false,
                 });
             }
         }
@@ -2049,6 +2054,7 @@ fn synthesize_data_class_copy(symbols: &mut Vec<SymbolEntry>, lines: &[String]) 
             documentation: extract_kdoc_from_lines(lines, symbols[idx].range.start.line),
 
             is_sealed: false,
+            is_typealias: false,
         });
     }
 }
@@ -2263,7 +2269,7 @@ pub(crate) fn extract_call_edges(source: &str, lang: crate::Language) -> Vec<(St
     let mut stack: Vec<tree_sitter::Node> = vec![root];
 
     while let Some(node) = stack.pop() {
-        if node.kind() == "call_expression" {
+        if node.kind() == KIND_CALL_EXPR || node.kind() == KIND_METHOD_INVOCATION {
             // Find the callee name (first identifier or navigation_expression)
             let callee = find_callee_name_from_node(&node, source);
             if let Some(caller) = find_caller_fn_name_from_call(&node, source) {
@@ -2291,6 +2297,10 @@ fn find_callee_name_from_node(node: &tree_sitter::Node, source: &str) -> String 
             if kind == "simple_identifier" {
                 return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
             }
+            if kind == "identifier" {
+                // Java method_invocation callee (e.g. `javaLeaf()` → `javaLeaf`).
+                return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+            }
             if kind == "navigation_expression" {
                 // Get the last identifier (method name)
                 return child
@@ -2315,11 +2325,12 @@ fn find_caller_fn_name_from_call(node: &tree_sitter::Node, source: &str) -> Opti
     let mut parent = node.parent();
     while let Some(p) = parent {
         match p.kind() {
-            "function_declaration" | "class_method" => {
-                // Find the simple_identifier child (function name)
+            "function_declaration" | "class_method" | KIND_METHOD_DECL | KIND_CTOR_DECL => {
+                // Find the function/method name child: `simple_identifier`
+                // (Kotlin) or `identifier` (Java, issue #266).
                 let mut cursor = p.walk();
                 for child in p.children(&mut cursor) {
-                    if child.kind() == "simple_identifier" {
+                    if child.kind() == "simple_identifier" || child.kind() == "identifier" {
                         return child
                             .utf8_text(source.as_bytes())
                             .ok()

@@ -3030,3 +3030,63 @@ fun e(
         "expected the malformed block body to remain visible"
     );
 }
+
+// ── kind labels & typealias marker (issue #269) ──────────────────────────────
+
+#[test]
+fn typealias_is_marked_and_kind_label_is_typealias() {
+    let data = parse_kotlin("public typealias ExampleAlias = ExampleClass");
+    let entry = sym(&data, "ExampleAlias").expect("typealias symbol");
+    assert!(
+        entry.is_typealias,
+        "typealias marked so --kind typealias can match it"
+    );
+    assert_eq!(entry.kind_label(), "typealias");
+    // The declaration kind itself stays CLASS (no lsp TYPE_ALIAS kind); the
+    // label is what --kind filters against.
+    assert_eq!(entry.kind, SymbolKind::CLASS);
+}
+
+#[test]
+fn plain_class_is_not_typealias() {
+    let data = parse_kotlin("public class ExampleClass");
+    let entry = sym(&data, "ExampleClass").expect("class symbol");
+    assert!(!entry.is_typealias);
+    assert_eq!(entry.kind_label(), "class");
+}
+
+#[test]
+fn enum_class_kind_label_stays_enum() {
+    // Regression lock for #269: enum class must keep its kind once parsed and
+    // indexed (this is the same parse path the index uses).
+    let data = parse_kotlin("public enum class ExampleEnum { A, B }");
+    let entry = sym(&data, "ExampleEnum").expect("enum symbol");
+    assert_eq!(entry.kind, SymbolKind::ENUM);
+    assert_eq!(entry.kind_label(), "enum");
+}
+
+// ── Java call edges (issue #266) ─────────────────────────────────────────────
+
+#[test]
+fn java_call_edges_extracted() {
+    let src = "public final class JavaHelper {\n    public static void javaMid() {\n        javaLeaf();\n    }\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Java);
+    eprintln!("java edges: {edges:?}");
+    assert!(
+        edges.iter().any(|(c, k)| c == "javaMid" && k == "javaLeaf"),
+        "java call edge javaMid -> javaLeaf present: {edges:?}"
+    );
+}
+
+#[test]
+fn java_kotlin_mixed_repo_paths() {
+    // Kotlin caller invoking a Java static method through JavaHelper.
+    let kotlin = "fun kotlinEntry() {\n    JavaHelper.javaMid()\n}\n";
+    let kotlin_edges = crate::parser::extract_call_edges(kotlin, crate::Language::Kotlin);
+    assert!(
+        kotlin_edges
+            .iter()
+            .any(|(c, k)| c == "kotlinEntry" && k == "javaMid"),
+        "kotlin -> java static call edge present: {kotlin_edges:?}"
+    );
+}

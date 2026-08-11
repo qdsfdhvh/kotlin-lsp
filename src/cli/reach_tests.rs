@@ -256,3 +256,31 @@ fn target_path_respects_language() {
     );
     assert_eq!(paths.len(), 1);
 }
+
+// ── Kotlin→Java paths (issue #266) ───────────────────────────────────────────
+
+/// A Kotlin entry calling a Java static method must keep following Java edges:
+/// single-language nodes are NOT filtered, only same-named multi-language
+/// ambiguity is (that is the #259 rule).
+#[test]
+fn kotlin_entry_follows_java_callees() {
+    let idx = Arc::new(Indexer::new());
+    let kotlin = "package a\nfun kotlinEntry() { JavaHelper.javaMid() }\n";
+    let java = "public final class JavaHelper {\n    public static void javaMid() {\n        javaLeaf();\n    }\n}\n";
+    let kt_uri = Url::from_file_path(std::env::temp_dir().join("KtCaller.kt")).expect("uri");
+    let java_uri = Url::from_file_path(std::env::temp_dir().join("JavaHelper.java")).expect("uri");
+    idx.index_content(&kt_uri, kotlin);
+    idx.index_content(&java_uri, java);
+
+    let map = build_callee_map(&idx);
+    let (paths, _) = enumerate_paths(
+        &map,
+        "kotlinEntry",
+        Some("javaLeaf"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert_eq!(paths.len(), 1, "kotlin entry reaches java leaf: {paths:?}");
+    let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+    assert_eq!(names, vec!["kotlinEntry", "javaMid", "javaLeaf"]);
+}

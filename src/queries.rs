@@ -349,6 +349,9 @@ pub(crate) const KIND_TYPE_IDENT: &str = "type_identifier";
 pub(crate) const KIND_IDENTIFIER: &str = "identifier";
 pub(crate) const KIND_SCOPED_IDENT: &str = "scoped_identifier";
 pub(crate) const KIND_CALL_EXPR: &str = "call_expression";
+/// Java call site (`foo(...)`) — Kotlin uses `call_expression`; Java's
+/// tree-sitter grammar names it `method_invocation` (issue #266).
+pub(crate) const KIND_METHOD_INVOCATION: &str = "method_invocation";
 pub(crate) const KIND_THIS_EXPR: &str = "this_expression";
 pub(crate) const KIND_LAMBDA_LIT: &str = "lambda_literal";
 pub(crate) const KIND_LAMBDA_PARAMS: &str = "lambda_parameters";

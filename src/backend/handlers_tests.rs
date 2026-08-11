@@ -649,6 +649,7 @@ mod code_action_tests {
             documentation: None,
 
             is_sealed: false,
+            is_typealias: false,
         }
     }
 

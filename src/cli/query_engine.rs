@@ -63,7 +63,7 @@ impl QueryEngine for IndexQueryEngine {
                         let file_path = loc.uri.to_file_path().unwrap_or_default();
                         let r = CliResult {
                             name: name.to_string(),
-                            kind: format!("{:?}", sym.kind).to_lowercase(),
+                            kind: sym.kind_label(),
                             file: file_path.display().to_string(),
                             line: loc.range.start.line + 1,
                             col: loc.range.start.character + 1,

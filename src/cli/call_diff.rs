@@ -185,7 +185,21 @@ pub(crate) fn list_source_files(
 /// worktree and commit snapshots on the same file set; contents are still read
 /// from disk so uncommitted edits to tracked files stay visible.
 fn git_tracked_source_files(cwd: &Path) -> Vec<String> {
-    let Ok(out) = git(&["ls-files", "-z", "--cached"], cwd) else {
+    // Tracked files plus untracked-but-not-ignored files (issue #268): a new
+    // file you just wrote is not in `--cached` yet, so tracked-only would hide
+    // the whole new call chain. `--exclude-standard` keeps gitignored build
+    // artifacts out (issue #260) while `--others` adds new files — the same
+    // file set `git status` considers part of the working tree.
+    let Ok(out) = git(
+        &[
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ],
+        cwd,
+    ) else {
         return Vec::new();
     };
     out.split('\0')

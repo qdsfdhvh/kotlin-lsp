@@ -467,3 +467,97 @@ fn path_filter_limits_loaded_files() {
         .expect("list files");
     assert_eq!(files, vec!["a/One.kt"], "only files under the filter");
 }
+
+// ── worktree snapshot file set (issues #260 + #268) ──────────────────────────
+
+fn init_repo(dir: &Path) {
+    git(dir, &["init", "-q"]);
+    git(dir, &["config", "user.email", "t@t"]);
+    git(dir, &["config", "user.name", "t"]);
+}
+
+/// #260: gitignored files must not appear in the worktree snapshot.
+#[test]
+fn worktree_snapshot_excludes_gitignored() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    std::fs::create_dir_all(dir.path().join("generated")).expect("mkdir");
+    std::fs::write(dir.path().join(".gitignore"), "/generated/\n").expect("gitignore");
+    std::fs::write(dir.path().join("Tracked.kt"), "fun tracked() = \"t\"\n").expect("tracked");
+    std::fs::write(
+        dir.path().join("generated/Gen.kt"),
+        "fun sameName() = \"g\"\n",
+    )
+    .expect("gen");
+    init_repo(dir.path());
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "v1"]);
+
+    let files = super::call_diff::list_source_files(dir.path(), &Snapshot::Worktree, &[])
+        .expect("list files");
+    assert_eq!(
+        files,
+        vec!["Tracked.kt"],
+        "gitignored file excluded: {files:?}"
+    );
+}
+
+/// #268: a new, unstaged file must be visible in the worktree snapshot.
+#[test]
+fn worktree_snapshot_includes_unstaged_new_file() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    std::fs::write(dir.path().join("Base.kt"), "fun base() = \"b\"\n").expect("base");
+    init_repo(dir.path());
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "base"]);
+
+    // New file, not git-added yet.
+    std::fs::write(dir.path().join("New.kt"), "fun brandNew() = \"n\"\n").expect("new");
+
+    let files = super::call_diff::list_source_files(dir.path(), &Snapshot::Worktree, &[])
+        .expect("list files");
+    assert!(
+        files.iter().any(|f| f == "New.kt"),
+        "unstaged new file visible: {files:?}"
+    );
+}
+
+/// #268: a tracked file's uncommitted edits must still be visible (contents are
+/// read from disk) — the regression that started this thread.
+#[test]
+fn worktree_snapshot_reads_edited_tracked_content() {
+    use tempfile::TempDir;
+    let dir = TempDir::new().expect("temp dir");
+    let f = dir.path().join("Tracked.kt");
+    std::fs::write(&f, "fun entry() = helper()\nfun helper() = \"v1\"\n").expect("v1");
+    init_repo(dir.path());
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "v1"]);
+    // entry now routes through a new function — the tree change must surface.
+    std::fs::write(
+        &f,
+        "fun entry() = added()\nfun added() = helper()\nfun helper() = \"v2\"\n",
+    )
+    .expect("v2");
+
+    let before = super::call_diff::load_index(
+        dir.path(),
+        &Snapshot::Commit {
+            ref_name: "HEAD".into(),
+        },
+        &[],
+    )
+    .expect("before index");
+    let after =
+        super::call_diff::load_index(dir.path(), &Snapshot::Worktree, &[]).expect("after index");
+    let before_tree =
+        super::call_diff::build_tree(&before, "entry", super::call_diff::DEFAULT_MAX_DEPTH);
+    let after_tree =
+        super::call_diff::build_tree(&after, "entry", super::call_diff::DEFAULT_MAX_DEPTH);
+    let diff = diff_trees(&before_tree, &after_tree);
+    assert!(
+        diff.children.iter().any(|c| c.name.contains("added")),
+        "edited tracked file change surfaced in diff"
+    );
+}

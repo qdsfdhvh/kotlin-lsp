@@ -91,7 +91,7 @@ pub(crate) async fn run_snapshot(
         let file_path = uri_str.replace("file://", "");
 
         for sym in &file_data.symbols {
-            let kind_str = format!("{:?}", sym.kind).to_lowercase();
+            let kind_str = sym.kind_label();
 
             // Build FQ name
             let fq_name = if pkg.is_empty() {
