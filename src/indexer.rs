@@ -241,6 +241,9 @@ pub(crate) struct Indexer {
     /// `lazy_load_library_file` call.
     pub(crate) library_cache_entries:
         RwLock<Option<Arc<HashMap<String, crate::indexer::cache::FileCacheEntry>>>>,
+    /// True once the compact library symbol index has been populated into
+    /// `definitions` (on first query miss, issue #275) — one-shot guard.
+    pub(crate) library_symbols_loaded: std::sync::atomic::AtomicBool,
     /// Simple name → sorted vec of importable FQNs.
     /// e.g. "Composable" → ["androidx.compose.runtime.Composable"]
     /// Built from top-level symbols only (no synthetic file-stem keys).
@@ -325,6 +328,7 @@ impl Indexer {
             library_uris: DashSet::new(),
             library_cache_path: RwLock::new(None),
             library_cache_entries: RwLock::new(None),
+            library_symbols_loaded: std::sync::atomic::AtomicBool::new(false),
             importable_fqns: std::sync::RwLock::new(std::collections::HashMap::new()),
             live_trees: DashMap::new(),
             gradle_deps: RwLock::new(None),
@@ -834,6 +838,41 @@ impl Indexer {
             self.files.insert(uri.to_string(), Arc::clone(&arc));
             arc
         })
+    }
+
+    /// Populate `definitions` from the compact library symbol index on first
+    /// query miss (issue #275). `find`/`refs` on a workspace-local symbol never
+    /// pays the 19 MB symbol-index load; library symbols load once per process
+    /// only when a query actually needs them.
+    pub(crate) fn lazy_load_library_symbols(&self) {
+        use std::sync::atomic::Ordering;
+        if self.library_symbols_loaded.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let Some(cache_path) = self.library_cache_path.read().expect("lock").clone() else {
+            return;
+        };
+        let Some(sym_idx) = crate::indexer::symbol_index::try_load_symbol_index(&cache_path) else {
+            return;
+        };
+        let need_load =
+            crate::indexer::symbol_index::populate_from_symbol_index(&sym_idx, &self.definitions);
+        for uri in need_load.iter() {
+            self.library_uris.insert(uri.clone());
+        }
+        // Auto-import completion also needs package + top-level symbols from
+        // the full library cache — load it once here (this path only runs when
+        // a query actually needs library data).
+        if self.library_cache_entries.read().expect("lock").is_none() {
+            let loaded =
+                crate::indexer::cache::try_load_library_cache_from(&cache_path).map(Arc::new);
+            *self.library_cache_entries.write().expect("lock") = loaded;
+        }
+        self.rebuild_bare_name_cache();
+        log::debug!(
+            "Lazy-loaded library symbols ({} names)",
+            sym_idx.symbols.len()
+        );
     }
 
     /// Get FileData for a URI, with transparent lazy loading from library cache.

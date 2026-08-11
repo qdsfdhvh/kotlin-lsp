@@ -298,16 +298,26 @@ pub(crate) fn smart_find(
     root: &Path,
     filters: &ResultFilters,
 ) -> Vec<CliResult> {
-    let locs = if let Some(ref owner) = filters.owner {
-        let fallback_uri = find_first_kt_uri(root);
-        if let Some(uri) = &fallback_uri {
-            engine.find_definition_qualified(name, Some(owner.as_str()), uri)
+    let query = |engine: &WorkspaceQueryEngine| -> Vec<Location> {
+        if let Some(ref owner) = filters.owner {
+            let fallback_uri = find_first_kt_uri(root);
+            if let Some(uri) = &fallback_uri {
+                engine.find_definition_qualified(name, Some(owner.as_str()), uri)
+            } else {
+                engine.definition_locations(name)
+            }
         } else {
             engine.definition_locations(name)
         }
-    } else {
-        engine.definition_locations(name)
     };
+    let mut locs = query(engine);
+    if locs.is_empty() {
+        // Issue #275: definitions start workspace-only; load library symbols
+        // only when a query actually misses, so `find` on a workspace-local
+        // symbol never pays the full symbol-index load.
+        engine.index.lazy_load_library_symbols();
+        locs = query(engine);
+    }
     if !locs.is_empty() {
         let mut results = locs_to_results(locs, name, "");
         enrich_result_kinds(&mut results, engine);
@@ -353,7 +363,12 @@ fn find_first_kt_uri(root: &Path) -> Option<tower_lsp::lsp_types::Url> {
 // ── Smart-mode refs ───────────────────────────────────────────────────────────
 
 fn smart_refs(engine: &WorkspaceQueryEngine, name: &str, root: &Path) -> Vec<CliResult> {
-    let decl_locs = engine.definition_locations(name);
+    let mut decl_locs = engine.definition_locations(name);
+    if decl_locs.is_empty() {
+        // Issue #275: library symbols load on first query miss.
+        engine.index.lazy_load_library_symbols();
+        decl_locs = engine.definition_locations(name);
+    }
     let decl_files: Vec<String> = decl_locs
         .iter()
         .filter_map(|l| l.uri.to_file_path().ok())
@@ -1865,6 +1880,10 @@ async fn run_complete(
         }
     }
     let index = build_index(root, no_stdlib).await;
+    // Issue #275: completion needs library symbols for auto-import; load them
+    // here (once per process) rather than at every build_index. find/refs do
+    // not pay this cost unless a query misses.
+    index.lazy_load_library_symbols();
     let engine = WorkspaceQueryEngine::new(index);
     let rows = completions_at(&engine, file, line, col);
     if rows.is_empty() {

@@ -144,3 +144,11 @@ pub(super) fn populate_from_symbol_index(
 #[cfg(test)]
 #[path = "symbol_index_tests.rs"]
 mod tests;
+
+/// Cheap existence check for the compact symbol index — a `stat`, no
+/// deserialization (issue #275). The fast-start path uses this to decide
+/// whether to skip the full library-cache load; the actual payload is read
+/// later by [`try_load_symbol_index`] only when a query misses.
+pub(super) fn symbol_index_exists(lib_cache_path: &Path) -> bool {
+    symbol_index_path(lib_cache_path).is_file()
+}

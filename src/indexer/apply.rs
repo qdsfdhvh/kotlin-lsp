@@ -532,11 +532,40 @@ impl Indexer {
             .collect();
 
         let cache_path = crate::indexer::cache::library_cache_path(&raw_paths);
-        // Issue #270: check dir mtimes (pure stat, no deserialization) before
-        // touching the tens-of-MB payload; a stale cache is rejected without
-        // ever deserializing it.
+        // Issue #270/#275: check dir mtimes (pure stat, no deserialization)
+        // before touching the tens-of-MB payload, and try the compact symbol
+        // index FIRST. When both succeed we skip the full library-cache
+        // deserialization entirely — `find` (definitions only) never needs
+        // the 100+ MB payload; it is deserialized on demand for completion
+        // (auto-import FQNs) and per-file lazy loads.
         let dirs_fresh =
             crate::indexer::cache::library_cache_dirs_fresh(&source_paths, &cache_path);
+
+        // ── Fast start: load definitions from compact symbol index.
+        //    When true, the cache_is_fresh block below will only restore
+        //    FileData (skipping the per-file definitions extraction).
+        let sym_loaded = if dirs_fresh {
+            // Issue #275: existence check only (stat) — the payload is read on
+            // demand via lazy_load_library_symbols when a query misses.
+            crate::indexer::symbol_index::symbol_index_exists(&cache_path)
+        } else {
+            false
+        };
+
+        // Fast path: library cache is fresh (source dirs haven't changed).
+        // then bulk-extend into DashMap in one pass. This avoids ~390K individual
+        // lock acquisitions + dedup scans that plague the per-file approach.
+        if dirs_fresh && sym_loaded {
+            // Issue #270/#275: symbol index pre-loaded the definitions and the
+            // source dirs are unchanged — return WITHOUT deserializing the full
+            // library cache (100+ MB). Library FileData and auto-import FQNs
+            // load on demand (lazy_load_library_file / rebuild_importable_fqns),
+            // so a `find`/`refs` invocation never pays the payload cost.
+            *self.library_cache_path.write().expect("lock") = Some(cache_path);
+            self.rebuild_bare_name_cache();
+            log::debug!("Fast-start: symbol index loaded, full library cache not deserialized");
+            return;
+        }
         let lib_cache = if dirs_fresh {
             crate::indexer::cache::try_load_library_cache(&raw_paths)
         } else {
@@ -549,46 +578,7 @@ impl Indexer {
             None => false,
         };
 
-        // ── Fast start: load definitions from compact symbol index.
-        //    When true, the cache_is_fresh block below will only restore
-        //    FileData (skipping the per-file definitions extraction).
-        let sym_loaded = if let Some(sym_idx) =
-            crate::indexer::symbol_index::try_load_symbol_index(&cache_path)
-        {
-            crate::indexer::symbol_index::populate_from_symbol_index(&sym_idx, &self.definitions);
-            for sym_uri in sym_idx.symbols.values().flat_map(|v| v.iter()) {
-                self.library_uris.insert(sym_uri.uri.clone());
-            }
-            log::info!(
-                "Fast-start definitions via symbol index ({} symbols)",
-                sym_idx.symbols.len()
-            );
-            true
-        } else {
-            false
-        };
-
-        // Fast path: library cache is fresh (source dirs haven't changed).
-        // then bulk-extend into DashMap in one pass. This avoids ~390K individual
-        // lock acquisitions + dedup scans that plague the per-file approach.
         if cache_is_fresh {
-            // Issue #270: when the compact symbol index pre-loaded definitions,
-            // skip the bulk FileData restore entirely — library FileData loads
-            // lazily per file via `get_file` / `lazy_load_library_file`. Bulk
-            // restoring ~390K FileData (with line tables etc.) on every one-shot
-            // CLI invocation is the dominant startup cost.
-            if sym_loaded {
-                // Keep the deserialized map for lazy per-file loads and for
-                // auto-import FQN rebuilds (which read package + top-level
-                // symbols from it) without materializing 390K FileData into
-                // `self.files` on every one-shot invocation (issue #270).
-                *self.library_cache_entries.write().expect("lock") = Some(Arc::new(
-                    lib_cache.expect("cache_is_fresh implies lib_cache is Some"),
-                ));
-                self.rebuild_bare_name_cache();
-                log::debug!("Fast-start: symbol index loaded, library FileData kept lazy");
-                return;
-            }
             let lib_cache = lib_cache.unwrap();
             let total = lib_cache.len();
             log::debug!(
@@ -900,10 +890,11 @@ impl Indexer {
                 }
             }
         }
-        // Library files kept lazy after fast start (issue #270): their
-        // FileData is not in `self.files`, but package + symbols are available
-        // from the one-shot deserialized library cache — auto-import
-        // completion must still see them.
+        // Library files kept lazy after fast start (issue #270/#275): their
+        // FileData is not in `self.files` and the full library cache is not
+        // deserialized at startup. Auto-import completion needs package +
+        // top-level symbols from it, so deserialize on demand (once per
+        // process, cached in library_cache_entries).
         if let Some(lib) = self.library_cache_entries.read().expect("lock").as_ref() {
             for entry in lib.values() {
                 let data = &entry.file_data;

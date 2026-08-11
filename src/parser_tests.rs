@@ -3091,3 +3091,97 @@ fn java_kotlin_mixed_repo_paths() {
         "kotlin -> java static call edge present: {kotlin_edges:?}"
     );
 }
+
+// ── enum selection range (issue #274) ────────────────────────────────────────
+
+#[test]
+fn enum_class_selection_range_points_at_name() {
+    let data = parse_kotlin("public enum class ExampleEnum { FIRST }");
+    let entry = sym(&data, "ExampleEnum").expect("enum symbol");
+    assert_eq!(entry.kind, SymbolKind::ENUM, "kind is ENUM");
+    // "public enum class " = 19 chars → identifier starts at 0-based col 19.
+    assert_eq!(
+        entry.selection_range.start.character, 18,
+        "selection points at the name (0-based 18 = 'public enum class '), not the enum keyword"
+    );
+}
+
+#[test]
+fn parse_issue274_full_file_has_all_symbols() {
+    let content = "package com.example\n\npublic class ExampleClass\n\npublic data class ExampleData(val id: String)\n\npublic interface ExampleInterface\n\npublic object ExampleObject\n\npublic enum class ExampleEnum { FIRST }\n\npublic annotation class ExampleAnnotation\n\npublic typealias ExampleAlias = String\n";
+    let data = parse_kotlin(content);
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(
+        names.contains(&"ExampleEnum"),
+        "ExampleEnum parsed; got: {names:?}"
+    );
+    assert_eq!(
+        data.symbols.len(),
+        8,
+        "all declarations + data-class property parsed: {names:?}"
+    );
+}
+
+#[test]
+fn enum_class_survives_alongside_other_declarations() {
+    // Regression for #274: enum class vanished from the symbol list when the
+    // file also contained a plain class declaration.
+    let data =
+        parse_kotlin("public class ExampleClass\n\npublic enum class ExampleEnum { FIRST }\n");
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(
+        names.contains(&"ExampleEnum"),
+        "enum survives with a class sibling: {names:?}"
+    );
+}
+
+#[test]
+fn enum_class_with_data_class_sibling() {
+    let data = parse_kotlin(
+        "public data class ExampleData(val id: String)\n\npublic enum class ExampleEnum { FIRST }\n",
+    );
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"ExampleEnum"), "with data class: {names:?}");
+}
+
+#[test]
+fn enum_class_with_interface_sibling() {
+    let data = parse_kotlin(
+        "public interface ExampleInterface\n\npublic enum class ExampleEnum { FIRST }\n",
+    );
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"ExampleEnum"), "with interface: {names:?}");
+}
+
+#[test]
+fn enum_class_with_object_sibling() {
+    let data =
+        parse_kotlin("public object ExampleObject\n\npublic enum class ExampleEnum { FIRST }\n");
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"ExampleEnum"), "with object: {names:?}");
+}
+
+#[test]
+fn enum_class_full_file_without_typealias() {
+    let content = "package com.example\n\npublic class ExampleClass\n\npublic data class ExampleData(val id: String)\n\npublic interface ExampleInterface\n\npublic object ExampleObject\n\npublic enum class ExampleEnum { FIRST }\n\npublic annotation class ExampleAnnotation\n";
+    let data = parse_kotlin(content);
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"ExampleEnum"), "no typealias: {names:?}");
+}
+
+#[test]
+fn enum_class_five_declarations() {
+    let content = "public class ExampleClass\n\npublic data class ExampleData(val id: String)\n\npublic interface ExampleInterface\n\npublic object ExampleObject\n\npublic enum class ExampleEnum { FIRST }\n";
+    let data = parse_kotlin(content);
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"ExampleEnum"), "five decls: {names:?}");
+}
+
+#[test]
+fn enum_class_with_annotation_sibling() {
+    let data = parse_kotlin(
+        "public annotation class ExampleAnnotation\n\npublic enum class ExampleEnum { FIRST }\n",
+    );
+    let names: Vec<&str> = data.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"ExampleEnum"), "with annotation: {names:?}");
+}

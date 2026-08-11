@@ -2393,3 +2393,32 @@ fn java_file_populates_call_edges() {
         "javaLeaf has javaMid as caller: {callers:?}"
     );
 }
+
+// ── enum in definitions (issue #274) ────────────────────────────────────────
+
+#[test]
+fn enum_class_lands_in_definitions_with_name_column() {
+    let idx = Arc::new(Indexer::new());
+    let uri = Url::from_file_path(std::env::temp_dir().join("Kinds274.kt")).unwrap();
+    idx.index_content(
+        &uri,
+        "package com.example\n\npublic enum class ExampleEnum { FIRST }\n",
+    );
+    let locs = idx.definition_locations("ExampleEnum");
+    assert!(!locs.is_empty(), "ExampleEnum in definitions");
+    let first = &locs[0];
+    // "public enum class " = 18 chars → the definition loc is the name.
+    assert_eq!(
+        first.range.start.character, 18,
+        "definition loc points at the name: {locs:?}"
+    );
+    // And the symbol itself is an ENUM with kind_label "enum".
+    let fd = idx.files.get(uri.as_str()).unwrap();
+    let sym = fd
+        .symbols
+        .iter()
+        .find(|s| s.name == "ExampleEnum")
+        .expect("enum symbol");
+    assert_eq!(sym.kind, SymbolKind::ENUM);
+    assert_eq!(sym.kind_label(), "enum");
+}
