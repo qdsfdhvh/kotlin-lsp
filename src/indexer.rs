@@ -236,6 +236,11 @@ pub(crate) struct Indexer {
     pub(crate) library_uris: DashSet<String>,
     /// Path to the full library cache (for lazy loading after fast symbol-index init).
     pub(crate) library_cache_path: RwLock<Option<PathBuf>>,
+    /// Deserialized library cache (lazy, one-shot) — issue #270: the 100+ MB
+    /// payload must be deserialized at most once per process, not on every
+    /// `lazy_load_library_file` call.
+    pub(crate) library_cache_entries:
+        RwLock<Option<Arc<HashMap<String, crate::indexer::cache::FileCacheEntry>>>>,
     /// Simple name → sorted vec of importable FQNs.
     /// e.g. "Composable" → ["androidx.compose.runtime.Composable"]
     /// Built from top-level symbols only (no synthetic file-stem keys).
@@ -319,6 +324,7 @@ impl Indexer {
             workspace_source_roots: RwLock::new(Vec::new()),
             library_uris: DashSet::new(),
             library_cache_path: RwLock::new(None),
+            library_cache_entries: RwLock::new(None),
             importable_fqns: std::sync::RwLock::new(std::collections::HashMap::new()),
             live_trees: DashMap::new(),
             gradle_deps: RwLock::new(None),
@@ -815,7 +821,14 @@ impl Indexer {
             return Some(Arc::clone(data.value()));
         }
         let cache_path = self.library_cache_path.read().expect("lock").clone()?;
-        let lib_cache = crate::indexer::cache::try_load_library_cache_from(&cache_path)?;
+        // One-shot deserialization: keep the map in memory for the process
+        // lifetime instead of decoding the whole cache per file (issue #270).
+        if self.library_cache_entries.read().expect("lock").is_none() {
+            let loaded =
+                crate::indexer::cache::try_load_library_cache_from(&cache_path).map(Arc::new);
+            *self.library_cache_entries.write().expect("lock") = loaded;
+        }
+        let lib_cache = self.library_cache_entries.read().expect("lock").clone()?;
         lib_cache.get(uri).map(|entry| {
             let arc = Arc::new(entry.file_data.clone());
             self.files.insert(uri.to_string(), Arc::clone(&arc));

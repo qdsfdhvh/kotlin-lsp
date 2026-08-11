@@ -532,7 +532,16 @@ impl Indexer {
             .collect();
 
         let cache_path = crate::indexer::cache::library_cache_path(&raw_paths);
-        let lib_cache = crate::indexer::cache::try_load_library_cache(&raw_paths);
+        // Issue #270: check dir mtimes (pure stat, no deserialization) before
+        // touching the tens-of-MB payload; a stale cache is rejected without
+        // ever deserializing it.
+        let dirs_fresh =
+            crate::indexer::cache::library_cache_dirs_fresh(&source_paths, &cache_path);
+        let lib_cache = if dirs_fresh {
+            crate::indexer::cache::try_load_library_cache(&raw_paths)
+        } else {
+            None
+        };
         let cache_is_fresh = match &lib_cache {
             Some(entries) => {
                 crate::indexer::cache::library_cache_is_fresh(&source_paths, &cache_path, entries)
@@ -563,6 +572,18 @@ impl Indexer {
         // then bulk-extend into DashMap in one pass. This avoids ~390K individual
         // lock acquisitions + dedup scans that plague the per-file approach.
         if cache_is_fresh {
+            // Issue #270: when the compact symbol index pre-loaded definitions,
+            // skip the bulk FileData restore entirely — library FileData loads
+            // lazily per file via `get_file` / `lazy_load_library_file`. Bulk
+            // restoring ~390K FileData (with line tables etc.) on every one-shot
+            // CLI invocation is the dominant startup cost.
+            if sym_loaded {
+                self.rebuild_bare_name_cache();
+                log::debug!(
+                    "Fast-start: symbol index loaded, skipping bulk library FileData restore"
+                );
+                return;
+            }
             let lib_cache = lib_cache.unwrap();
             let total = lib_cache.len();
             log::debug!(
