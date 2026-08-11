@@ -40,6 +40,38 @@ pub(crate) fn build_callee_map(index: &Indexer) -> HashMap<String, Vec<(String, 
     map
 }
 
+/// Resolve a possibly bare-name entry (issue #273): an exact key wins; a bare
+/// name resolves to the single `Class.name` key; multiple candidates or none
+/// return `None` (the caller reports ambiguity / not-found).
+pub(crate) fn resolve_entry_key<'a>(
+    entry: &'a str,
+    map: &'a HashMap<String, Vec<(String, String)>>,
+) -> Option<&'a str> {
+    if map.contains_key(entry) {
+        return Some(entry);
+    }
+    let suffix = format!(".{entry}");
+    let mut matches: Vec<&str> = map
+        .keys()
+        .filter(|k| k.ends_with(&suffix))
+        .map(String::as_str)
+        .collect();
+    if matches.len() == 1 {
+        matches.pop()
+    } else {
+        None
+    }
+}
+
+/// Number of `Class.name` keys matching a bare name — for ambiguity reporting.
+pub(crate) fn bare_name_matches(
+    entry: &str,
+    map: &HashMap<String, Vec<(String, String)>>,
+) -> usize {
+    let suffix = format!(".{entry}");
+    map.keys().filter(|k| k.ends_with(&suffix)).count()
+}
+
 /// Language of a source file, from its extension. Used to keep call paths
 /// within one language (issue #259): `call_edges` keys callees by bare name,
 /// so same-named functions in different languages share a key and paths would
@@ -83,24 +115,31 @@ pub(crate) fn enumerate_paths(
     let mut paths: Vec<Vec<(String, String)>> = Vec::new();
     let mut truncated = false;
 
-    let Some(_first_callees) = callee_map.get(entry) else {
+    // Bare-name entry resolves to the unique `Class.method` key (issue #273);
+    // ambiguous or unknown entries yield no paths.
+    let entry_key = match resolve_entry_key(entry, callee_map) {
+        Some(k) => k,
+        None => return (paths, truncated),
+    };
+
+    let Some(_first_callees) = callee_map.get(entry_key) else {
         // Entry has no callees at all — no paths (or, with a target, the
         // target is trivially unreachable).
         return (paths, truncated);
     };
 
     // Language of the entry: from any of its outgoing call edges' caller file.
-    let entry_lang = callee_map[entry]
+    let entry_lang = callee_map[entry_key]
         .iter()
         .find_map(|(file, _)| lang_of_file(file));
 
-    let mut path = vec![(String::new(), entry.to_string())];
+    let mut path = vec![(String::new(), entry_key.to_string())];
     let mut visited: HashSet<String> = HashSet::new();
-    visited.insert(entry.to_string());
+    visited.insert(entry_key.to_string());
 
     dfs(
         callee_map,
-        entry,
+        entry_key,
         entry_lang,
         &mut path,
         &mut visited,
@@ -150,12 +189,24 @@ fn dfs(
         return;
     }
 
-    let Some(callees) = callee_map.get(current) else {
-        // True leaf (no callees): a complete path when enumerating everything.
-        if target.is_none() {
-            paths.push(path.clone());
-        }
-        return;
+    // Bare-name callee fallback (issue #273): a call through a variable
+    // receiver yields a bare callee (`client.send()` → "send") while the graph
+    // keys callers as `Class.method`. Resolve to the unique `Class.method`
+    // key when unambiguous; multiple matches (or none) stay a leaf — guessing
+    // would recreate the #267 false-positive paths.
+    let callees: &Vec<(String, String)> = if let Some(callees) = callee_map.get(current) {
+        callees
+    } else {
+        let Some(key) = resolve_entry_key(current, callee_map) else {
+            // True leaf (no callees): a complete path when enumerating everything.
+            if target.is_none() {
+                paths.push(path.clone());
+            }
+            return;
+        };
+        callee_map
+            .get(key)
+            .expect("resolve_entry_key returns a key present in the map")
     };
 
     // Issue #259 + #266: filter by language only when the current node has
@@ -230,23 +281,39 @@ pub(crate) async fn run_reach(
     let index = crate::cli::run::build_index(&root, no_stdlib).await;
     let callee_map = build_callee_map(&index);
 
-    if !callee_map.contains_key(entry) {
+    let Some(entry_key) = resolve_entry_key(entry, &callee_map) else {
+        let matches = bare_name_matches(entry, &callee_map);
+        let msg = if matches > 1 {
+            format!(
+                "Symbol '{entry}' is ambiguous ({matches} matches: {}) — use Class.method",
+                callee_map
+                    .keys()
+                    .filter(|k| k.ends_with(&format!(".{entry}")))
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        } else {
+            format!("No symbol '{entry}' found in call graph")
+        };
         if json {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "entry": entry,
-                    "error": format!("No symbol '{entry}' in call graph"),
+                    "error": msg,
                 }))
                 .expect("serialize reach error")
             );
         } else {
-            eprintln!("No symbol '{entry}' found in call graph");
+            eprintln!("{msg}");
         }
         std::process::exit(1);
-    }
+    };
+    let entry_key = entry_key.to_string();
 
-    let (paths, truncated) = enumerate_paths(&callee_map, entry, target, max_depth, MAX_PATHS);
+    let (paths, truncated) = enumerate_paths(&callee_map, &entry_key, target, max_depth, MAX_PATHS);
 
     if json {
         let out_paths: Vec<serde_json::Value> = paths

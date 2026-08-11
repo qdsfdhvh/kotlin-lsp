@@ -182,6 +182,12 @@ pub(crate) fn parse_kotlin(content: &str) -> FileData {
         // ── fun interface (tree-sitter parses these as ERROR + lambda_literal) ─
         data.extract_fun_interfaces(root, bytes);
 
+        // ── annotation class / swallowed enum class (infix misparse) ─────────
+        // tree-sitter-kotlin does not recognize `annotation class`; the whole
+        // declaration — and any following declarations — parse as one
+        // infix_expression chain with no class_declaration nodes (issue #274).
+        extract_misparsed_class_decls(root, bytes, &mut data.symbols, &data.lines);
+
         // ── salvage functions from ERROR nodes (annotated function types) ────
         // When tree-sitter can't parse annotated function types like
         // @Composable (Int) -> Unit, the entire function_declaration becomes
@@ -869,6 +875,103 @@ fn has_any_fun_interface_in_tree(root: &Node, bytes: &[u8]) -> bool {
 
 /// Walk ERROR nodes and salvage function declarations that tree-sitter
 /// could not parse due to annotated function types like `@Composable (Int) -> Unit`.
+/// Salvage `annotation class` / `enum class` declarations that
+/// tree-sitter-kotlin misparses as infix_expression chains (issue #274).
+/// `annotation class` is not in the grammar; the misparse also swallows
+/// following declarations (e.g. an enum class) into the same chain, so they
+/// never become class_declaration nodes and the definition query misses them.
+fn extract_misparsed_class_decls(
+    root: Node,
+    bytes: &[u8],
+    symbols: &mut Vec<SymbolEntry>,
+    lines: &[String],
+) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if node.kind() == "infix_expression" {
+            for (kind, name, sel) in misparsed_class_decls(&node, bytes) {
+                let sel_lsp = ts_to_lsp(sel);
+                let duplicate = symbols
+                    .iter()
+                    .any(|s| s.name == name && s.selection_start() == sel_lsp.start.line);
+                if !duplicate {
+                    let visibility = visibility_at_line(lines, node.range().start_point.row);
+                    let range = ts_to_lsp(node.range());
+                    let detail = extract_detail(lines, range.start.line, range.end.line);
+                    let type_params = node.extract_type_params_or_error_child(bytes);
+                    let deprecated = is_deprecated_at_line(lines, sel_lsp.start.line as usize);
+                    symbols.push(SymbolEntry {
+                        name: name.to_owned(),
+                        kind,
+                        visibility,
+                        range,
+                        selection_range: sel_lsp,
+                        detail,
+                        type_params,
+                        extension_receiver: String::new(),
+                        deprecated,
+                        parent_fq_name: None,
+                        return_type: None,
+                        parameters: Vec::new(),
+                        documentation: extract_kdoc_from_lines(
+                            lines,
+                            node.range().start_point.row as u32,
+                        ),
+                        is_sealed: false,
+                        is_typealias: false,
+                    });
+                }
+            }
+        }
+        let mut cur = node.walk();
+        for child in node.children(&mut cur) {
+            stack.push(child);
+        }
+    }
+}
+
+/// Extract every `(enum )?class <Name>` from an infix_expression's identifier
+/// chain (issue #274). tree-sitter-kotlin misparses `annotation class` — and
+/// every declaration after it — as one infix_expression chain, so a chain can
+/// hold several class declarations; each `class` keyword token followed by an
+/// identifier yields one.
+fn misparsed_class_decls(
+    node: &Node,
+    bytes: &[u8],
+) -> Vec<(SymbolKind, String, tree_sitter::Range)> {
+    // Collect simple_identifier tokens in source order (recursive walk keeps
+    // left-to-right order for infix chains).
+    fn collect<'a>(n: Node<'a>, bytes: &'a [u8], out: &mut Vec<(String, tree_sitter::Range)>) {
+        if n.kind() == "simple_identifier" {
+            if let Ok(t) = n.utf8_text(bytes) {
+                out.push((t.to_string(), n.range()));
+            }
+            return;
+        }
+        let mut cur = n.walk();
+        for c in n.children(&mut cur) {
+            collect(c, bytes, out);
+        }
+    }
+    let mut tokens = Vec::new();
+    collect(*node, bytes, &mut tokens);
+    let mut found = Vec::new();
+    for (i, (tok, _)) in tokens.iter().enumerate() {
+        if tok == "class" {
+            let is_enum = i > 0 && tokens[i - 1].0 == "enum";
+            if let Some((name, sel)) = tokens.get(i + 1) {
+                let kind = if is_enum {
+                    SymbolKind::ENUM
+                } else {
+                    SymbolKind::CLASS
+                };
+                found.push((kind, name.clone(), *sel));
+            }
+        }
+    }
+    found
+}
+
 fn extract_functions_from_errors(
     root: Node,
     bytes: &[u8],

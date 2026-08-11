@@ -6,7 +6,10 @@ use tower_lsp::lsp_types::Url;
 
 use crate::indexer::Indexer;
 
-use super::reach::{build_callee_map, enumerate_paths, DEFAULT_MAX_DEPTH, MAX_PATHS};
+use super::reach::{
+    bare_name_matches, build_callee_map, enumerate_paths, resolve_entry_key, DEFAULT_MAX_DEPTH,
+    MAX_PATHS,
+};
 
 // ── test helpers ─────────────────────────────────────────────────────────────
 
@@ -334,5 +337,53 @@ fun entry() { ExampleReader().process() }
     assert!(
         paths.is_empty(),
         "writer path must not be reachable: {paths:?}"
+    );
+}
+
+// ── bare-name entry + variable receiver (issue #273) ─────────────────────────
+
+#[test]
+fn bare_name_entry_resolves_to_unique_class_method() {
+    let idx = Arc::new(Indexer::new());
+    let src = "class ExampleService {\n    fun handle() { doSend() }\n    fun doSend() {}\n}\nfun entry() { ExampleService().handle() }\n";
+    let uri = Url::from_file_path(std::env::temp_dir().join("Bare273.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+
+    let resolved = resolve_entry_key("handle", &map).expect("bare name resolves");
+    assert_eq!(resolved, "ExampleService.handle");
+    let (paths, _) = enumerate_paths(&map, "handle", Some("doSend"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    assert_eq!(paths.len(), 1, "bare entry path: {paths:?}");
+}
+
+#[test]
+fn ambiguous_bare_name_resolves_to_none() {
+    let idx = Arc::new(Indexer::new());
+    let src = "class ExampleReader {\n    fun process() { readFromDisk() }\n}\nclass ExampleWriter {\n    fun process() { writeToDisk() }\n}\n";
+    let uri = Url::from_file_path(std::env::temp_dir().join("Amb273.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+    assert!(
+        resolve_entry_key("process", &map).is_none(),
+        "ambiguous bare name must not silently pick one"
+    );
+    assert_eq!(bare_name_matches("process", &map), 2);
+}
+
+#[test]
+fn variable_receiver_callee_follows_unique_method() {
+    // `client.send()` — variable receiver, bare callee "send" — must follow
+    // the unique ExampleClient.send (issue #273 truncation).
+    let idx = Arc::new(Indexer::new());
+    let src = "class ExampleClient {\n    fun send() { doSend() }\n    fun doSend() {}\n}\nclass ExampleService {\n    fun handle(c: ExampleClient) {\n        c.send()\n    }\n}\nfun entry() {\n    val client = ExampleClient()\n    ExampleService().handle(client)\n}\n";
+    let uri = Url::from_file_path(std::env::temp_dir().join("Var273.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+    let (paths, _) = enumerate_paths(&map, "entry", Some("doSend"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    assert_eq!(paths.len(), 1, "variable receiver followed: {paths:?}");
+    let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["entry", "ExampleService.handle", "send", "doSend"]
     );
 }
