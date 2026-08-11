@@ -1,17 +1,37 @@
 ## 0.31.4 (2026-08-11)
 
+### fix: 0.31.3 regressions (#278-#281, PR #282)
+
+- **call reach** (#278): callees are now resolved through the receiver's
+  declared type (parameter types and `val`/`var` initializers in the enclosing
+  function) instead of bare-name uniqueness — false paths when a same-named
+  method was unique, silent truncation when it was ambiguous, both fixed.
+  #267's type-qualified isolation is preserved.
+- **find** (#279): `object` and `interface` declarations no longer vanish from
+  the index when the file contains a parameterless `annotation class` — the
+  #274 salvage pass now also extracts `object` and `interface` from the
+  misparsed infix-expression chains.
+- **impact / call hierarchy** (#280): a position on a Kotlin keyword
+  (`fun`, `suspend`, `override`, …) now returns `No symbol at cursor` instead
+  of a report about the keyword. Also fixed a `/tmp` vs `/private/tmp`
+  canonicalization mismatch that made the position forms miss files under
+  `/tmp` on macOS.
+- **startup** (#281): a `find`/`refs` miss loads only the compact symbol
+  index (~19 MB) — the 100+ MB library cache is no longer deserialized on the
+  miss path; only completion (auto-import FQNs) loads the full cache.
+
 ### fix: propagate two recurring bug patterns (PR #283, proactive)
 
 - **`--no-stdlib` is now honored by every indexed command** — `edit imports`,
   `edit insert`, `context` and the search-family commands previously
-  hardcoded `build_index(&root, false)` (same shape as #257 / the reach and
+  hardcoded `build_index(&root, false)` (same shape as the #257 / reach and
   index fixes), always indexing the 72k+ stdlib sources. `CliArgs.no_stdlib`
   now flows globally; verified `edit imports --no-stdlib` triggers zero
   stdlib indexing.
 - **File-path canonicalization** — `batch`, `find-test`, `complete` and
   `context` used `std::path::absolute`, which on macOS yields `/tmp` where the
-  indexer stores `/private/tmp` (the #280 shape), silently missing the file.
-  They now canonicalize so URIs match indexer keys.
+  indexer stores `/private/tmp`, silently missing the file. They now
+  canonicalize so URIs match indexer keys.
 
 ## 0.31.3 (2026-08-11)
 
