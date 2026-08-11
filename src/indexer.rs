@@ -860,19 +860,28 @@ impl Indexer {
         for uri in need_load.iter() {
             self.library_uris.insert(uri.clone());
         }
-        // Auto-import completion also needs package + top-level symbols from
-        // the full library cache — load it once here (this path only runs when
-        // a query actually needs library data).
-        if self.library_cache_entries.read().expect("lock").is_none() {
-            let loaded =
-                crate::indexer::cache::try_load_library_cache_from(&cache_path).map(Arc::new);
-            *self.library_cache_entries.write().expect("lock") = loaded;
-        }
         self.rebuild_bare_name_cache();
         log::debug!(
             "Lazy-loaded library symbols ({} names)",
             sym_idx.symbols.len()
         );
+    }
+
+    /// Load the full library cache (FileData) into memory, once. Only needed
+    /// by auto-import completion (package + top-level symbols for FQNs) —
+    /// `find`/`refs` misses are answered by the compact symbol index alone
+    /// (issue #281), so they must not pay the 100+ MB payload.
+    pub(crate) fn lazy_load_library_full(&self) {
+        if self.library_cache_entries.read().expect("lock").is_some() {
+            return;
+        }
+        let Some(cache_path) = self.library_cache_path.read().expect("lock").clone() else {
+            return;
+        };
+        let loaded = crate::indexer::cache::try_load_library_cache_from(&cache_path).map(Arc::new);
+        *self.library_cache_entries.write().expect("lock") = loaded;
+        self.rebuild_bare_name_cache();
+        log::debug!("Lazy-loaded full library cache");
     }
 
     /// Get FileData for a URI, with transparent lazy loading from library cache.
