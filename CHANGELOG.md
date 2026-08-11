@@ -1,3 +1,14 @@
+## 0.31.6 (2026-08-11)
+
+### fix: call reach receiver resolution extends to class properties (#289, PR #290)
+
+- `call reach` resolves a receiver held as a **class property**
+  (`private val client: ExampleClient`) through the enclosing class body —
+  both explicit type annotations and initializers feed the scope. #278's
+  declared-type resolution previously only consulted function scope
+  (parameters + local `val`s), so DI-injected collaborators truncated real
+  call chains at the first property.
+
 ## 0.31.5 (2026-08-11)
 
 ### fix: call reach interface expansion + CHANGELOG gap (#285, #286; PR #287)
