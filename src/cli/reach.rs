@@ -72,6 +72,29 @@ pub(crate) fn bare_name_matches(
     map.keys().filter(|k| k.ends_with(&suffix)).count()
 }
 
+/// type name → implementing class names, from `supertypes_index`
+/// (subtype → [(supertype, file)]), issue #285: a call through an
+/// interface/abstract-typed receiver resolves to `Interface.method`, but the
+/// method body lives in the implementor — expand the implementors' same-named
+/// methods when the interface member has no body.
+pub(crate) fn build_impls_map(index: &Indexer) -> HashMap<String, Vec<String>> {
+    let mut impls: HashMap<String, Vec<String>> = HashMap::new();
+    for entry in index.supertypes_index.iter() {
+        let subtype = entry.key().clone();
+        for (supertype, _file, _kind) in entry.value().iter() {
+            impls
+                .entry(supertype.clone())
+                .or_default()
+                .push(subtype.clone());
+        }
+    }
+    for v in impls.values_mut() {
+        v.sort_unstable();
+        v.dedup();
+    }
+    impls
+}
+
 /// Language of a source file, from its extension. Used to keep call paths
 /// within one language (issue #259): `call_edges` keys callees by bare name,
 /// so same-named functions in different languages share a key and paths would
@@ -107,6 +130,7 @@ fn lang_of_file(path: &str) -> Option<Lang> {
 /// may appear on *different* paths but never twice on the *same* path.
 pub(crate) fn enumerate_paths(
     callee_map: &HashMap<String, Vec<(String, String)>>,
+    impls_map: &HashMap<String, Vec<String>>,
     entry: &str,
     target: Option<&str>,
     max_depth: u32,
@@ -139,6 +163,7 @@ pub(crate) fn enumerate_paths(
 
     dfs(
         callee_map,
+        impls_map,
         entry_key,
         entry_lang,
         &mut path,
@@ -156,6 +181,7 @@ pub(crate) fn enumerate_paths(
 #[allow(clippy::too_many_arguments)]
 fn dfs(
     callee_map: &HashMap<String, Vec<(String, String)>>,
+    impls_map: &HashMap<String, Vec<String>>,
     current: &str,
     lang: Option<Lang>,
     path: &mut Vec<(String, String)>,
@@ -194,19 +220,36 @@ fn dfs(
     // keys callers as `Class.method`. Resolve to the unique `Class.method`
     // key when unambiguous; multiple matches (or none) stay a leaf — guessing
     // would recreate the #267 false-positive paths.
-    let callees: &Vec<(String, String)> = if let Some(callees) = callee_map.get(current) {
-        callees
+    let callees: Vec<(String, String)> = if let Some(callees) = callee_map.get(current) {
+        callees.clone()
+    } else if let Some(key) = resolve_entry_key(current, callee_map) {
+        callee_map
+            .get(key)
+            .expect("resolve_entry_key returns a key present in the map")
+            .clone()
     } else {
-        let Some(key) = resolve_entry_key(current, callee_map) else {
-            // True leaf (no callees): a complete path when enumerating everything.
+        // Issue #285: a qualified interface/abstract member has no body —
+        // expand the implementors' same-named methods instead.
+        let mut expanded: Vec<(String, String)> = Vec::new();
+        if let Some((typ, method)) = current.split_once('.') {
+            if let Some(implementors) = impls_map.get(typ) {
+                for implementor in implementors {
+                    let impl_key = format!("{implementor}.{method}");
+                    if let Some(edges) = callee_map.get(&impl_key) {
+                        expanded.extend(edges.iter().cloned());
+                    }
+                }
+            }
+        }
+        if expanded.is_empty() {
+            // True leaf (no callees): a complete path when enumerating
+            // everything.
             if target.is_none() {
                 paths.push(path.clone());
             }
             return;
-        };
-        callee_map
-            .get(key)
-            .expect("resolve_entry_key returns a key present in the map")
+        }
+        expanded
     };
 
     // Issue #259 + #266: filter by language only when the current node has
@@ -224,12 +267,12 @@ fn dfs(
     for (file, callee) in callees {
         if ambiguous {
             if let Some(lang) = lang {
-                if lang_of_file(file) != Some(lang) {
+                if lang_of_file(&file) != Some(lang) {
                     continue;
                 }
             }
         }
-        if visited.contains(callee) {
+        if visited.contains(&callee) {
             continue;
         }
         expanded = true;
@@ -237,7 +280,8 @@ fn dfs(
         path.push((file.clone(), callee.clone()));
         dfs(
             callee_map,
-            callee,
+            impls_map,
+            &callee,
             lang,
             path,
             visited,
@@ -249,7 +293,7 @@ fn dfs(
             truncated,
         );
         path.pop();
-        visited.remove(callee);
+        visited.remove(&callee);
     }
     // Every callee was already visited (cycle back-edge): the node is a leaf
     // within this path — record it when enumerating everything.
@@ -313,7 +357,15 @@ pub(crate) async fn run_reach(
     };
     let entry_key = entry_key.to_string();
 
-    let (paths, truncated) = enumerate_paths(&callee_map, &entry_key, target, max_depth, MAX_PATHS);
+    let impls_map = build_impls_map(&index);
+    let (paths, truncated) = enumerate_paths(
+        &callee_map,
+        &impls_map,
+        &entry_key,
+        target,
+        max_depth,
+        MAX_PATHS,
+    );
 
     if json {
         let out_paths: Vec<serde_json::Value> = paths

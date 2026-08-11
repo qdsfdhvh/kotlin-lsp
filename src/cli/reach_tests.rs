@@ -7,8 +7,8 @@ use tower_lsp::lsp_types::Url;
 use crate::indexer::Indexer;
 
 use super::reach::{
-    bare_name_matches, build_callee_map, enumerate_paths, resolve_entry_key, DEFAULT_MAX_DEPTH,
-    MAX_PATHS,
+    bare_name_matches, build_callee_map, build_impls_map, enumerate_paths, resolve_entry_key,
+    DEFAULT_MAX_DEPTH, MAX_PATHS,
 };
 
 // ── test helpers ─────────────────────────────────────────────────────────────
@@ -60,8 +60,14 @@ fun right(): String { return "r" }
 fn direct_call_one_hop() {
     let idx = build_graph(CYCLE_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, truncated) =
-        enumerate_paths(&map, "entry", Some("c"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, truncated) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "entry",
+        Some("c"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert!(!truncated, "no truncation expected");
     assert_eq!(paths.len(), 1, "exactly one direct path");
     assert_eq!(names(&paths[0]), vec!["entry", "c"]);
@@ -71,7 +77,14 @@ fn direct_call_one_hop() {
 fn multi_hop_path() {
     let idx = build_graph(CHAIN_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, _) = enumerate_paths(&map, "e1", Some("e3"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "e1",
+        Some("e3"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 1, "exactly one transitive path");
     assert_eq!(names(&paths[0]), vec!["e1", "e2", "e3"]);
 }
@@ -81,7 +94,14 @@ fn cycle_terminates_with_target() {
     // a → b → a: target c lives outside the cycle — must terminate with no paths.
     let idx = build_graph(CYCLE_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, truncated) = enumerate_paths(&map, "a", Some("c"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, truncated) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "a",
+        Some("c"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert!(!truncated, "no truncation expected");
     assert!(paths.is_empty(), "c is unreachable from a");
 }
@@ -91,7 +111,14 @@ fn cycle_terminates_without_target() {
     // a → b → a: the back edge must not be re-traversed on the same path.
     let idx = build_graph(CYCLE_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, _) = enumerate_paths(&map, "a", None, DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "a",
+        None,
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 1, "exactly one path [a, b]");
     assert_eq!(names(&paths[0]), vec!["a", "b"]);
 }
@@ -102,6 +129,7 @@ fn unreachable_target_is_empty() {
     let map = build_callee_map(&idx);
     let (paths, _) = enumerate_paths(
         &map,
+        &std::collections::HashMap::new(),
         "entry",
         Some("nonexistent"),
         DEFAULT_MAX_DEPTH,
@@ -114,7 +142,14 @@ fn unreachable_target_is_empty() {
 fn entry_missing_from_graph_is_empty() {
     let idx = build_graph(CYCLE_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, _) = enumerate_paths(&map, "ghost", None, DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "ghost",
+        None,
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert!(paths.is_empty(), "unknown entry yields no paths");
 }
 
@@ -122,7 +157,14 @@ fn entry_missing_from_graph_is_empty() {
 fn all_paths_without_target() {
     let idx = build_graph(BRANCH_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, _) = enumerate_paths(&map, "branch", None, DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "branch",
+        None,
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 2, "two leaves (if / else arms)");
     let mut leaves: Vec<Vec<&str>> = paths.iter().map(|p| names(p)).collect();
     leaves.sort();
@@ -136,7 +178,14 @@ fn all_paths_without_target() {
 fn branch_paths_to_specific_target() {
     let idx = build_graph(BRANCH_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, _) = enumerate_paths(&map, "branch", Some("left"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "branch",
+        Some("left"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 1);
     assert_eq!(names(&paths[0]), vec!["branch", "left"]);
 }
@@ -146,7 +195,14 @@ fn max_depth_bounds_enumeration() {
     let idx = build_graph(CHAIN_SOURCE);
     let map = build_callee_map(&idx);
     // Depth 1: e1 → e2 recorded, e3 never reached.
-    let (paths, _) = enumerate_paths(&map, "e1", None, 1, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "e1",
+        None,
+        1,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 1);
     assert_eq!(names(&paths[0]), vec!["e1", "e2"]);
 }
@@ -155,7 +211,14 @@ fn max_depth_bounds_enumeration() {
 fn target_at_entry_is_immediate_path() {
     let idx = build_graph(CYCLE_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, _) = enumerate_paths(&map, "a", Some("a"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "a",
+        Some("a"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 1, "entry == target is a single-node path");
     assert_eq!(names(&paths[0]), vec!["a"]);
 }
@@ -164,7 +227,14 @@ fn target_at_entry_is_immediate_path() {
 fn path_cap_truncates() {
     let idx = build_graph(BRANCH_SOURCE);
     let map = build_callee_map(&idx);
-    let (paths, truncated) = enumerate_paths(&map, "branch", None, DEFAULT_MAX_DEPTH, 1);
+    let (paths, truncated) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "branch",
+        None,
+        DEFAULT_MAX_DEPTH,
+        1,
+    );
     assert!(truncated, "cap 1 must set the truncation flag");
     assert!(paths.len() <= 1);
 }
@@ -204,7 +274,14 @@ fn paths_do_not_cross_language_boundary() {
 
     let map = build_callee_map(&idx);
     // Kotlin path: entryPoint -> sharedName -> kotlinOnlyLeaf only.
-    let (paths, _) = enumerate_paths(&map, "entryPoint", None, DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "entryPoint",
+        None,
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert!(!paths.is_empty(), "kotlin path exists");
     for p in &paths {
         let names: Vec<&str> = p.iter().map(|(_, n)| n.as_str()).collect();
@@ -214,7 +291,14 @@ fn paths_do_not_cross_language_boundary() {
         );
     }
     // Swift path: swiftEntry -> sharedName -> swiftOnlyLeaf only.
-    let (paths, _) = enumerate_paths(&map, "swiftEntry", None, DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "swiftEntry",
+        None,
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert!(!paths.is_empty(), "swift path exists");
     for p in &paths {
         let names: Vec<&str> = p.iter().map(|(_, n)| n.as_str()).collect();
@@ -240,6 +324,7 @@ fn target_path_respects_language() {
     // Kotlin entry → Swift-only target: unreachable (language boundary).
     let (paths, _) = enumerate_paths(
         &map,
+        &std::collections::HashMap::new(),
         "entryPoint",
         Some("swiftOnlyLeaf"),
         DEFAULT_MAX_DEPTH,
@@ -252,6 +337,7 @@ fn target_path_respects_language() {
     // Kotlin entry → Kotlin leaf: reachable.
     let (paths, _) = enumerate_paths(
         &map,
+        &std::collections::HashMap::new(),
         "entryPoint",
         Some("kotlinOnlyLeaf"),
         DEFAULT_MAX_DEPTH,
@@ -278,6 +364,7 @@ fn kotlin_entry_follows_java_callees() {
     let map = build_callee_map(&idx);
     let (paths, _) = enumerate_paths(
         &map,
+        &std::collections::HashMap::new(),
         "kotlinEntry",
         Some("javaLeaf"),
         DEFAULT_MAX_DEPTH,
@@ -314,6 +401,7 @@ fun entry() { ExampleReader().process() }
     // The real path exists: entry → ExampleReader.process → readFromDisk.
     let (paths, _) = enumerate_paths(
         &map,
+        &std::collections::HashMap::new(),
         "entry",
         Some("readFromDisk"),
         DEFAULT_MAX_DEPTH,
@@ -329,6 +417,7 @@ fun entry() { ExampleReader().process() }
     // The false path must not exist: writeToDisk is unreachable from entry.
     let (paths, _) = enumerate_paths(
         &map,
+        &std::collections::HashMap::new(),
         "entry",
         Some("writeToDisk"),
         DEFAULT_MAX_DEPTH,
@@ -352,7 +441,14 @@ fn bare_name_entry_resolves_to_unique_class_method() {
 
     let resolved = resolve_entry_key("handle", &map).expect("bare name resolves");
     assert_eq!(resolved, "ExampleService.handle");
-    let (paths, _) = enumerate_paths(&map, "handle", Some("doSend"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "handle",
+        Some("doSend"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 1, "bare entry path: {paths:?}");
 }
 
@@ -379,7 +475,14 @@ fn variable_receiver_callee_follows_unique_method() {
     let uri = Url::from_file_path(std::env::temp_dir().join("Var273.kt")).expect("uri");
     idx.index_content(&uri, src);
     let map = build_callee_map(&idx);
-    let (paths, _) = enumerate_paths(&map, "entry", Some("doSend"), DEFAULT_MAX_DEPTH, MAX_PATHS);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "entry",
+        Some("doSend"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
     assert_eq!(paths.len(), 1, "variable receiver followed: {paths:?}");
     let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
     assert_eq!(
@@ -391,5 +494,30 @@ fn variable_receiver_callee_follows_unique_method() {
             "doSend"
         ],
         "receiver type resolution (issue #278) qualifies the variable receiver"
+    );
+}
+
+// ── interface/abstract member expansion (issue #285) ─────────────────────────
+
+#[test]
+fn interface_receiver_expands_implementor_body() {
+    let idx = Arc::new(Indexer::new());
+    let src = "interface Reader {\n    fun process()\n}\nclass ImplReader : Reader {\n    override fun process() {\n        readFromDisk()\n    }\n    fun readFromDisk() {}\n}\nfun useReader(r: Reader) {\n    r.process()\n}\nfun entry() {\n    useReader(ImplReader())\n}\n";
+    let uri = Url::from_file_path(std::env::temp_dir().join("Iface285.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+    let impls_map = build_impls_map(&idx);
+    let (paths, _) = enumerate_paths(
+        &map,
+        &impls_map,
+        "entry",
+        Some("readFromDisk"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert_eq!(
+        paths.len(),
+        1,
+        "implementor body reached through interface: {paths:?}"
     );
 }
