@@ -1,3 +1,21 @@
+## 0.31.3 (2026-08-11)
+
+### fix: 0.31.2 regressions (#273-#275, PR #276)
+
+- **call reach** (#273): bare-name entries resolve to the unique `Class.method`
+  key (ambiguous names report an explicit error listing candidates); bare
+  callees from variable receivers (`client.send()`) follow the unique
+  qualified key. Type-qualified isolation from #267 is preserved.
+- **find** (#274): enum class lost its kind once indexed when the file also
+  contained an `annotation class` — tree-sitter-kotlin misparses it into an
+  infix_expression chain that swallows following declarations. A salvage pass
+  now extracts `(enum )?class Name` from such chains.
+- **startup** (#275): `find`/`refs` no longer deserialize the 100+ MB library
+  cache — symbol-index existence is a cheap stat, definitions populate lazily
+  only when a query misses, and completion loads library data on demand.
+  `find --smart` on a workspace-local symbol drops from ~6.5s to well under a
+  second on a normal machine.
+
 ## 0.31.2 (2026-08-11)
 
 ### fix: 0.31.1 regressions (#266-#270, PR #271)
