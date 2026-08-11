@@ -3209,3 +3209,15 @@ fn local_initializer_receiver_qualifies_callee() {
         "local val initializer resolves receiver type: {edges:?}"
     );
 }
+
+// ── class-property receiver resolution (issue #289) ──────────────────────────
+
+#[test]
+fn class_property_receiver_qualifies_callee() {
+    let src = "class ExampleClient {\n    fun send() { doSend() }\n}\nclass ExampleService {\n    private val client: ExampleClient = ExampleClient()\n    fun handle() {\n        client.send()\n    }\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    assert!(
+        edges.iter().any(|(_, k)| k == "ExampleClient.send"),
+        "class-property receiver resolves via declared/initializer type: {edges:?}"
+    );
+}

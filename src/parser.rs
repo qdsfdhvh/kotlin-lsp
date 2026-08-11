@@ -2529,7 +2529,83 @@ fn local_var_types(node: &tree_sitter::Node, source: &str) -> HashMap<String, St
         }
     }
 
+    // Class properties (issue #289): a receiver held as a member
+    // (`private val client: ExampleClient` or `= ExampleClient()`) is not in
+    // function scope. Walk the enclosing class body for property declarations
+    // and add their declared/initializer types — DI-injected collaborators
+    // live here.
+    if let Some(class_node) = enclosing_class(fn_node.parent()) {
+        let mut stack: Vec<tree_sitter::Node> = vec![class_node];
+        while let Some(n) = stack.pop() {
+            if n.kind() == KIND_PROP_DECL {
+                // Explicit type annotation: `val client: ExampleClient`.
+                if let Some((var, typ)) = property_declared_type(&n, source) {
+                    scope.insert(var, typ);
+                }
+                // Or initializer: `val client = ExampleClient()`.
+                if let Some((var, typ)) = local_initializer_type(&n, source) {
+                    scope.insert(var, typ);
+                }
+            }
+            let mut cur = n.walk();
+            for child in n.children(&mut cur) {
+                stack.push(child);
+            }
+        }
+    }
+
     scope
+}
+
+/// Walk up from `node` to the enclosing type declaration (class/object/
+/// interface/companion).
+fn enclosing_class(node: Option<tree_sitter::Node>) -> Option<tree_sitter::Node> {
+    let mut cur = node;
+    while let Some(n) = cur {
+        if matches!(
+            n.kind(),
+            KIND_CLASS_DECL | KIND_OBJECT_DECL | KIND_COMPANION_OBJ | KIND_INTERFACE_DECL
+        ) {
+            return Some(n);
+        }
+        cur = n.parent();
+    }
+    None
+}
+
+/// `val client: ExampleClient` / `var x: Type = ...` → (name, type) from an
+/// explicit type annotation (vs the initializer path in
+/// [`local_initializer_type`]).
+fn property_declared_type(decl: &tree_sitter::Node, source: &str) -> Option<(String, String)> {
+    // Name: first simple_identifier in the subtree.
+    fn first_ident(n: &tree_sitter::Node, bytes: &[u8]) -> Option<String> {
+        if n.kind() == "simple_identifier" {
+            return n.utf8_text(bytes).ok().map(|s| s.to_string());
+        }
+        let mut cur = n.walk();
+        for c in n.children(&mut cur) {
+            if let Some(s) = first_ident(&c, bytes) {
+                return Some(s);
+            }
+        }
+        None
+    }
+    let name = first_ident(decl, source.as_bytes())?;
+    // Type annotation: a user_type/type_identifier child before the `=`.
+    let mut cur = decl.walk();
+    for child in decl.children(&mut cur) {
+        if matches!(
+            child.kind(),
+            "user_type" | "type_identifier" | "generic_type"
+        ) {
+            let typ = child.utf8_text(source.as_bytes()).ok()?.to_string();
+            if typ.contains('=') {
+                continue; // not a type
+            }
+            return Some((name, typ));
+        }
+    }
+    None
 }
 
 /// `val client = ExampleClient()` / `var x: Type = ...` → (name, type).
