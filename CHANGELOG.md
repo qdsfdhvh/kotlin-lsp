@@ -1,3 +1,26 @@
+## 0.31.2 (2026-08-11)
+
+### fix: 0.31.1 regressions (#266-#270, PR #271)
+
+- **call reach / call diff call graph** (#266): Java declarations now enter
+  the call graph — `extract_call_edges` handles Java `method_invocation`,
+  `method_declaration` and `constructor_declaration`; Kotlin→Java static calls
+  are followed.
+- **call reach** (#267): caller keys are type-qualified (`Class.method`) and
+  callee keys are qualified when the receiver is statically known, so
+  same-named methods on different types no longer merge — `--to` no longer
+  reports an unreachable function as reachable.
+- **call diff** (#268): the worktree snapshot now includes new unstaged files
+  (`git ls-files --cached --others --exclude-standard`) while still excluding
+  gitignored build artifacts (#260).
+- **find** (#269): `typealias` gets its own kind so `--kind typealias`
+  matches; enum class keeps its kind once indexed.
+- **startup** (#270): library cache freshness is checked with pure stat before
+  any payload deserialization, and fast start skips bulk FileData restore
+  (library FileData loads lazily, deserialized once per process); auto-import
+  completion reads library package/symbol metadata from the cached map.
+- `index --no-stdlib` is now honored (same shape as #257).
+
 ## 0.31.1 (2026-08-10)
 
 ### fix: 0.31.0 regressions (#259-#263, PR #264)
