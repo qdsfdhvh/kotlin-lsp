@@ -593,6 +593,8 @@ fn is_single_line_body_phantom_error(node: &Node) -> bool {
     };
     let mut cursor = node.walk();
     let mut saw_member = false;
+    let mut class_head_form = false; // contains a simple_identifier (class name)
+    let mut saw_semicolon = false;
     for child in node.children(&mut cursor) {
         if child.is_missing() {
             return false;
@@ -601,12 +603,23 @@ fn is_single_line_body_phantom_error(node: &Node) -> bool {
             if !ok_unnamed(child.kind()) {
                 return false;
             }
+            if child.kind() == ";" {
+                saw_semicolon = true;
+            }
             continue;
+        }
+        if child.kind() == "simple_identifier" {
+            class_head_form = true;
         }
         if !is_member_decl(&child) {
             return false;
         }
         saw_member = true;
+    }
+    // Class-head form (`class X : B() {;`) only suppresses when the empty-body
+    // semicolon is present — `class Bad {` (missing `}`) must keep reporting.
+    if class_head_form && !saw_semicolon {
+        return false;
     }
     saw_member
 }
