@@ -521,3 +521,242 @@ fn interface_receiver_expands_implementor_body() {
         "implementor body reached through interface: {paths:?}"
     );
 }
+
+// ── chained-call receiver resolution (issue #295) ────────────────────────────
+
+#[test]
+fn chained_call_keys_outer_callee_against_inner_return_type() {
+    // `api.fetch().onFailure()`: onFailure is declared on ExampleResult (what
+    // fetch returns), not on ExampleApi. The path must run through
+    // ExampleResult.onFailure — the old behavior fabricated ExampleApi.onFailure
+    // (a node that does not exist) and dropped the real edge.
+    let idx = Arc::new(Indexer::new());
+    let src = r#"
+class ExampleResult {
+    fun onFailure(): ExampleResult {
+        handleFailure()
+        return this
+    }
+}
+fun handleFailure() {
+    println("failure")
+}
+class ExampleApi {
+    fun fetch(): ExampleResult {
+        doNetworkIO()
+        return ExampleResult()
+    }
+}
+fun doNetworkIO() {
+    println("io")
+}
+class Caller(private val api: ExampleApi) {
+    fun chained() {
+        api.fetch().onFailure()
+    }
+}
+"#;
+    let uri = Url::from_file_path(std::env::temp_dir().join("Chain295.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+    assert!(
+        !map.keys().any(|k| k == "ExampleApi.onFailure"),
+        "fabricated ExampleApi.onFailure must not be a graph node"
+    );
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "Caller.chained",
+        Some("handleFailure"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert_eq!(
+        paths.len(),
+        1,
+        "chained call reaches handleFailure: {paths:?}"
+    );
+    let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["Caller.chained", "ExampleResult.onFailure", "handleFailure"],
+        "outer callee keyed by fetch's return type"
+    );
+}
+
+#[test]
+fn nested_chained_call_resolves_recursively() {
+    // `api.fetch().onFailure().again()` — the parser emits compound keys for
+    // each level; the resolver must chase fetch → ExampleResult, then
+    // ExampleResult.onFailure → ExampleResult again. Each compound key
+    // resolves to the callee keyed by the return type at that hop.
+    let idx = Arc::new(Indexer::new());
+    let src = r#"
+class ExampleResult {
+    fun onFailure(): ExampleResult { noteFailure(); return this }
+    fun noteFailure() {}
+    fun again(): ExampleResult { doRecovery(); return this }
+}
+fun doRecovery() {}
+class ExampleApi {
+    fun fetch(): ExampleResult { return ExampleResult() }
+}
+class Caller(private val api: ExampleApi) {
+    fun chained() {
+        api.fetch().onFailure().again()
+    }
+}
+"#;
+    let uri = Url::from_file_path(std::env::temp_dir().join("ChainNested295.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+    // Both hops resolve to real keys: `ExampleResult.onFailure` (from the
+    // one-hop compound) and `ExampleResult.again` (from the two-hop one).
+    let callers = map.get("Caller.chained").expect("caller present");
+    let callees: Vec<&str> = callers.iter().map(|(_, c)| c.as_str()).collect();
+    assert!(
+        callees.contains(&"ExampleResult.onFailure"),
+        "one-hop compound resolves: {callees:?}"
+    );
+    assert!(
+        callees.contains(&"ExampleResult.again"),
+        "two-hop compound resolves through both return types: {callees:?}"
+    );
+    // Each real callee expands its own body.
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "Caller.chained",
+        Some("doRecovery"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    assert_eq!(paths.len(), 1, "nested chain reaches doRecovery: {paths:?}");
+    let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["Caller.chained", "ExampleResult.again", "doRecovery"],
+        "outermost callee keys against the final return type"
+    );
+    let (paths, _) = enumerate_paths(
+        &map,
+        &std::collections::HashMap::new(),
+        "Caller.chained",
+        Some("noteFailure"),
+        DEFAULT_MAX_DEPTH,
+        MAX_PATHS,
+    );
+    let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["Caller.chained", "ExampleResult.onFailure", "noteFailure"],
+        "intermediate hop follows its own body"
+    );
+}
+
+#[test]
+fn chained_call_unknown_return_type_never_attributes_to_root_receiver() {
+    // `someApi.getThings().toResult().map { }` where getThings's return type
+    // is unknown (inferred / stdlib): the chain must NOT be reported as
+    // SomeApi.toResult / SomeApi.map. The methods stay bare — dropped edges
+    // are recoverable, a wrong edge is not (issue #295 point 2).
+    let idx = Arc::new(Indexer::new());
+    let src = r#"
+class SomeApi {
+    fun getThings() {
+        doIO()
+    }
+}
+fun doIO() {}
+class Caller(private val api: SomeApi) {
+    fun chained() {
+        api.getThings().toResult().map { }
+    }
+}
+"#;
+    let uri = Url::from_file_path(std::env::temp_dir().join("ChainUnknown295.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+    assert!(
+        !map.keys()
+            .any(|k| k == "SomeApi.toResult" || k == "SomeApi.map"),
+        "no root-receiver fabrication: {}",
+        map.keys().cloned().collect::<Vec<_>>().join(", ")
+    );
+    // The real inner edge survives; the outer methods stay bare.
+    let callers = map.get("Caller.chained").expect("caller present");
+    let callees: Vec<&str> = callers.iter().map(|(_, c)| c.as_str()).collect();
+    assert!(
+        callees.contains(&"SomeApi.getThings"),
+        "real inner call: {callees:?}"
+    );
+    assert!(
+        callees.contains(&"toResult"),
+        "bare fallback keeps the method: {callees:?}"
+    );
+    assert!(
+        callees.contains(&"map"),
+        "bare fallback keeps the method: {callees:?}"
+    );
+}
+
+// ── delegated property receiver resolution (issue #296) ─────────────────────
+
+#[test]
+fn delegated_property_receivers_reach_through_delegate_type() {
+    // `by lazy { ExampleClient() }` and `val client by client` with
+    // `client: Lazy<ExampleClient>` both give the property the delegate's
+    // getValue result type — ExampleClient — so client.send() is
+    // ExampleClient.send, and the unique-name fallback cannot fire.
+    let idx = Arc::new(Indexer::new());
+    let src = r#"
+class ExampleClient {
+    fun send() {
+        transmit()
+    }
+}
+fun transmit() {
+    println("sent")
+}
+class UnrelatedSender {
+    fun send() {
+        println("unrelated")
+    }
+}
+class ViaLazyDelegateParam(client: Lazy<ExampleClient>) {
+    private val client by client
+    fun go() { client.send() }
+}
+class ViaByLazyBlock {
+    private val client by lazy { ExampleClient() }
+    fun go() { client.send() }
+}
+"#;
+    let uri = Url::from_file_path(std::env::temp_dir().join("Delegate296.kt")).expect("uri");
+    idx.index_content(&uri, src);
+    let map = build_callee_map(&idx);
+    assert!(
+        !map.keys().any(|k| k == "Lazy.send"),
+        "delegate's own type must not be used"
+    );
+    for (entry, label) in [
+        ("ViaLazyDelegateParam.go", "Lazy-param delegate"),
+        ("ViaByLazyBlock.go", "lazy-block delegate"),
+    ] {
+        let (paths, _) = enumerate_paths(
+            &map,
+            &std::collections::HashMap::new(),
+            entry,
+            Some("transmit"),
+            DEFAULT_MAX_DEPTH,
+            MAX_PATHS,
+        );
+        assert_eq!(paths.len(), 1, "{label} reaches transmit: {paths:?}");
+        let names: Vec<&str> = paths[0].iter().map(|(_, n)| n.as_str()).collect();
+        assert_eq!(
+            names,
+            vec![entry, "ExampleClient.send", "transmit"],
+            "{label} keys the property by the delegate getValue result"
+        );
+    }
+}

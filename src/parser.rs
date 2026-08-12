@@ -2441,6 +2441,25 @@ fn find_callee_name_from_node_with_scope(
                     .split('(')
                     .next()
                     .unwrap_or("");
+                // Chained call (`api.fetch().onFailure()`): the receiver is
+                // itself a call_expression, so its type is the *return type*
+                // of the inner call, never the root receiver's declared type.
+                // Emit a compound key `InnerCallee.method` — reach resolves it
+                // through the declaration index's return types (issue #295).
+                // When the inner callee does not resolve, stay bare: a wrong
+                // edge (root-receiver attribution) is worse than a dropped
+                // one, and the dropped edge is recoverable.
+                let mut cur = child.walk();
+                for inner_child in child.children(&mut cur) {
+                    if inner_child.is_named() && inner_child.kind() == KIND_CALL_EXPR {
+                        let inner =
+                            find_callee_name_from_node_with_scope(&inner_child, source, scope);
+                        if inner.contains('.') || is_type_like(&inner) {
+                            return format!("{inner}.{method}");
+                        }
+                        return method.to_string();
+                    }
+                }
                 if let Some(prefix) = receiver_type_prefix(full) {
                     return format!("{prefix}.{method}");
                 }
@@ -2522,6 +2541,11 @@ fn local_var_types(node: &tree_sitter::Node, source: &str) -> HashMap<String, St
             if let Some((var, typ)) = local_initializer_type(&n, source) {
                 scope.insert(var, typ);
             }
+            // Delegated property: `val x by lazy { T() }` / `by someLazy`
+            // (issue #296).
+            if let Some((var, typ)) = delegated_property_type(&n, source, &scope) {
+                scope.insert(var, typ);
+            }
         }
         let mut cur = n.walk();
         for child in n.children(&mut cur) {
@@ -2535,29 +2559,41 @@ fn local_var_types(node: &tree_sitter::Node, source: &str) -> HashMap<String, St
     // and add their declared/initializer types — DI-injected collaborators
     // live here.
     if let Some(class_node) = enclosing_class(fn_node.parent()) {
+        // Pass 1 — primary-constructor properties first, so a delegated
+        // property can resolve its delegate's declared type regardless of
+        // declaration order: `val client by client` with a `client` param
+        // (issue #296) needs `client → Lazy<ExampleClient>` in scope before
+        // the property's own type is computed.
         let mut stack: Vec<tree_sitter::Node> = vec![class_node];
         while let Some(n) = stack.pop() {
-            match n.kind() {
-                KIND_PROP_DECL => {
-                    // Explicit type annotation: `val client: ExampleClient`.
-                    if let Some((var, typ)) = property_declared_type(&n, source) {
-                        scope.insert(var, typ);
-                    }
-                    // Or initializer: `val client = ExampleClient()`.
-                    if let Some((var, typ)) = local_initializer_type(&n, source) {
-                        scope.insert(var, typ);
-                    }
+            if n.kind() == "class_parameter" {
+                if let Some((var, typ)) = class_parameter_type(&n, source) {
+                    scope.insert(var, typ);
                 }
-                "class_parameter" => {
-                    // Primary-constructor property: `class C(private val
-                    // repo: Repo)` → repo → Repo (issue #292). The parameter
-                    // holds name + type; the declared type resolves
-                    // interface/abstract receivers through implementors.
-                    if let Some((var, typ)) = class_parameter_type(&n, source) {
-                        scope.insert(var, typ);
-                    }
+            }
+            let mut cur = n.walk();
+            for child in n.children(&mut cur) {
+                stack.push(child);
+            }
+        }
+        // Pass 2 — property declarations (explicit type, initializer, or
+        // delegate).
+        let mut stack: Vec<tree_sitter::Node> = vec![class_node];
+        while let Some(n) = stack.pop() {
+            if n.kind() == KIND_PROP_DECL {
+                // Explicit type annotation: `val client: ExampleClient`.
+                if let Some((var, typ)) = property_declared_type(&n, source) {
+                    scope.insert(var, typ);
                 }
-                _ => {}
+                // Or initializer: `val client = ExampleClient()`.
+                if let Some((var, typ)) = local_initializer_type(&n, source) {
+                    scope.insert(var, typ);
+                }
+                // Or delegate: `val client by lazy { ExampleClient() }` /
+                // `val client by someLazy` (issue #296).
+                if let Some((var, typ)) = delegated_property_type(&n, source, &scope) {
+                    scope.insert(var, typ);
+                }
             }
             let mut cur = n.walk();
             for child in n.children(&mut cur) {
@@ -2596,6 +2632,110 @@ fn class_parameter_type(param: &tree_sitter::Node, source: &str) -> Option<(Stri
     match (name, typ) {
         (Some(n), Some(t)) => Some((n, t)),
         _ => None,
+    }
+}
+
+/// `val x by delegate` → (name, type). A delegated property's type is the
+/// delegate's `getValue` result, not the delegate's own type (issue #296):
+/// - `by lazy { ExampleClient() }` → `ExampleClient` (the lambda's
+///   constructed type), the ordinary way to hold a lazy collaborator;
+/// - `by someLazy` with `someLazy: Lazy<ExampleClient>` → `ExampleClient`
+///   (`Lazy<T>.getValue` returns `T`), the DI cycle-breaker shape.
+///
+/// Other delegates (a custom `ReadWriteProperty`, a function call) have no
+/// statically knowable property type → `None`, leaving the receiver bare.
+fn delegated_property_type(
+    decl: &tree_sitter::Node,
+    source: &str,
+    scope: &HashMap<String, String>,
+) -> Option<(String, String)> {
+    fn first_ident(n: &tree_sitter::Node, bytes: &[u8]) -> Option<String> {
+        if n.kind() == "simple_identifier" {
+            return n.utf8_text(bytes).ok().map(|s| s.to_string());
+        }
+        let mut cur = n.walk();
+        for c in n.children(&mut cur) {
+            if let Some(s) = first_ident(&c, bytes) {
+                return Some(s);
+            }
+        }
+        None
+    }
+    let name = first_ident(decl, source.as_bytes())?;
+    // The delegate expression is the first named child of property_delegate
+    // (after the `by` keyword).
+    let delegate = decl
+        .children(&mut decl.walk())
+        .find(|c| c.kind() == "property_delegate")?;
+    let mut cur = delegate.walk();
+    let expr = delegate.children(&mut cur).find(|c| c.is_named())?;
+    match expr.kind() {
+        KIND_CALL_EXPR => {
+            // `by lazy { ExampleClient() }` — the property type is what the
+            // lambda constructs: the first statement-level constructor call
+            // or bare type reference inside the lambda body.
+            let callee = expr.children(&mut expr.walk()).find(|c| c.is_named())?;
+            let callee_text = callee.utf8_text(source.as_bytes()).ok()?;
+            if callee_text.starts_with("lazy") {
+                let typ = constructed_type_in_lambda(&expr, source)?;
+                Some((name, typ))
+            } else {
+                None
+            }
+        }
+        "simple_identifier" | "identifier" => {
+            // `by someLazy` — the property type is `Lazy<T>`'s `getValue`
+            // result: unwrap the delegate's declared type `Lazy<T>` → `T`.
+            let delegate_name = expr.utf8_text(source.as_bytes()).ok()?;
+            let typ = unwrap_delegate_type(scope.get(delegate_name)?)?;
+            Some((name, typ))
+        }
+        _ => None,
+    }
+}
+
+/// First statement-level constructor call / bare type reference inside a
+/// `lazy { … }` lambda body, e.g. `lazy { ExampleClient() }` →
+/// `ExampleClient`. Nested calls inside the constructor's own arguments are
+/// not followed — only the lambda's direct statements are inspected.
+fn constructed_type_in_lambda(lazy_call: &tree_sitter::Node, source: &str) -> Option<String> {
+    let mut stack: Vec<tree_sitter::Node> = vec![*lazy_call];
+    while let Some(n) = stack.pop() {
+        if n.kind() == KIND_CALL_EXPR {
+            if let Some(callee) = n
+                .children(&mut n.walk())
+                .find(|c| c.is_named() && c.kind() == "simple_identifier")
+            {
+                let text = callee.utf8_text(source.as_bytes()).ok()?;
+                if is_type_like(text) && !text.starts_with("lazy") {
+                    return Some(text.to_string());
+                }
+            }
+        } else if n.kind() == "simple_identifier" {
+            let text = n.utf8_text(source.as_bytes()).ok()?;
+            if is_type_like(text) && !text.starts_with("lazy") {
+                return Some(text.to_string());
+            }
+        }
+        let mut cur = n.walk();
+        for child in n.children(&mut cur) {
+            stack.push(child);
+        }
+    }
+    None
+}
+
+/// `Lazy<T>` / `Lazy<out T>` → `T` (nullable suffix stripped). Other types
+/// are not `getValue`-unwrapable statically → `None`.
+fn unwrap_delegate_type(typ: &str) -> Option<String> {
+    let inner = typ.trim().strip_prefix("Lazy<")?.strip_suffix('>')?;
+    let inner = inner.trim();
+    let inner = inner.strip_prefix("out ").unwrap_or(inner).trim();
+    let inner = inner.trim_end_matches('?').trim();
+    if inner.is_empty() {
+        None
+    } else {
+        Some(inner.to_string())
     }
 }
 
@@ -2772,6 +2912,15 @@ fn receiver_type_prefix(full: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// True for a bare identifier that reads as a type/constructor name
+/// (starts uppercase): `ExampleReader` qualifies a chained callee as
+/// `ExampleReader.process`, matching the non-chained `receiver_type_prefix`
+/// behavior for `ExampleReader().process()`.
+fn is_type_like(name: &str) -> bool {
+    let first = name.trim_start().chars().next().unwrap_or(' ');
+    first.is_uppercase()
 }
 
 /// First type-identifier/identifier child of a type-declaration node.
