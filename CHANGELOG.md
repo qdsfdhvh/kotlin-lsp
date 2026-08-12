@@ -1,4 +1,59 @@
-## 0.31.8 (2026-08-12)
+## 0.32.0 (2026-08-12)
+
+### feat: codegraph-parity semantic search (acronym segmentation, field filters, generated down-ranking) (#298, #299, #302, #305)
+
+- **Identifier segmentation** matches codegraph's `splitIdentifierSegments`:
+  acronym runs split (`HTMLParser` → html/parser), digits glue to their word
+  (`base64Encode` → base64/encode), any non-alphanumeric separates, and
+  2–32 char / 12-per-name bounds drop minified names. Query-side expansion
+  keeps raw casing so typed names like `HTMLParser` match their segments.
+- **Field-qualified query filters**: `kind:function name:auth path:src/api
+  authenticate` — filters narrow the candidate set, TF-IDF scores within it.
+  `lang:`/`language:` accept kotlin|java|swift; unknown prefixes (`TODO:`)
+  pass through as plain text; quoted values keep spaces; filters-only queries
+  (`search "kind:method path:src/api"`) list all matches by name. `--kind`
+  ORs onto query-string filters (was silently dropped).
+- **Generated-file detection** (path conventions: `.pb.kt`/`_grpc.kt`/
+  `grpc.kt`/`*OuterClass.java`/`.g.java`/`_mock.kt`/`.generated.kt` + a
+  head-of-file banner): generated stubs rank below same-name real
+  implementations and print `(generated)`.
+- `search`/symbol-query commands now honor `--root` and `--no-stdlib`
+  (both were parsed but ignored; the latter avoided re-parsing
+  `~/.kotlin-lsp/sources` on every invocation). Real-world search quality
+  corpus battery guards all of the above.
+- **Stemmer fix**: the `-tion` rule mangled short words (`option` → `ope`,
+  which prefix-matched `opening`); it now requires length 9–14 and strips
+  `ion` + e (`resolution` → `resolute`). `search "kind:class Option"`
+  ranks the Option class first again.
+
+### feat: check false-positive suppression for 11+ grammar phantom classes (#300, #306, #308, #309, #310)
+
+tree-sitter-kotlin-sg misparses valid Kotlin into ERROR nodes; each shape
+gets a conservative suppression in `collect_syntax_errors`, pinned by
+`fp_*` tests with real-error controls:
+
+- single-line class/interface bodies (`class X { fun f() {} }`)
+- `fun interface` cascades (already handled, now tested)
+- `catch<T>` generic Flow-operator calls
+- nullable callable references (`String?::plus`)
+- semicolon empty class bodies (`class X : B() {;`)
+- local `suspend fun` + callable-reference blocks
+- Kotlin 2.x context receivers (call form, function-type receiver form,
+  trailing annotations, generic args)
+- parenthesized callable statements (`(fn)(call, it)`)
+- generic receiver function heads (`Raise<NonEmptyList<Error>>.zipOrAccumulate`)
+- detached constructors with KDoc (`@JvmOverloads constructor(...)`, `: this`)
+
+dogfood sweep (check): coroutines 11→0, ktor 61→18, arrow 139→22,
+sqldelight 20→0.
+
+### perf: strip raw source lines from the disk cache (#304, #311)
+
+`FileData.lines` replaced with `LazyLines`: parse fills eagerly, cache hits
+deserialize empty and fill from disk on first actual use (hover/complete/
+find), iter commands never touch disk. index.bin 857→565 KiB on the arrow
+fixture (8485→5457 KiB decompressed); cached-hit search ~2.5s→~2.1s.
+CACHE_VERSION 21.
 
 ### fix: call reach resolves chained calls through return types + delegated properties (#295, #296)
 

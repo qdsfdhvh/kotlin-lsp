@@ -67,6 +67,11 @@ kotlin-lsp context <file> <line> <col>
 # Search group (symbol discovery)
 kotlin-lsp search semantic "login repo" [--limit N]
 kotlin-lsp search semantic "kind:class name:ViewModel login" [--kind class]  # field filters + flag
+# Field filters: kind: (class|fun|method|...), lang:/language: (kotlin|java|swift),
+# path:/name: (case-insensitive substring); unknown prefixes are plain text;
+# filters-only queries ("kind:method path:src/api") list all matches by name.
+# Generated stubs (protobuf/kapt/mock, or a "Code generated ... DO NOT EDIT"
+# header) rank below same-name real implementations and print "(generated)".
 kotlin-lsp search summarize <name> --cached
 kotlin-lsp search docs <query>
 kotlin-lsp search cache-stats
