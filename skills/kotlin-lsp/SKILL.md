@@ -66,6 +66,7 @@ kotlin-lsp context <file> <line> <col>
 
 # Search group (symbol discovery)
 kotlin-lsp search semantic "login repo" [--limit N]
+kotlin-lsp search semantic "kind:class name:ViewModel login" [--kind class]  # field filters + flag
 kotlin-lsp search summarize <name> --cached
 kotlin-lsp search docs <query>
 kotlin-lsp search cache-stats

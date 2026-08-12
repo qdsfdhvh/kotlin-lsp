@@ -19,6 +19,8 @@ kotlin-lsp complete Foo.kt 42 --dot    # completions
 kotlin-lsp docs "parse"               # KDoc search (top-level alias)
 kotlin-lsp search "login"            # semantic search (shorthand)
 kotlin-lsp search semantic "login"  # semantic search (explicit)
+kotlin-lsp search "kind:class name:ViewModel"  # field-filtered search
+kotlin-lsp search "kind:function path:src/api"  # filters-only (list all matching)
 kotlin-lsp search summarize User      # symbol summary
 kotlin-lsp search docs "parse"        # KDoc search
 kotlin-lsp search imports UserRepo     # who imports this
