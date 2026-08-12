@@ -274,6 +274,7 @@ pub(crate) fn symbols_to_filedata(
         syntax_errors: Vec::new(),
         call_edges: Vec::new(),
         annotation_edges: Vec::new(),
+        generated: false,
     };
 
     (fd, definitions)

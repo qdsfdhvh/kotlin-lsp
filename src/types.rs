@@ -220,6 +220,12 @@ pub(crate) struct FileData {
     /// Transient — not serialized to disk cache.
     #[serde(skip)]
     pub syntax_errors: Vec<SyntaxError>,
+    /// Whether the file is tool-generated (path convention or header banner),
+    /// judged once at index time. A relevance hint for ranking — generated
+    /// symbols rank below real implementations with the same name; never a
+    /// hard filter (codegraph #1500).
+    #[serde(default)]
+    pub generated: bool,
 }
 
 impl FileData {
