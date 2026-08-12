@@ -48,8 +48,11 @@ fn stem(word: &str) -> String {
         }
         return base.to_string(); // "models" → "model"
     }
-    if w.ends_with("tion") && w.len() >= 6 && w.len() <= 9 {
-        return format!("{}e", &w[..w.len() - 4]); // "resolution" → "resolute"
+    if w.ends_with("tion") && w.len() >= 9 && w.len() <= 14 {
+        // Strip the "ion" suffix, restore the e: "resolution" → "resolute".
+        // Length >= 9 keeps short words like "option"/"motion" intact — the
+        // old 6-9 rule turned "option" into "ope".
+        return format!("{}e", &w[..w.len() - 3]);
     }
     if w.ends_with("ment") && w.len() >= 6 && w.len() <= 9 {
         return w[..w.len() - 4].to_string(); // "refreshment" → "refresh"
@@ -965,6 +968,18 @@ mod tests {
         // No filters → everything passes.
         let q = parse_query("anything");
         assert!(doc_passes_filters(&d, &q, "kotlin"));
+    }
+
+    #[test]
+    fn test_stem_does_not_mangle_short_tion_words() {
+        // "option" ends with "tion" but is not a -tion suffix word — the old
+        // 6-9 char rule turned it into "ope", which prefix-matched "opening".
+        assert_eq!(stem("option"), "option");
+        assert_eq!(stem("motion"), "motion");
+        assert_eq!(stem("action"), "action");
+        // Long genuine -tion words still stem.
+        assert_eq!(stem("resolution"), "resolute");
+        assert_eq!(stem("evolution"), "evolute");
     }
 
     #[test]
