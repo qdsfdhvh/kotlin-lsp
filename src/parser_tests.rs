@@ -3291,6 +3291,96 @@ fun testIsActiveWithoutJob() {
     );
 }
 
+// ── issue #307: context receivers + paren-call statements ───────────────────
+
+#[test]
+fn fp_context_receiver_prefix() {
+    // RaiseContext shape: `context(raise: ResultRaise)` — Kotlin 2.x context
+    // receivers are unsupported by the grammar and wrap the whole prefix.
+    let src = r#"
+context(raise: ResultRaise)
+fun <A> Iterable<A>.bindAll(): List<A> = listOf()
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "context receiver should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_context_receiver_with_annotations() {
+    // RaiseContext full shape: context receiver + annotations + fun.
+    let src = r#"
+context(raise: ResultRaise) @RaiseDSL @JvmName("bindAllResult")
+public fun <K, V> Map<K, V>.bindAll(): Map<K, V> = emptyMap()
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "context receiver with annotations should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_context_receiver_multi() {
+    // Two context receivers on one function.
+    let src = r#"
+context(scope: CoroutineScope, label: String)
+fun run(): Unit = Unit
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "multi-parameter context receiver should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_paren_call_as_statement() {
+    // FormAuth shape: `(authenticationFunction)(call, it)` — a parenthesized
+    // callable used as a function value inside a lambda.
+    let src = r#"
+val principal = credentials?.let { (authenticationFunction)(call, it) }
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "paren call as statement should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_paren_call_as_statement_with_arg() {
+    let src = r#"
+val result = maybe?.let { (fn)(arg1, arg2) }
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "paren call with args should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_destructuring_declaration_still_parses() {
+    // Control: real destructuring declarations must keep working.
+    let src = r#"
+val (a, b) = pair
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "destructuring declaration must not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
 // ── kind labels & typealias marker (issue #269) ──────────────────────────────
 
 #[test]

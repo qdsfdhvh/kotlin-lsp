@@ -708,6 +708,77 @@ fn is_empty_body_semicolon_error(node: &Node, bytes: &[u8]) -> bool {
         .is_some_and(|t| t == "{")
 }
 
+/// Kotlin 2.x context-receiver prefixes unsupported by the grammar, two
+/// shapes (issue #307 class 1):
+/// - as a call (`context(raise: ResultRaise)` at statement level) `context`
+///   parses as a call and only the `name: Type` colon becomes an ERROR;
+/// - as a function-type receiver (`action: context(X) () -> A`) the whole
+///   `context(...)` prefix becomes an ERROR.
+///
+/// Real errors like a bare `context(` fragment keep reporting.
+fn is_context_receiver_error(node: &Node, bytes: &[u8]) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    let text = node.utf8_text(bytes).unwrap_or("").trim_start().to_string();
+    // Shape B: the whole `context(...)` prefix is the ERROR.
+    if text.starts_with("context(") {
+        return true;
+    }
+    // Shape C: annotations after a `context(...)` call (`context(x) @Anno`)
+    // — the ERROR starts with '@' and its previous sibling is that call.
+    if text.starts_with('@') {
+        return node
+            .prev_sibling()
+            .filter(|s| s.kind() == "call_expression")
+            .and_then(|s| s.child(0))
+            .and_then(|c| c.utf8_text(bytes).ok())
+            .is_some_and(|t| t == "context");
+    }
+    // Shape A: a `: Type` colon ERROR inside a `context(...)` call — walk up
+    // to the enclosing call_expression and require callee == `context`.
+    if !text.starts_with(':') {
+        return false;
+    }
+    let mut cur = node.parent();
+    while let Some(n) = cur {
+        if n.kind() == "call_expression" {
+            return n
+                .child(0)
+                .and_then(|c| c.utf8_text(bytes).ok())
+                .is_some_and(|t| t == "context");
+        }
+        cur = n.parent();
+    }
+    false
+}
+
+/// Parenthesized callable used as a function value — `(fn)(arg)` inside a
+/// lambda (issue #307 class 2, ktor FormAuth). The grammar parses the parens
+/// as a destructuring declaration and wraps them in ERROR. Suppress only when
+/// every named child is a clean `multi_variable_declaration`; a real
+/// malformed destructuring leaves a MISSING or an error subtree.
+fn is_paren_call_statement_error(node: &Node) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    let mut cursor = node.walk();
+    let mut saw_mvd = false;
+    for child in node.children(&mut cursor) {
+        if child.is_missing() || child.has_error() {
+            return false;
+        }
+        if !child.is_named() {
+            continue;
+        }
+        if child.kind() != "multi_variable_declaration" {
+            return false;
+        }
+        saw_mvd = true;
+    }
+    saw_mvd
+}
+
 fn is_chained_call_assignment_error(node: &Node, bytes: &[u8]) -> bool {
     if !node.is_error() {
         return false;
@@ -1324,6 +1395,15 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
             // Skip a lone `;` right after `{` — empty-body semicolon in a
             // multi-line class (issue #301 class 3).
             if is_empty_body_semicolon_error(&node, bytes) {
+                continue;
+            }
+            // Skip Kotlin 2.x context-receiver prefixes (issue #307 class 1).
+            if is_context_receiver_error(&node, bytes) {
+                continue;
+            }
+            // Skip parenthesized callable statements `(fn)(args)` (issue #307
+            // class 2).
+            if is_paren_call_statement_error(&node) {
                 continue;
             }
             // Skip errors that are chained-call property assignments: a.method().prop = value
