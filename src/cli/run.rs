@@ -1599,8 +1599,20 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Docs { query } => {
             crate::cli::symbol_queries::run_docs(&query, json).await;
         }
-        Subcommand::Search { query, limit } => {
-            crate::cli::search::run_search(&query, json, limit).await;
+        Subcommand::Search {
+            query,
+            limit,
+            kinds,
+        } => {
+            crate::cli::search::run_search(
+                &query,
+                json,
+                limit,
+                args.root.as_deref(),
+                &kinds,
+                args.no_stdlib,
+            )
+            .await;
         }
     }
 }
@@ -1788,7 +1800,7 @@ fn split_qualified_name(name: &str, mut filters: ResultFilters) -> (String, Resu
 
 /// Map short-form kind names to the full SymbolKind debug format.
 /// e.g. "fun" → "function".
-fn normalize_kind_str(k: &str) -> &str {
+pub(crate) fn normalize_kind_str(k: &str) -> &str {
     match k {
         "fun" => "function",
         "fns" => "function",

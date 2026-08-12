@@ -302,6 +302,8 @@ pub(crate) enum Subcommand {
         query: String,
         /// Max results to return.
         limit: usize,
+        /// `--kind` flag filters, OR'd onto query-string `kind:` filters.
+        kinds: Vec<String>,
     },
     /// Show AI summary cache statistics.
     SummaryCacheStats,
@@ -309,6 +311,14 @@ pub(crate) enum Subcommand {
     Capabilities,
     /// Show Gradle dependencies parsed from build.gradle.kts / libs.versions.toml.
     GradleDeps,
+}
+
+/// Split the comma-separated `--kind` flag value into individual filters
+/// (same shape as `ResultFilters::kinds`). Empty flag → no filters.
+fn split_kind_filter(kind_filter: Option<&str>) -> Vec<String> {
+    kind_filter
+        .map(|k| k.split(',').map(str::to_owned).collect())
+        .unwrap_or_default()
 }
 
 /// Sub-command within the `module` parent command.
@@ -835,7 +845,11 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                 "semantic" => {
                     let query = rest.first().cloned().ok_or("search requires QUERY")?;
                     let limit = parsed.limit.unwrap_or(20);
-                    Ok(Subcommand::Search { query, limit })
+                    Ok(Subcommand::Search {
+                        query,
+                        limit,
+                        kinds: split_kind_filter(kind_filter.as_deref()),
+                    })
                 }
                 "summarize" => {
                     let name = rest.first().cloned().unwrap_or_default();
@@ -882,6 +896,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     Ok(Subcommand::Search {
                         query: o.to_string(),
                         limit,
+                        kinds: split_kind_filter(kind_filter.as_deref()),
                     })
                 }
             }
@@ -1781,8 +1796,8 @@ SUBCOMMANDS:
     format check <file/dir>...           Check formatting violations (like spotlessCheck)
     format apply <file/dir>...           Apply formatting in-place (like spotlessApply)
 
-    search <query>                    Semantic search with TF-IDF ranking
-    search semantic <query>           Semantic search (explicit)
+    search <query>                    Semantic search; filters kind: lang: path: name:
+    search semantic <query>           Semantic search (explicit, same filters)
     search docs <query>               Search symbols by name or signature (KDoc)
     search summarize <name>           Show rich summary for a symbol
     search cache-stats                Show AI summary cache statistics

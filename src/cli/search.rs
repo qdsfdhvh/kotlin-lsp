@@ -64,7 +64,7 @@ fn stem(word: &str) -> String {
     w
 }
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -309,6 +309,210 @@ struct SearchResult {
     score: f64,
 }
 
+// ── field-qualified query parsing (codegraph query-parser parity) ──────────
+
+/// Structured filters parsed from a search query like
+/// `kind:function name:auth path:src/api authenticate`.
+/// Filters narrow the candidate set; the remaining free text is scored by
+/// TF-IDF within the narrowed set. Unknown prefixes (`foo:bar`) pass through
+/// as plain text so searching for `TODO:` still works.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct ParsedQuery {
+    /// Free text fed to TF-IDF. Empty when the query is filters-only.
+    pub text: String,
+    /// `kind:` values (normalized: `fun` → `function`), OR'd.
+    pub kinds: Vec<String>,
+    /// `lang:`/`language:` values (kotlin | java | swift), OR'd.
+    pub languages: Vec<String>,
+    /// `path:` case-insensitive substrings of the file path, OR'd.
+    pub path_filters: Vec<String>,
+    /// `name:` case-insensitive substrings of the symbol name, OR'd.
+    pub name_filters: Vec<String>,
+}
+
+/// Accepted `kind:` values — `SymbolEntry::kind_label()` values plus the
+/// normalized aliases `normalize_kind_str` maps onto them.
+fn kind_values() -> &'static std::collections::HashSet<&'static str> {
+    use std::sync::OnceLock;
+    static KINDS: OnceLock<std::collections::HashSet<&'static str>> = OnceLock::new();
+    KINDS.get_or_init(|| {
+        [
+            "file",
+            "module",
+            "namespace",
+            "package",
+            "class",
+            "method",
+            "property",
+            "field",
+            "constructor",
+            "enum",
+            "interface",
+            "function",
+            "variable",
+            "constant",
+            "string",
+            "number",
+            "boolean",
+            "array",
+            "object",
+            "key",
+            "null",
+            "enum_member",
+            "struct",
+            "event",
+            "operator",
+            "type_parameter",
+            "typealias",
+        ]
+        .into_iter()
+        .collect()
+    })
+}
+
+fn language_values() -> &'static std::collections::HashSet<&'static str> {
+    use std::sync::OnceLock;
+    static LANGS: OnceLock<std::collections::HashSet<&'static str>> = OnceLock::new();
+    LANGS.get_or_init(|| ["kotlin", "java", "swift"].into_iter().collect())
+}
+
+/// Tokenize on whitespace, keeping quoted spans (`path:"src/a b"`) as part of
+/// the current token. An unterminated quote swallows the rest of the input
+/// (forgiving, never throws) — same contract as codegraph's tokenizer.
+fn split_query_tokens(raw: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut i = 0;
+    let chars: Vec<char> = raw.chars().collect();
+    while i < chars.len() {
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+        if i >= chars.len() {
+            break;
+        }
+        let start = i;
+        while i < chars.len() && !chars[i].is_whitespace() {
+            if chars[i] == '"' {
+                i += 1;
+                while i < chars.len() && chars[i] != '"' {
+                    i += 1;
+                }
+                if i < chars.len() {
+                    i += 1;
+                }
+                continue;
+            }
+            i += 1;
+        }
+        tokens.push(chars[start..i].iter().collect());
+    }
+    tokens
+}
+
+fn unquote(s: &str) -> String {
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+        s[1..s.len() - 1].to_string()
+    } else {
+        s.to_string()
+    }
+}
+
+/// Parse a raw search query into structured filters + remaining text.
+/// Always returns a value; never throws. Unknown `key:` prefixes and invalid
+/// `kind:`/`lang:` values degrade to plain text (codegraph behavior).
+fn parse_query(raw: &str) -> ParsedQuery {
+    let mut out = ParsedQuery::default();
+    let mut text_parts: Vec<String> = Vec::new();
+
+    for tok in split_query_tokens(raw) {
+        let Some(colon) = tok.find(':') else {
+            text_parts.push(tok);
+            continue;
+        };
+        if colon == 0 || colon == tok.len() - 1 {
+            text_parts.push(tok);
+            continue;
+        }
+        let key = tok[..colon].to_lowercase();
+        let value = unquote(&tok[colon + 1..]);
+        if value.is_empty() {
+            text_parts.push(tok);
+            continue;
+        }
+        match key.as_str() {
+            "kind" => {
+                let norm = crate::cli::run::normalize_kind_str(&value).to_string();
+                if kind_values().contains(norm.as_str()) {
+                    if !out.kinds.iter().any(|k| k == &norm) {
+                        out.kinds.push(norm);
+                    }
+                } else {
+                    text_parts.push(tok);
+                }
+            }
+            "lang" | "language" => {
+                let v = value.to_lowercase();
+                if language_values().contains(v.as_str()) {
+                    if !out.languages.iter().any(|l| l == &v) {
+                        out.languages.push(v);
+                    }
+                } else {
+                    text_parts.push(tok);
+                }
+            }
+            "path" => out.path_filters.push(value),
+            "name" => out.name_filters.push(value),
+            _ => text_parts.push(tok),
+        }
+    }
+
+    out.text = text_parts.join(" ").trim().to_string();
+    out
+}
+
+/// True when `doc` passes every active filter in `q`. Kind compares on the
+/// normalized label; path/name are case-insensitive substring matches; language
+/// matches the file extension-derived language.
+fn doc_passes_filters(doc: &SearchDoc, q: &ParsedQuery, language: &str) -> bool {
+    if !q.kinds.is_empty() && !q.kinds.iter().any(|k| k.eq_ignore_ascii_case(&doc.kind)) {
+        return false;
+    }
+    if !q.languages.is_empty() && !q.languages.iter().any(|l| l == language) {
+        return false;
+    }
+    if !q.path_filters.is_empty() {
+        let file = doc.file.to_lowercase();
+        if !q
+            .path_filters
+            .iter()
+            .any(|p| file.contains(&p.to_lowercase()))
+        {
+            return false;
+        }
+    }
+    if !q.name_filters.is_empty() {
+        let name = doc.name.to_lowercase();
+        if !q
+            .name_filters
+            .iter()
+            .any(|p| name.contains(&p.to_lowercase()))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn language_from_path(path: &str) -> &'static str {
+    if path.ends_with(".java") {
+        "java"
+    } else if path.ends_with(".swift") {
+        "swift"
+    } else {
+        "kotlin"
+    }
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /// Identifier-segment expansion of the raw query.
@@ -330,12 +534,29 @@ fn query_segments(raw: &str) -> Vec<String> {
     out
 }
 
-pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_search(
+    query: &str,
+    json: bool,
+    max_results: usize,
+    root: Option<&Path>,
+    flag_kinds: &[String],
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
+
+    // Field-qualified filters narrow the candidate set; --kind flag filters
+    // OR onto the query-string `kind:` filters.
+    let mut parsed = parse_query(query);
+    for k in flag_kinds {
+        let norm = crate::cli::run::normalize_kind_str(k).to_string();
+        if !parsed.kinds.iter().any(|k| k == &norm) {
+            parsed.kinds.push(norm);
+        }
+    }
 
     let mut tfidf = TfIdfIndex::new();
-    let query_tokens: Vec<String> = tokenize_query(query)
+    let query_tokens: Vec<String> = tokenize_query(&parsed.text)
         .into_iter()
         .map(|t| stem(&t))
         .collect();
@@ -352,7 +573,7 @@ pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
             }
         }
     }
-    for seg in query_segments(query) {
+    for seg in query_segments(&parsed.text) {
         if !all_query_tokens.contains(&seg) {
             all_query_tokens.push(seg);
         }
@@ -399,22 +620,47 @@ pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
             // Only stem query tokens, not document tokens.
             // Document tokens (code identifiers) are exact and should
             // match as-is; the query side stems user's free-text input.
-            let doc_id = tfidf.docs.len();
-            tfidf.docs.push(SearchDoc {
+            let doc = SearchDoc {
                 name: sym.name.clone(),
-                kind: format!("{:?}", sym.kind).to_lowercase(),
+                kind: sym.kind_label(),
                 file: display_path.clone(),
                 line: sym.selection_range.start.line + 1,
                 signature: sym.detail.clone(),
                 doc: sym.documentation.clone(),
                 tokens: tokens.clone(),
-            });
+            };
+            // Field filters narrow the candidate set before TF-IDF scoring.
+            if !doc_passes_filters(&doc, &parsed, language_from_path(file_path)) {
+                continue;
+            }
+            let doc_id = tfidf.docs.len();
+            tfidf.docs.push(doc);
             tfidf.add(doc_id, &tokens);
         }
     }
 
     tfidf.finalize();
-    let results = tfidf.search(&all_query_tokens, max_results);
+
+    // Filters-only query (`search "kind:class path:src/api"`): no free text
+    // to score, so return everything that passed the filters, ordered by name.
+    let results = if all_query_tokens.is_empty() {
+        let mut docs: Vec<&SearchDoc> = tfidf.docs.iter().collect();
+        docs.sort_by(|a, b| a.name.cmp(&b.name));
+        docs.truncate(max_results);
+        docs.into_iter()
+            .map(|d| SearchResult {
+                name: d.name.clone(),
+                kind: d.kind.clone(),
+                file: d.file.clone(),
+                line: d.line,
+                signature: d.signature.clone(),
+                doc: d.doc.clone(),
+                score: 1.0,
+            })
+            .collect()
+    } else {
+        tfidf.search(&all_query_tokens, max_results)
+    };
 
     if json {
         println!(
@@ -561,6 +807,106 @@ mod tests {
         // Trailing punctuation separates for free.
         let segs = query_segments("HTMLParser,");
         assert_eq!(segs, vec!["html", "parser"]);
+    }
+
+    // ── field-qualified query parsing (codegraph query-parser parity) ──
+
+    fn doc(kind: &str, name: &str, file: &str) -> SearchDoc {
+        SearchDoc {
+            name: name.into(),
+            kind: kind.into(),
+            file: file.into(),
+            line: 1,
+            signature: String::new(),
+            doc: None,
+            tokens: vec![],
+        }
+    }
+
+    #[test]
+    fn test_parse_query_fields() {
+        let q = parse_query("kind:function name:auth path:src/api authenticate");
+        assert_eq!(q.text, "authenticate");
+        assert_eq!(q.kinds, vec!["function"]);
+        assert_eq!(q.name_filters, vec!["auth"]);
+        assert_eq!(q.path_filters, vec!["src/api"]);
+        assert!(q.languages.is_empty());
+    }
+
+    #[test]
+    fn test_parse_query_unknown_prefix_passthrough() {
+        // `foo:bar` is not a known field — stays plain text so `TODO:` works.
+        let q = parse_query("TODO: fix the thing");
+        assert_eq!(q.text, "TODO: fix the thing");
+        assert!(q.kinds.is_empty());
+    }
+
+    #[test]
+    fn test_parse_query_kind_normalized_and_invalid_falls_back() {
+        // `fun` normalizes to `function`; an unknown kind degrades to text.
+        let q = parse_query("kind:fun parser");
+        assert_eq!(q.kinds, vec!["function"]);
+        assert_eq!(q.text, "parser");
+        let q = parse_query("kind:giraffe parser");
+        assert!(q.kinds.is_empty());
+        assert_eq!(q.text, "kind:giraffe parser");
+    }
+
+    #[test]
+    fn test_parse_query_lang_alias() {
+        let q = parse_query("language:java kind:class Foo");
+        assert_eq!(q.languages, vec!["java"]);
+        assert_eq!(q.kinds, vec!["class"]);
+        assert_eq!(q.text, "Foo");
+        // `lang:` is an alias for `language:`.
+        let q = parse_query("lang:swift");
+        assert_eq!(q.languages, vec!["swift"]);
+        // Unknown language degrades to text.
+        let q = parse_query("lang:cobol");
+        assert!(q.languages.is_empty());
+        assert_eq!(q.text, "lang:cobol");
+    }
+
+    #[test]
+    fn test_parse_query_quoted_value_keeps_spaces() {
+        let q = parse_query(r#"path:"src/some dir/" token"#);
+        assert_eq!(q.path_filters, vec!["src/some dir/"]);
+        assert_eq!(q.text, "token");
+        // Unterminated quote: tokenizer swallows the rest of the input; the
+        // leading quote is kept (unquote only strips paired quotes, codegraph
+        // parity) — forgiving, never errors.
+        let q = parse_query("path:\"unterminated rest of input");
+        assert_eq!(q.path_filters, vec!["\"unterminated rest of input"]);
+        assert_eq!(q.text, "");
+    }
+
+    #[test]
+    fn test_parse_query_filters_only() {
+        let q = parse_query("kind:class path:src/api");
+        assert_eq!(q.text, "");
+        assert_eq!(q.kinds, vec!["class"]);
+        assert_eq!(q.path_filters, vec!["src/api"]);
+    }
+
+    #[test]
+    fn test_doc_passes_filters() {
+        let d = doc("function", "authenticate", "src/api/Auth.kt");
+        let q = parse_query("kind:function path:src/api name:auth");
+        assert!(doc_passes_filters(&d, &q, "kotlin"));
+        // Kind mismatch.
+        let q = parse_query("kind:class");
+        assert!(!doc_passes_filters(&d, &q, "kotlin"));
+        // Language mismatch.
+        let q = parse_query("lang:java");
+        assert!(!doc_passes_filters(&d, &q, "kotlin"));
+        let q = parse_query("lang:kotlin");
+        assert!(doc_passes_filters(&d, &q, "kotlin"));
+        // Path and name are case-insensitive substrings.
+        let q = parse_query("path:SRC/API name:AUTH");
+        assert!(doc_passes_filters(&d, &q, "kotlin"));
+        // No filters → everything passes.
+        let q = parse_query("anything");
+        assert!(doc_passes_filters(&d, &q, "kotlin"));
     }
 
     #[test]

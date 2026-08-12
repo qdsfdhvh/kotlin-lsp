@@ -448,9 +448,28 @@ fn skills_parses_as_subcommand() {
 fn search_shorthand_parses_query() {
     let args = parse(&["search", "login view model"]).unwrap().unwrap();
     match args.subcommand {
-        Subcommand::Search { query, limit } => {
+        Subcommand::Search {
+            query,
+            limit,
+            kinds,
+        } => {
             assert_eq!(query, "login view model");
             assert_eq!(limit, 20); // default
+            assert!(kinds.is_empty());
+        }
+        other => panic!("expected Search, got {other:?}"),
+    }
+}
+
+#[test]
+fn search_shorthand_parses_kind_flag() {
+    let args = parse(&["search", "login", "--kind", "class,fun"])
+        .unwrap()
+        .unwrap();
+    match args.subcommand {
+        Subcommand::Search { query, kinds, .. } => {
+            assert_eq!(query, "login");
+            assert_eq!(kinds, vec!["class", "fun"]);
         }
         other => panic!("expected Search, got {other:?}"),
     }
@@ -462,7 +481,7 @@ fn search_semantic_explicit_parses_query() {
         .unwrap()
         .unwrap();
     match args.subcommand {
-        Subcommand::Search { query, limit } => {
+        Subcommand::Search { query, limit, .. } => {
             assert_eq!(query, "login view model");
             assert_eq!(limit, 20);
         }
@@ -482,7 +501,7 @@ fn search_shorthand_parses_limit() {
         .unwrap()
         .unwrap();
     match args.subcommand {
-        Subcommand::Search { query, limit } => {
+        Subcommand::Search { query, limit, .. } => {
             assert_eq!(query, "login");
             assert_eq!(limit, 5);
         }
@@ -496,7 +515,7 @@ fn search_semantic_explicit_parses_limit() {
         .unwrap()
         .unwrap();
     match args.subcommand {
-        Subcommand::Search { query, limit } => {
+        Subcommand::Search { query, limit, .. } => {
             assert_eq!(query, "login");
             assert_eq!(limit, 10);
         }
