@@ -560,6 +560,10 @@ fn is_single_line_body_phantom_error(node: &Node) -> bool {
                 | KIND_INTERFACE_DECL
                 | KIND_ENUM_ENTRY
                 | KIND_TYPE_ALIAS
+                // Class-header pieces (issue #301 class 3: `class X : B() {;`
+                // wraps the whole one-line class — name + delegation spec).
+                | "simple_identifier"
+                | "delegation_specifier"
         ) && !n.has_error()
     };
     // Direct unnamed tokens must be braces or declaration keywords only — a
@@ -583,10 +587,14 @@ fn is_single_line_body_phantom_error(node: &Node) -> bool {
                 | "<"
                 | ">"
                 | ","
+                | ";"
+                | ":"
         )
     };
     let mut cursor = node.walk();
     let mut saw_member = false;
+    let mut class_head_form = false; // contains a simple_identifier (class name)
+    let mut saw_semicolon = false;
     for child in node.children(&mut cursor) {
         if child.is_missing() {
             return false;
@@ -595,14 +603,109 @@ fn is_single_line_body_phantom_error(node: &Node) -> bool {
             if !ok_unnamed(child.kind()) {
                 return false;
             }
+            if child.kind() == ";" {
+                saw_semicolon = true;
+            }
             continue;
+        }
+        if child.kind() == "simple_identifier" {
+            class_head_form = true;
         }
         if !is_member_decl(&child) {
             return false;
         }
         saw_member = true;
     }
+    // Class-head form (`class X : B() {;`) only suppresses when the empty-body
+    // semicolon is present — `class Bad {` (missing `}`) must keep reporting.
+    if class_head_form && !saw_semicolon {
+        return false;
+    }
     saw_member
+}
+
+/// ERROR node wrapping a complete `statements` block whose members are all
+/// error-free (issue #301 class 4): `fun outer() { var x = 1; suspend fun
+/// inner() { … }; ::inner.startCoroutine(…) }` — the grammar drops the whole
+/// block into an ERROR despite every member being valid.
+///
+/// Conservative: the ERROR must have no MISSING children anywhere (a real
+/// malformed statement always leaves a MISSING) and every named child must be
+/// a clean `statements` subtree.
+fn is_statements_wrapper_error(node: &Node) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    let mut cursor = node.walk();
+    let mut saw_statements = false;
+    for child in node.children(&mut cursor) {
+        if child.is_missing() {
+            return false;
+        }
+        if !child.is_named() {
+            continue;
+        }
+        if child.kind() != "statements" {
+            return false;
+        }
+        if child.has_error() {
+            return false;
+        }
+        saw_statements = true;
+    }
+    saw_statements
+}
+
+/// Single-character `<` ERROR inside a generic-function-call misparse
+/// (issue #301 class 1): `catch<Throwable> { … }` is a Flow operator call
+/// (catch is an extension function), but the grammar treats `catch` as the
+/// keyword and chokes on the angle. Only `catch`-adjacent angles are
+/// suppressed — other call shapes parse fine and real comparisons don't
+/// produce a bare-`<` ERROR.
+fn is_catch_generic_angle_error(node: &Node, bytes: &[u8]) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    if node.utf8_text(bytes).unwrap_or("") != "<" {
+        return false;
+    }
+    node.prev_sibling()
+        .and_then(|s| s.utf8_text(bytes).ok())
+        .is_some_and(|t| t == "catch")
+}
+
+/// Single-character `:` ERROR inside a nullable callable reference
+/// (issue #301 class 2): `String?::plus` parses as `String ?: :plus` — the
+/// elvis `?:` swallows the first colon and the second one becomes a bare `:`
+/// ERROR followed by the member name. Suppress a lone `:` ERROR directly
+/// after an elvis operator.
+fn is_elvis_callable_ref_error(node: &Node, bytes: &[u8]) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    if node.utf8_text(bytes).unwrap_or("") != ":" {
+        return false;
+    }
+    node.prev_sibling()
+        .and_then(|s| s.utf8_text(bytes).ok())
+        .is_some_and(|t| t == "?:")
+}
+
+/// Single-character `;` ERROR right after `{` — the empty-body semicolon
+/// (issue #301 class 3, multi-line variant): `class X : B() {;` inside a
+/// real multi-line class parses the class fine and only the `;` becomes an
+/// ERROR. (The single-line variant wraps the whole class; that is handled by
+/// [`is_single_line_body_phantom_error`].)
+fn is_empty_body_semicolon_error(node: &Node, bytes: &[u8]) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    if node.utf8_text(bytes).unwrap_or("") != ";" {
+        return false;
+    }
+    node.prev_sibling()
+        .and_then(|s| s.utf8_text(bytes).ok())
+        .is_some_and(|t| t == "{")
 }
 
 fn is_chained_call_assignment_error(node: &Node, bytes: &[u8]) -> bool {
@@ -1201,6 +1304,26 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
             // with a concrete ERROR wrapper, unlike fwcd's zero-ERROR-node
             // phantom). Real errors contain MISSING nodes or error subtrees.
             if is_single_line_body_phantom_error(&node) {
+                continue;
+            }
+            // Skip a complete-statements block dropped into ERROR (issue #301
+            // class 4: local suspend fun + callable reference).
+            if is_statements_wrapper_error(&node) {
+                continue;
+            }
+            // Skip single-char `<` after `catch` — generic Flow-operator call
+            // misparsed as a catch clause (issue #301 class 1).
+            if is_catch_generic_angle_error(&node, bytes) {
+                continue;
+            }
+            // Skip the elvis-colon of a nullable callable reference
+            // `String?::plus` → `String ?: :plus` (issue #301 class 2).
+            if is_elvis_callable_ref_error(&node, bytes) {
+                continue;
+            }
+            // Skip a lone `;` right after `{` — empty-body semicolon in a
+            // multi-line class (issue #301 class 3).
+            if is_empty_body_semicolon_error(&node, bytes) {
                 continue;
             }
             // Skip errors that are chained-call property assignments: a.method().prop = value

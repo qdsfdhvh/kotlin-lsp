@@ -3136,6 +3136,161 @@ fun set(x: Int) = x
     );
 }
 
+// ── issue #301: four more phantom classes on tree-sitter-kotlin-sg ─────────
+// (1) catch<T> generics, (2) nullable function refs String?::plus,
+// (3) semicolon-terminated empty class body {;, (4) local suspend fun.
+// All valid Kotlin; all misparsed by the grammar. Probed against -sg 0.4.1.
+
+#[test]
+fn fp_catch_generic_type_parameter() {
+    let src = r#"
+fun f() {
+    try {
+        expect(5)
+    } catch<Throwable> {
+        e ->
+    }
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "catch<T> should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_catch_generic_assigning_expression() {
+    // CallbackFlowTest shape: `catch<Throwable> { exception = it }`.
+    let src = r#"
+fun f() {
+    try {
+        send()
+    } catch<Throwable> {
+        exception = it
+    }
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "catch<T> with assignment body should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_catch_generic_without_lambda_param() {
+    let src = r#"
+fun f() {
+    try {
+        send()
+    } catch<Throwable> {
+    }
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "catch<T> without lambda param should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_standard_catch_still_parses() {
+    // Control: the ordinary `catch (e: Throwable)` form must keep working.
+    let src = r#"
+fun f() {
+    try {
+        send()
+    } catch (e: Throwable) {
+        println(e)
+    }
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "standard catch must not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_nullable_callable_reference() {
+    // ZipTest/CombineTest shape: `String?::plus` as a callable reference.
+    let src = r#"
+val f = String?::plus
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "nullable callable reference should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_nullable_callable_reference_in_argument() {
+    let src = r#"
+val list = flow.combineLatest(flow2, String?::plus).toList()
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "nullable callable reference in argument should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_non_null_callable_reference_still_parses() {
+    // Control: plain `String::plus` must keep working.
+    let src = r#"
+val f = String::plus
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "plain callable reference must not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_semicolon_empty_class_body() {
+    // CancelledParentAttachTest shape: `class X : TestBase() {;`.
+    let src = "class CancelledParentAttachTest : TestBase() {;";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "semicolon empty class body should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_local_suspend_fun_after_statements() {
+    // CoroutineScopeTest shape: local suspend fun after a property statement.
+    let src = r#"
+fun testIsActiveWithoutJob() {
+    var invoked = false
+    suspend fun testIsActive() {
+        invoked = true
+    }
+    invoked = true
+}
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "local suspend fun should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
 // ── kind labels & typealias marker (issue #269) ──────────────────────────────
 
 #[test]
