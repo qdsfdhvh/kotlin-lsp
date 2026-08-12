@@ -1,3 +1,15 @@
+## 0.31.7 (2026-08-12)
+
+### fix: call reach receiver resolution covers primary-constructor properties and lateinit (#292, PR #293)
+
+- A receiver held as a **primary-constructor property** (`class C(private val
+  repo: Repo)`) or a **type-annotated property without initializer**
+  (`lateinit var repo: Repo`) now resolves through its declared type — #289
+  only read initializers, so DI-injected collaborators still truncated.
+  Primary-constructor parameters feed the scope directly; property type
+  annotations are found by a full-subtree search (fixing a byte-offset bug
+  that skipped lateinit's nested type).
+
 ## 0.31.6 (2026-08-11)
 
 ### fix: call reach receiver resolution extends to class properties (#289, PR #290)
