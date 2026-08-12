@@ -70,36 +70,76 @@ use serde::Serialize;
 
 // ── tokenization ────────────────────────────────────────────────────────────
 
-/// Split an identifier into tokens on camelCase and snake_case boundaries.
+/// Split an identifier into lowercase word segments.
+///
+/// Mirrors codegraph's `splitIdentifierSegments` semantics (src/search/
+/// identifier-segments.ts): camelCase/PascalCase humps ("LoginViewModel" →
+/// login/view/model), acronym runs ("HTMLParser" → html/parser), any
+/// non-alphanumeric separates ("user_repository_impl" → user/repository/impl),
+/// and digits stay glued to their word ("base64Encode" → base64/encode).
+/// Segment bounds (2–32 chars, 12 segments per identifier) keep minified or
+/// degenerate names from bloating the search index; digit-only segments are
+/// dropped because they carry no prose signal.
 fn tokenize_identifier(s: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let mut current = String::new();
-    let mut prev_lower = false;
+    const MIN_SEGMENT_CHARS: usize = 2;
+    const MAX_SEGMENT_CHARS: usize = 32;
+    const MAX_SEGMENTS_PER_NAME: usize = 12;
 
-    for ch in s.chars() {
-        if ch == '_' || ch == '-' || ch == '.' || ch == '/' {
-            if !current.is_empty() {
-                tokens.push(current.to_lowercase());
-                current.clear();
+    fn is_alnum(c: char) -> bool {
+        c.is_alphabetic() || c.is_numeric()
+    }
+    fn push_segment(out: &mut Vec<String>, seg: &[char]) {
+        if seg.is_empty()
+            || seg.len() < MIN_SEGMENT_CHARS
+            || seg.len() > MAX_SEGMENT_CHARS
+            || seg.iter().all(|c| c.is_numeric())
+        {
+            return;
+        }
+        out.push(seg.iter().flat_map(|c| c.to_lowercase()).collect());
+    }
+
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        // Non-alphanumerics separate runs (codegraph `[\p{L}\p{N}]+`).
+        if !is_alnum(chars[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len() && is_alnum(chars[i]) {
+            i += 1;
+        }
+        let run = &chars[start..i];
+
+        // Split the run on camelCase humps (lower/digit → Upper) and on the
+        // last Upper of an acronym run when a lowercase follows ("HTMLParser"
+        // → HTML | Parser). Both are the codegraph split points, written out
+        // without lookbehind (Rust regex has none).
+        let mut seg_start = 0;
+        for j in 1..run.len() {
+            let camel_hump =
+                run[j].is_uppercase() && (run[j - 1].is_lowercase() || run[j - 1].is_numeric());
+            let acronym_end = run[j - 1].is_uppercase()
+                && run[j].is_uppercase()
+                && j + 1 < run.len()
+                && run[j + 1].is_lowercase();
+            if camel_hump || acronym_end {
+                push_segment(&mut out, &run[seg_start..j]);
+                seg_start = j;
+                if out.len() >= MAX_SEGMENTS_PER_NAME {
+                    return out;
+                }
             }
-            prev_lower = false;
-        } else if ch.is_uppercase() && prev_lower {
-            // camelCase boundary: "fooBar" → ["foo", "bar"]
-            if !current.is_empty() {
-                tokens.push(current.to_lowercase());
-                current.clear();
-            }
-            current.push(ch);
-            prev_lower = false;
-        } else {
-            current.push(ch);
-            prev_lower = ch.is_lowercase();
+        }
+        push_segment(&mut out, &run[seg_start..]);
+        if out.len() >= MAX_SEGMENTS_PER_NAME {
+            return out;
         }
     }
-    if !current.is_empty() {
-        tokens.push(current.to_lowercase());
-    }
-    tokens
+    out
 }
 
 /// Tokenize free text: split on whitespace, strip punctuation, lowercase.
@@ -271,6 +311,25 @@ struct SearchResult {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+/// Identifier-segment expansion of the raw query.
+///
+/// Names typed as-is ("HTMLParser") yield their segments (html/parser) so they
+/// match indexed name segments. `tokenize_query` lowercases first, so the same
+/// input would otherwise become a single "htmlparser" token that never matches
+/// the "html"/"parser" segments a `HTMLParser` symbol indexes under.
+/// Non-alphanumerics separate, so trailing punctuation is stripped for free.
+fn query_segments(raw: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in raw.split_whitespace() {
+        for seg in tokenize_identifier(word) {
+            if !out.contains(&seg) {
+                out.push(seg);
+            }
+        }
+    }
+    out
+}
+
 pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
     let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
     let index = crate::cli::run::build_index(&root, false).await;
@@ -281,7 +340,9 @@ pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
         .map(|t| stem(&t))
         .collect();
 
-    // Also try to tokenize query as if it were a camelCase identifier
+    // Query expansion: stemmed free-text tokens, their camelCase/snake_case
+    // sub-segments, and segments of the raw query kept at original casing
+    // (acronym names like "HTMLParser" only split before lowercasing).
     let mut all_query_tokens: Vec<String> = query_tokens.clone();
     for qt in &query_tokens {
         let sub = tokenize_identifier(qt);
@@ -289,6 +350,11 @@ pub(crate) async fn run_search(query: &str, json: bool, max_results: usize) {
             if !all_query_tokens.contains(&s) {
                 all_query_tokens.push(s);
             }
+        }
+    }
+    for seg in query_segments(query) {
+        if !all_query_tokens.contains(&seg) {
+            all_query_tokens.push(seg);
         }
     }
 
@@ -406,6 +472,95 @@ mod tests {
     fn test_tokenize_acronym() {
         let tokens = tokenize_identifier("parseJSON");
         assert_eq!(tokens, vec!["parse", "json"]);
+    }
+
+    // ── acronym-run segmentation (codegraph identifier-segments parity) ──
+
+    #[test]
+    fn test_tokenize_acronym_run() {
+        // "HTMLParser" must split into HTML | Parser, not stay one token.
+        let tokens = tokenize_identifier("HTMLParser");
+        assert_eq!(tokens, vec!["html", "parser"]);
+    }
+
+    #[test]
+    fn test_tokenize_acronym_run_leading() {
+        let tokens = tokenize_identifier("JSONParser");
+        assert_eq!(tokens, vec!["json", "parser"]);
+        let tokens = tokenize_identifier("XMLHttpRequest");
+        assert_eq!(tokens, vec!["xml", "http", "request"]);
+    }
+
+    #[test]
+    fn test_tokenize_digits_glued_to_word() {
+        // Digits stay glued to their word: base64 | encode, foo2 | bar.
+        let tokens = tokenize_identifier("base64Encode");
+        assert_eq!(tokens, vec!["base64", "encode"]);
+        let tokens = tokenize_identifier("Foo2Bar");
+        assert_eq!(tokens, vec!["foo2", "bar"]);
+    }
+
+    #[test]
+    fn test_tokenize_acronym_with_trailing_digits() {
+        // Trailing digits glue to the last segment, not a separate token.
+        let tokens = tokenize_identifier("HTMLParser2");
+        assert_eq!(tokens, vec!["html", "parser2"]);
+    }
+
+    #[test]
+    fn test_tokenize_segment_bounds() {
+        // 2-char minimum: single-letter names carry no prose signal.
+        let tokens = tokenize_identifier("a");
+        assert_eq!(tokens, Vec::<String>::new());
+        let tokens = tokenize_identifier("xy");
+        assert_eq!(tokens, vec!["xy"]);
+    }
+
+    #[test]
+    fn test_tokenize_digit_only_segment_dropped() {
+        let tokens = tokenize_identifier("12345");
+        assert_eq!(tokens, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_tokenize_minified_identifier_dropped() {
+        // Oversized single segments (minified names, hashes) are dropped.
+        let tokens = tokenize_identifier("abcdefghijklmnopqrstuvwxyzabcdefghijklmnop");
+        assert_eq!(tokens, Vec::<String>::new());
+        // A hump after the oversized run still yields the short tail segment
+        // (codegraph parity: "…3456789" + "ABCDEF" → ["abcdef"]).
+        let tokens = tokenize_identifier("abcdefghijklmnopqrstuvwxyz0123456789ABCDEF");
+        assert_eq!(tokens, vec!["abcdef"]);
+    }
+
+    #[test]
+    fn test_tokenize_signature_punctuation() {
+        // Non-alphanumerics separate: a signature tokenizes into words.
+        let tokens =
+            tokenize_identifier("fun addBiometryToPowerAuth(isAllowedForActiveOp: Boolean)");
+        assert_eq!(
+            tokens,
+            vec![
+                "fun", "add", "biometry", "to", "power", "auth", "is", "allowed", "for", "active",
+                "op", "boolean"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_query_segments_acronym() {
+        // Raw-casing expansion: "HTMLParser" must match html/parser segments.
+        let segs = query_segments("HTMLParser");
+        assert_eq!(segs, vec!["html", "parser"]);
+    }
+
+    #[test]
+    fn test_query_segments_snake_and_punctuation() {
+        let segs = query_segments("user_repository");
+        assert_eq!(segs, vec!["user", "repository"]);
+        // Trailing punctuation separates for free.
+        let segs = query_segments("HTMLParser,");
+        assert_eq!(segs, vec!["html", "parser"]);
     }
 
     #[test]
