@@ -35,7 +35,11 @@
 ### src/indexer/ — Indexing & parsing
 - Tree-sitter parsing for Kotlin/Java/Swift
 - In-memory `DashMap`-based index
-- Disk cache via bincode
+- Disk cache via bincode; `FileData.lines` is a `LazyLines` once-cell that is
+  **not** serialized — parse fills eagerly, cache hits fill from disk on first
+  actual use (hover/complete/find), iter commands never touch disk
+- Generated-file detection (path conventions + header banner) persists
+  `FileData.generated`, used to down-rank stubs in search
 - File discovery via fd/walkdir
 
 ### src/resolver/ — Symbol resolution
@@ -53,6 +57,9 @@
 ### src/parser.rs — Tree-sitter integration
 - Query execution for Kotlin/Java/Swift grammars
 - Symbol extraction: classes, functions, properties, imports
+- `collect_syntax_errors()` suppresses 11+ grammar phantom classes
+  (single-line bodies, `catch<T>`, context receivers, detached constructors,
+  …) — each pinned by an `fp_*` regression test with a real-error control
 - Deprecated annotation detection
 
 ## Data flow
