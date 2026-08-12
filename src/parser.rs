@@ -735,9 +735,9 @@ fn is_context_receiver_error(node: &Node, bytes: &[u8]) -> bool {
             .and_then(|c| c.utf8_text(bytes).ok())
             .is_some_and(|t| t == "context");
     }
-    // Shape A: a `: Type` colon ERROR inside a `context(...)` call — walk up
+    // Shape A: a `:`/`<`/`>` ERROR inside a `context(...)` call — walk up
     // to the enclosing call_expression and require callee == `context`.
-    if !text.starts_with(':') {
+    if !text.starts_with(':') && !text.starts_with('<') && !text.starts_with('>') {
         return false;
     }
     let mut cur = node.parent();
@@ -751,6 +751,49 @@ fn is_context_receiver_error(node: &Node, bytes: &[u8]) -> bool {
         cur = n.parent();
     }
     false
+}
+
+/// Whole function-head ERROR caused by a generic receiver type
+/// (`Raise<NonEmptyList<Error>>.zipOrAccumulate`, arrow high-arity): the
+/// grammar drops the full declaration head into an ERROR even though
+/// modifiers/type_parameters/receiver_type parse clean. Suppress only when
+/// every named child is clean and at least one is a head piece that a bare
+/// `class Bad {` (the #306 regression) never has — receiver_type, or both
+/// modifiers AND type_parameters.
+fn is_function_head_wrapper_error(node: &Node) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    let mut cursor = node.walk();
+    let mut has_modifiers = false;
+    let mut has_type_params = false;
+    let mut has_receiver = false;
+    let mut saw_other_named = false;
+    for child in node.children(&mut cursor) {
+        if child.is_missing() || child.has_error() {
+            return false;
+        }
+        if !child.is_named() {
+            continue;
+        }
+        match child.kind() {
+            "modifiers" => has_modifiers = true,
+            "type_parameters" => has_type_params = true,
+            "receiver_type" => has_receiver = true,
+            // Head pieces that may appear on their own.
+            "function_value_parameters"
+            | "simple_identifier"
+            | "user_type"
+            | "type_identifier"
+            | "annotation"
+            | "type_arguments" => {}
+            _ => saw_other_named = true,
+        }
+    }
+    if saw_other_named {
+        return false; // statements, expressions … — not a head wrapper
+    }
+    has_receiver || (has_modifiers && has_type_params)
 }
 
 /// Parenthesized callable used as a function value — `(fn)(arg)` inside a
@@ -1404,6 +1447,11 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
             // Skip parenthesized callable statements `(fn)(args)` (issue #307
             // class 2).
             if is_paren_call_statement_error(&node) {
+                continue;
+            }
+            // Skip whole function heads dropped into ERROR by a generic
+            // receiver type (issue #307).
+            if is_function_head_wrapper_error(&node) {
                 continue;
             }
             // Skip errors that are chained-call property assignments: a.method().prop = value
