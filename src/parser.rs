@@ -2537,15 +2537,27 @@ fn local_var_types(node: &tree_sitter::Node, source: &str) -> HashMap<String, St
     if let Some(class_node) = enclosing_class(fn_node.parent()) {
         let mut stack: Vec<tree_sitter::Node> = vec![class_node];
         while let Some(n) = stack.pop() {
-            if n.kind() == KIND_PROP_DECL {
-                // Explicit type annotation: `val client: ExampleClient`.
-                if let Some((var, typ)) = property_declared_type(&n, source) {
-                    scope.insert(var, typ);
+            match n.kind() {
+                KIND_PROP_DECL => {
+                    // Explicit type annotation: `val client: ExampleClient`.
+                    if let Some((var, typ)) = property_declared_type(&n, source) {
+                        scope.insert(var, typ);
+                    }
+                    // Or initializer: `val client = ExampleClient()`.
+                    if let Some((var, typ)) = local_initializer_type(&n, source) {
+                        scope.insert(var, typ);
+                    }
                 }
-                // Or initializer: `val client = ExampleClient()`.
-                if let Some((var, typ)) = local_initializer_type(&n, source) {
-                    scope.insert(var, typ);
+                "class_parameter" => {
+                    // Primary-constructor property: `class C(private val
+                    // repo: Repo)` → repo → Repo (issue #292). The parameter
+                    // holds name + type; the declared type resolves
+                    // interface/abstract receivers through implementors.
+                    if let Some((var, typ)) = class_parameter_type(&n, source) {
+                        scope.insert(var, typ);
+                    }
                 }
+                _ => {}
             }
             let mut cur = n.walk();
             for child in n.children(&mut cur) {
@@ -2555,6 +2567,36 @@ fn local_var_types(node: &tree_sitter::Node, source: &str) -> HashMap<String, St
     }
 
     scope
+}
+
+/// `private val repo: Repo` / `public var x: Type` in a primary constructor →
+/// (name, type). `class_parameter` children: modifiers, val/var keyword,
+/// simple_identifier (name), user_type (type).
+fn class_parameter_type(param: &tree_sitter::Node, source: &str) -> Option<(String, String)> {
+    let mut cur = param.walk();
+    let mut name: Option<String> = None;
+    let mut typ: Option<String> = None;
+    for child in param.children(&mut cur) {
+        match child.kind() {
+            "simple_identifier" if name.is_none() => {
+                name = child
+                    .utf8_text(source.as_bytes())
+                    .ok()
+                    .map(|s| s.to_string());
+            }
+            "user_type" | "type_identifier" | "generic_type" if typ.is_none() => {
+                typ = child
+                    .utf8_text(source.as_bytes())
+                    .ok()
+                    .map(|s| s.to_string());
+            }
+            _ => {}
+        }
+    }
+    match (name, typ) {
+        (Some(n), Some(t)) => Some((n, t)),
+        _ => None,
+    }
 }
 
 /// Walk up from `node` to the enclosing type declaration (class/object/
@@ -2591,18 +2633,29 @@ fn property_declared_type(decl: &tree_sitter::Node, source: &str) -> Option<(Str
         None
     }
     let name = first_ident(decl, source.as_bytes())?;
-    // Type annotation: a user_type/type_identifier child before the `=`.
+    // Type annotation: a user_type/type_identifier/generic_type node anywhere
+    // in the subtree — `lateinit var x: Repo` nests the type under
+    // variable_declaration, and `var x: Type = ...` has it before `=`. An
+    // initializer's call_expression has no user_type node, so a full-subtree
+    // search cannot pick up the wrong thing.
+    fn find_type(n: &tree_sitter::Node, bytes: &[u8]) -> Option<String> {
+        if matches!(n.kind(), "user_type" | "type_identifier" | "generic_type") {
+            return n.utf8_text(bytes).ok().map(|s| s.to_string());
+        }
+        let mut cur = n.walk();
+        for c in n.children(&mut cur) {
+            if let Some(t) = find_type(&c, bytes) {
+                return Some(t);
+            }
+        }
+        None
+    }
     let mut cur = decl.walk();
     for child in decl.children(&mut cur) {
-        if matches!(
-            child.kind(),
-            "user_type" | "type_identifier" | "generic_type"
-        ) {
-            let typ = child.utf8_text(source.as_bytes()).ok()?.to_string();
-            if typ.contains('=') {
-                continue; // not a type
+        if let Some(typ) = find_type(&child, source.as_bytes()) {
+            if !typ.contains('=') && !typ.contains('(') {
+                return Some((name, typ));
             }
-            return Some((name, typ));
         }
     }
     None
