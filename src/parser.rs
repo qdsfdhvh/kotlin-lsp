@@ -524,6 +524,87 @@ fn is_fun_interface_error(node: &Node, bytes: &[u8]) -> bool {
 /// CST pattern:
 ///   statements { navigation_expression { ... } }
 ///   ERROR { "=" ... }    ← false positive
+/// Phantom single-line class/interface-body wrapper (-sg grammar).
+///
+/// `class X { fun f() {} }` (and `interface I { fun f() }`, `class G { init {} }`,
+/// `class E { companion object { val x = 1 } }`) parse with a complete CST but
+/// an ERROR node that wraps one complete member declaration — codegraph's
+/// kotlin-kernel-port-checklist §(b) phantom class, except here the phantom
+/// comes with a concrete ERROR wrapper (fwcd 0.3.8 had zero ERROR nodes).
+///
+/// Suppress only when the ERROR is single-line and every named child is a
+/// complete, error-free member declaration, and every direct unnamed child
+/// is a brace or declaration keyword (`class`, `{`, `companion`, …). A bare
+/// `=` as a direct child (e.g. `class Y { fun f() {} val broken = }`) means
+/// the parser dropped a malformed member — keep that error visible.
+fn is_single_line_body_phantom_error(node: &Node) -> bool {
+    use crate::queries::{
+        KIND_ANON_INIT, KIND_CLASS_DECL, KIND_ENUM_ENTRY, KIND_FUN_DECL, KIND_INTERFACE_DECL,
+        KIND_OBJECT_DECL, KIND_PROP_DECL, KIND_TYPE_ALIAS,
+    };
+    if !node.is_error() {
+        return false;
+    }
+    let r = node.range();
+    if r.start_point.row != r.end_point.row {
+        return false; // the phantom only manifests on single-line bodies
+    }
+    let is_member_decl = |n: &Node| {
+        matches!(
+            n.kind(),
+            KIND_FUN_DECL
+                | KIND_PROP_DECL
+                | KIND_OBJECT_DECL
+                | KIND_ANON_INIT
+                | KIND_CLASS_DECL
+                | KIND_INTERFACE_DECL
+                | KIND_ENUM_ENTRY
+                | KIND_TYPE_ALIAS
+        ) && !n.has_error()
+    };
+    // Direct unnamed tokens must be braces or declaration keywords only — a
+    // stray operator (`=`, `(`, `,`) means a malformed member was dropped.
+    let ok_unnamed = |k: &str| {
+        matches!(
+            k,
+            "{" | "}"
+                | "class"
+                | "interface"
+                | "object"
+                | "companion"
+                | "init"
+                | "fun"
+                | "val"
+                | "var"
+                | "enum"
+                | "typealias"
+                | "constructor"
+                | "by"
+                | "<"
+                | ">"
+                | ","
+        )
+    };
+    let mut cursor = node.walk();
+    let mut saw_member = false;
+    for child in node.children(&mut cursor) {
+        if child.is_missing() {
+            return false;
+        }
+        if !child.is_named() {
+            if !ok_unnamed(child.kind()) {
+                return false;
+            }
+            continue;
+        }
+        if !is_member_decl(&child) {
+            return false;
+        }
+        saw_member = true;
+    }
+    saw_member
+}
+
 fn is_chained_call_assignment_error(node: &Node, bytes: &[u8]) -> bool {
     if !node.is_error() {
         return false;
@@ -1112,6 +1193,14 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
         } else if node.is_error() {
             // Skip errors that are actually valid `fun interface` declarations.
             if is_fun_interface_error(&node, bytes) {
+                continue;
+            }
+            // Skip phantom single-line class/interface-body wrappers: the -sg
+            // grammar wraps one complete member declaration in an ERROR node
+            // when the body is a one-liner (codegraph checklist §(b) — but
+            // with a concrete ERROR wrapper, unlike fwcd's zero-ERROR-node
+            // phantom). Real errors contain MISSING nodes or error subtrees.
+            if is_single_line_body_phantom_error(&node) {
                 continue;
             }
             // Skip errors that are chained-call property assignments: a.method().prop = value
