@@ -68,6 +68,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use crate::types::SymbolEntry;
+
 // ── tokenization ────────────────────────────────────────────────────────────
 
 /// Split an identifier into lowercase word segments.
@@ -176,6 +178,21 @@ struct SearchDoc {
     generated: bool,
 }
 
+impl Clone for SearchDoc {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            kind: self.kind.clone(),
+            file: self.file.clone(),
+            line: self.line,
+            signature: self.signature.clone(),
+            doc: self.doc.clone(),
+            tokens: self.tokens.clone(),
+            generated: self.generated,
+        }
+    }
+}
+
 /// TF-IDF search index over workspace symbols.
 struct TfIdfIndex {
     docs: Vec<SearchDoc>,
@@ -265,13 +282,31 @@ impl TfIdfIndex {
             .filter(|(_, s)| *s > 0.0)
             .collect();
 
+        // Names that have at least one hand-written implementation — generated
+        // stubs sharing one of these names rank LAST regardless of the small
+        // score gap a stub gets from having no doc tokens (codegraph:
+        // "rank LAST when there's a real implementation with the same name").
+        let real_names: std::collections::HashSet<&str> = self
+            .docs
+            .iter()
+            .filter(|d| !d.generated)
+            .map(|d| d.name.as_str())
+            .collect();
+
         ranked.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                // Tie-break: generated stubs rank below real implementations
-                // with the same score (codegraph relevance-hint philosophy).
-                .then_with(|| self.docs[a.0].generated.cmp(&self.docs[b.0].generated))
-                .then_with(|| a.0.cmp(&b.0))
+            let (ia, ib) = (a.0, b.0);
+            // Generated stubs with a same-name real implementation rank LAST
+            // regardless of score (codegraph: "rank LAST when there's a real
+            // implementation with the same name") — a stub scores slightly
+            // HIGHER here because it lacks doc tokens to dilute its tf.
+            let a_defer =
+                self.docs[ia].generated && real_names.contains(self.docs[ia].name.as_str());
+            let b_defer =
+                self.docs[ib].generated && real_names.contains(self.docs[ib].name.as_str());
+            a_defer
+                .cmp(&b_defer)
+                .then_with(|| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal))
+                .then_with(|| ia.cmp(&ib))
         });
 
         ranked.truncate(max_results);
@@ -542,6 +577,31 @@ fn query_segments(raw: &str) -> Vec<String> {
     out
 }
 
+/// Search tokens for one symbol — the exact fields `run_search` indexes.
+/// Shared with the corpus battery so the test asserts the real indexing path.
+fn doc_tokens(sym: &SymbolEntry) -> Vec<String> {
+    let mut tokens = Vec::new();
+    // Name tokens
+    tokens.extend(tokenize_identifier(&sym.name));
+    // Signature tokens
+    if !sym.detail.is_empty() {
+        tokens.extend(tokenize_identifier(&sym.detail));
+    }
+    // Documentation tokens
+    if let Some(ref doc) = sym.documentation {
+        tokens.extend(tokenize_query(doc));
+    }
+    // Return type tokens
+    if let Some(ref rt) = sym.return_type {
+        tokens.extend(tokenize_identifier(rt));
+    }
+    // Parameter type tokens
+    for (_, ptype) in &sym.parameters {
+        tokens.extend(tokenize_identifier(ptype));
+    }
+    tokens
+}
+
 pub(crate) async fn run_search(
     query: &str,
     json: bool,
@@ -599,35 +659,11 @@ pub(crate) async fn run_search(
             .to_string();
 
         for sym in &file_data.symbols {
-            let mut tokens = Vec::new();
-
-            // Name tokens
-            tokens.extend(tokenize_identifier(&sym.name));
-
-            // Signature tokens
-            if !sym.detail.is_empty() {
-                tokens.extend(tokenize_identifier(&sym.detail));
-            }
-
-            // Documentation tokens
-            if let Some(ref doc) = sym.documentation {
-                tokens.extend(tokenize_query(doc));
-            }
-
-            // Return type tokens
-            if let Some(ref rt) = sym.return_type {
-                tokens.extend(tokenize_identifier(rt));
-            }
-
-            // Parameter type tokens
-            for (_, ptype) in &sym.parameters {
-                tokens.extend(tokenize_identifier(ptype));
-            }
-
             // Stem all tokens for better matching (e.g., "refreshed" → "refresh")
             // Only stem query tokens, not document tokens.
             // Document tokens (code identifiers) are exact and should
             // match as-is; the query side stems user's free-text input.
+            let tokens = doc_tokens(sym);
             let doc = SearchDoc {
                 name: sym.name.clone(),
                 kind: sym.kind_label(),
@@ -708,6 +744,10 @@ pub(crate) async fn run_search(
 }
 
 // ── test helpers ────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+#[path = "search_corpus_tests.rs"]
+mod search_corpus_tests;
 
 #[cfg(test)]
 mod tests {
