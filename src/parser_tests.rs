@@ -3221,3 +3221,32 @@ fn class_property_receiver_qualifies_callee() {
         "class-property receiver resolves via declared/initializer type: {edges:?}"
     );
 }
+
+#[test]
+fn lateinit_and_ctor_property_receivers_qualify() {
+    // issue #292 matrix: primary-constructor property + lateinit
+    let src = "class C(private val repo: Repo) {\n    fun load() { repo.go() }\n}\nclass D {\n    private lateinit var repo: Repo\n    fun load() { repo.go() }\n}\ninterface Repo {\n    fun go()\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges.iter().any(|(c, k)| c == "C.load" && k == "Repo.go"),
+        "ctor property receiver: {edges:?}"
+    );
+    assert!(
+        edges.iter().any(|(c, k)| c == "D.load" && k == "Repo.go"),
+        "lateinit property receiver: {edges:?}"
+    );
+}
+
+#[test]
+fn lateinit_receiver_qualifies_minimal() {
+    let src = "class D {\n    private lateinit var repository: ExampleRepository\n    fun load() { repository.loadThings() }\n}\ninterface ExampleRepository {\n    fun loadThings()\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges
+            .iter()
+            .any(|(_, k)| k == "ExampleRepository.loadThings"),
+        "lateinit receiver resolves: {edges:?}"
+    );
+}
