@@ -796,6 +796,45 @@ fn is_function_head_wrapper_error(node: &Node) -> bool {
     has_receiver || (has_modifiers && has_type_params)
 }
 
+/// Detached `constructor(...)` misparsed as a call (issue #307): a KDoc
+/// between the class head and `@JvmOverloads constructor(...)` makes the
+/// grammar parse `constructor` as a call_expression, and the parameter
+/// types' `:`/`<` become ERRORs. Suppress a `:`/`<`-leading ERROR whose
+/// enclosing call_expression callee is `constructor`.
+fn is_detached_constructor_error(node: &Node, bytes: &[u8]) -> bool {
+    if !node.is_error() {
+        return false;
+    }
+    let text = node.utf8_text(bytes).unwrap_or("").trim_start().to_string();
+    // Delegation `: this(...)` after the constructor call — prev sibling is
+    // that call_expression.
+    if text.starts_with(": this") {
+        return node
+            .prev_sibling()
+            .filter(|s| s.kind() == "call_expression")
+            .and_then(|s| s.child(0))
+            .and_then(|c| c.utf8_text(bytes).ok())
+            .is_some_and(|t| t == "constructor");
+    }
+    if !text.starts_with(':')
+        && !text.starts_with('<')
+        && !(text.starts_with('=') && text.len() == 1)
+    {
+        return false;
+    }
+    let mut cur = node.parent();
+    while let Some(n) = cur {
+        if n.kind() == "call_expression" {
+            return n
+                .child(0)
+                .and_then(|c| c.utf8_text(bytes).ok())
+                .is_some_and(|t| t == "constructor");
+        }
+        cur = n.parent();
+    }
+    false
+}
+
 /// Parenthesized callable used as a function value — `(fn)(arg)` inside a
 /// lambda (issue #307 class 2, ktor FormAuth). The grammar parses the parens
 /// as a destructuring declaration and wraps them in ERROR. Suppress only when
@@ -1452,6 +1491,10 @@ fn collect_syntax_errors(root: Node, bytes: &[u8]) -> Vec<SyntaxError> {
             // Skip whole function heads dropped into ERROR by a generic
             // receiver type (issue #307).
             if is_function_head_wrapper_error(&node) {
+                continue;
+            }
+            // Skip detached-constructor param ERRORs (issue #307).
+            if is_detached_constructor_error(&node, bytes) {
                 continue;
             }
             // Skip errors that are chained-call property assignments: a.method().prop = value
