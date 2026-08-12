@@ -3415,6 +3415,58 @@ public inline fun <Error, T1, R> Raise<NonEmptyList<Error>>.zipOrAccumulate(
 }
 
 #[test]
+fn fp_detached_constructor_with_kdoc() {
+    // AsyncPagingDataDiffer shape: class head + KDoc + @JvmOverloads + a
+    // separate constructor(...) — the KDoc makes the grammar parse
+    // `constructor` as a call and the params' `:`/`<` become ERRORs.
+    let src = r#"
+class AsyncPagingDataDiffer<T : Any>
+/**
+ * Construct.
+ */
+@JvmOverloads
+constructor(
+  private val diffCallback: DiffUtil.ItemCallback<T>,
+)
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "detached constructor with KDoc should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_detached_constructor_multiple_params() {
+    let src = r#"
+class Differ<T : Any>
+@JvmOverloads
+constructor(
+  private val diffCallback: DiffUtil.ItemCallback<T>,
+  val updateCallback: ListUpdateCallback,
+)
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "detached constructor with multiple params should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_constructor_call_real_error_still_reports() {
+    // Control: a genuinely broken constructor body must keep reporting.
+    let src = "class X\nconstructor(\n  val broken =\n)\n";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        !data.syntax_errors.is_empty(),
+        "malformed constructor param must remain visible"
+    );
+}
+
+#[test]
 fn fp_malformed_function_head_still_reports() {
     // Control: an unterminated function head must keep reporting.
     let src = "fun f( }";
