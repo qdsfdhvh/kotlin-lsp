@@ -3031,6 +3031,111 @@ fun e(
     );
 }
 
+// ── codegraph checklist classes (kotlin-kernel-port-checklist §error classes) ──
+// (b) phantom single-line class bodies, (c) soft-keyword identifiers — probed
+// against tree-sitter-kotlin-sg 0.4.1; classes (a) fun-interface and (d)
+// call().prop = x already have dedicated handling + tests above.
+
+#[test]
+fn fp_single_line_class_body() {
+    // codegraph §(b): `class X { fun f() {} }` sets hasError with a complete
+    // CST and no ERROR/missing node — a phantom error.
+    let src = "class X { fun f() {} }";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "single-line class body should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_single_line_abstract_class_body() {
+    // The checklist's defer-fixture #2 shape (one-liner).
+    let src = "abstract class A { abstract fun i(): Int }";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "single-line abstract class body should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_single_line_object_body() {
+    let src = "object O { val x = 1 }";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "single-line object body should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_single_line_class_body_with_method_body() {
+    let src = "class Y { fun g() = 42 }";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "single-line class with expression body should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_single_line_body_phantom_does_not_hide_real_error() {
+    // A malformed member inside a single-line body must stay visible — the
+    // phantom suppression only applies to complete, error-free members.
+    let src = "class X { fun f( }";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        !data.syntax_errors.is_empty(),
+        "malformed member in single-line body must remain visible"
+    );
+
+    // A phantom member next to a real error: only the real one survives.
+    let src = "class Y { fun f() {} val broken = }";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        !data.syntax_errors.is_empty(),
+        "broken sibling must remain visible next to a phantom member"
+    );
+}
+
+#[test]
+fn fp_soft_keyword_final_as_identifier() {
+    // codegraph §(c): `final` is reserved by fwcd 0.3.8; probe whether the
+    // -sg grammar accepts it as an ordinary identifier.
+    let src = r#"
+var final = false
+final = true
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "soft keyword `final` as identifier should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_soft_keyword_field_value_as_identifier() {
+    // Kotlin compiler soft keywords used as property names.
+    let src = r#"
+val value = 1
+val field = 2
+val param = 3
+fun set(x: Int) = x
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "soft keywords as identifiers should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
 // ── kind labels & typealias marker (issue #269) ──────────────────────────────
 
 #[test]
