@@ -3381,6 +3381,50 @@ val (a, b) = pair
     );
 }
 
+#[test]
+fn fp_context_receiver_generic_type() {
+    // RaiseContext shape: `context(raise: Raise<Error>)` — generic arg inside
+    // the context call produces `:`/`<`/`>` ERRORs.
+    let src = r#"
+context(raise: Raise<Error>) @RaiseDSL
+public fun <Error> raise(e: Error): Nothing = TODO()
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "generic context receiver should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_generic_receiver_function_head() {
+    // RaiseAccumulate shape: generic receiver type wraps the whole function
+    // head in ERROR even though it parses clean.
+    let src = r#"
+public inline fun <Error, T1, R> Raise<NonEmptyList<Error>>.zipOrAccumulate(
+    action: () -> T1,
+): Pair<Error, T1> = TODO()
+"#;
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        data.syntax_errors.is_empty(),
+        "generic receiver function head should not error, got: {:?}",
+        data.syntax_errors
+    );
+}
+
+#[test]
+fn fp_malformed_function_head_still_reports() {
+    // Control: an unterminated function head must keep reporting.
+    let src = "fun f( }";
+    let data = super::parse_by_extension("test.kt", src);
+    assert!(
+        !data.syntax_errors.is_empty(),
+        "malformed function head must remain visible"
+    );
+}
+
 // ── kind labels & typealias marker (issue #269) ──────────────────────────────
 
 #[test]
