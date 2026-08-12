@@ -1,3 +1,21 @@
+## 0.31.8 (2026-08-12)
+
+### fix: call reach resolves chained calls through return types + delegated properties (#295, #296)
+
+- **Chained calls** (#295): in `receiver.a().b()`, the second callee is now
+  keyed against what `a()` *returns*, not against the root receiver's type.
+  The parser emits a compound key (`ExampleApi.fetch.onFailure` for
+  `api.fetch().onFailure()`); reach resolves it through the declaration
+  index's return types, so `Result`-style chaining no longer fabricates
+  nodes like `ExampleApi.onFailure` or drops the real edge. When the return
+  type is unknown (generic, stdlib, inferred body), the callee stays bare —
+  a dropped edge is recoverable, a wrong edge is not.
+- **Delegated properties** (#296): `val x by lazy { ExampleClient() }` and
+  `val x by someLazy` (`someLazy: Lazy<ExampleClient>`) now give the
+  property the delegate's `getValue` result type (`ExampleClient`), so
+  `x.send()` resolves through the real type instead of the delegate's own
+  type or nothing.
+
 ## 0.31.7 (2026-08-12)
 
 ### fix: call reach receiver resolution covers primary-constructor properties and lateinit (#292, PR #293)

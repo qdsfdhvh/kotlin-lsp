@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use tower_lsp::lsp_types::Location;
+use tower_lsp::lsp_types::{Location, SymbolKind};
 
 use crate::indexer::Indexer;
 
@@ -22,15 +22,100 @@ pub(crate) const MAX_PATHS: usize = 1000;
 
 // ── Graph construction (pure, testable) ──────────────────────────────────────
 
+/// `Class.method` → declared return type (generics kept), from every indexed
+/// function/method symbol. `parent_fq_name` is package-qualified, so the key
+/// uses its last segment — matching the `Class.method` keys the parser and
+/// caller qualification emit.
+fn build_return_types(index: &Indexer) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for file in index.files.iter() {
+        for sym in file.value().symbols.iter() {
+            if !matches!(sym.kind, SymbolKind::FUNCTION | SymbolKind::METHOD) {
+                continue;
+            }
+            let (Some(parent), Some(ret)) = (&sym.parent_fq_name, &sym.return_type) else {
+                continue;
+            };
+            let Some(class) = parent.rsplit('.').next() else {
+                continue;
+            };
+            map.insert(format!("{class}.{}", sym.name), ret.clone());
+        }
+    }
+    map
+}
+
+/// Return type of a `Class.method` key, chasing nested chained-call keys:
+/// `A.b.c` is the return type of `R.c`, where `R` is the return type of
+/// `A.b`. Return types are stripped of generics (`List<X>` → `List`) so the
+/// result doubles as a receiver type. `None` when any hop is unknown — a
+/// generic, a stdlib type, an inferred `=` body.
+fn chain_return_type(fn_key: &str, return_types: &HashMap<String, String>) -> Option<String> {
+    if let Some(ret) = return_types.get(fn_key) {
+        return Some(strip_type_args(ret));
+    }
+    let (head, method) = fn_key.rsplit_once('.')?;
+    let head_ret = chain_return_type(head, return_types)?;
+    return_types
+        .get(&format!("{head_ret}.{method}"))
+        .map(|r| strip_type_args(r))
+}
+
+/// Resolve a synthetic chained-call callee key (parser-emitted
+/// `ExampleApi.fetch.onFailure` for `api.fetch().onFailure()`) to the real
+/// callee keyed by the *declared return type* of the inner call — reach then
+/// keys the outer method against what the inner call actually returns, not
+/// the root receiver's type (issue #295). `None` when the return type is
+/// unknown — the edge then falls back to a bare method name instead of
+/// attributing it to the root receiver (a dropped edge is recoverable; a
+/// wrong edge is not).
+fn resolve_chained_callee(callee: &str, return_types: &HashMap<String, String>) -> Option<String> {
+    let (head, method) = callee.rsplit_once('.')?;
+    let head_ret = chain_return_type(head, return_types)?;
+    if head_ret.is_empty() || matches!(head_ret.as_str(), "Unit" | "Nothing") {
+        return None;
+    }
+    Some(format!("{head_ret}.{method}"))
+}
+
+/// Rewrite a parser-emitted callee key for reach:
+/// - real keys (`Class.method`, bare names) pass through unchanged;
+/// - chained-call keys (≥2 dots, `ExampleApi.fetch.onFailure`) resolve
+///   through the return-type index; unknown return types fall back to the
+///   bare method name so the existing unique-name resolution can still find
+///   it (issue #295).
+fn resolve_edge_callee(callee: &str, return_types: &HashMap<String, String>) -> String {
+    if callee.matches('.').count() >= 2 {
+        if let Some(real) = resolve_chained_callee(callee, return_types) {
+            return real;
+        }
+        return callee.rsplit('.').next().unwrap_or(callee).to_string();
+    }
+    callee.to_string()
+}
+
+/// Strip generic type arguments: `List<Thing>` → `List`, `Result<String>` →
+/// `Result`. The graph keys receiver types without generics.
+fn strip_type_args(typ: &str) -> String {
+    let t = typ.trim();
+    match t.find('<') {
+        Some(i) => t[..i].trim().to_string(),
+        None => t.to_string(),
+    }
+}
+
 /// caller_name → Vec<(caller_file, callee_name)>.
 ///
 /// `Indexer::call_edges` is keyed by *callee* (callee → callers); reach walks
 /// forward, so we reverse the map once up front instead of scanning the whole
-/// edge table on every expansion step.
+/// edge table on every expansion step. Chained-call callee keys are resolved
+/// to real graph keys here, so the graph reach walks contains no synthetic
+/// nodes (issue #295).
 pub(crate) fn build_callee_map(index: &Indexer) -> HashMap<String, Vec<(String, String)>> {
+    let return_types = build_return_types(index);
     let mut map: HashMap<String, Vec<(String, String)>> = HashMap::new();
     for entry in index.call_edges.iter() {
-        let callee = entry.key();
+        let callee = resolve_edge_callee(entry.key(), &return_types);
         for (caller_file, caller_name) in entry.value().iter() {
             map.entry(caller_name.clone())
                 .or_default()

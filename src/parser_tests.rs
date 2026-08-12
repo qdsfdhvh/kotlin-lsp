@@ -3250,3 +3250,116 @@ fn lateinit_receiver_qualifies_minimal() {
         "lateinit receiver resolves: {edges:?}"
     );
 }
+
+// ── chained-call receiver resolution (issue #295) ────────────────────────────
+
+#[test]
+fn chained_call_keys_outer_callee_against_inner_callee() {
+    // `api.fetch().onFailure()`: the inner call resolves to ExampleApi.fetch;
+    // the outer callee must key against *that* (compound key for reach to
+    // resolve through fetch's return type), never against the root receiver's
+    // declared type (ExampleApi.onFailure is fabricated).
+    let src = "class ExampleResult {\n    fun onFailure(): ExampleResult { handleFailure(); return this }\n}\nfun handleFailure() {}\nclass ExampleApi {\n    fun fetch(): ExampleResult { return ExampleResult() }\n}\nclass Caller(private val api: ExampleApi) {\n    fun chained() { api.fetch().onFailure() }\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges
+            .iter()
+            .any(|(c, k)| c == "Caller.chained" && k == "ExampleApi.fetch"),
+        "inner call edge present: {edges:?}"
+    );
+    assert!(
+        edges
+            .iter()
+            .any(|(c, k)| c == "Caller.chained" && k == "ExampleApi.fetch.onFailure"),
+        "outer callee is a compound key of the inner callee, not the root type: {edges:?}"
+    );
+    assert!(
+        !edges.iter().any(|(_, k)| k == "ExampleApi.onFailure"),
+        "no fabricated ExampleApi.onFailure edge: {edges:?}"
+    );
+}
+
+#[test]
+fn chained_call_unresolved_inner_receiver_stays_bare() {
+    // `x.unknown().baz()` — the inner callee is unresolvable (lowercase
+    // receiver, no scope hit), so the outer callee stays bare rather than
+    // being attributed to anything.
+    let src = "fun entry() {\n    x.unknown().baz()\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges.iter().any(|(c, k)| c == "entry" && k == "baz"),
+        "bare outer callee: {edges:?}"
+    );
+    assert!(
+        !edges
+            .iter()
+            .any(|(_, k)| k.contains('.') && !k.ends_with(".unknown") && k != "unknown"),
+        "no type-qualified fabrication: {edges:?}"
+    );
+}
+
+#[test]
+fn chained_constructor_receiver_keeps_type_qualification() {
+    // `ExampleReader().process()` — the receiver is a constructor call; the
+    // outer callee stays ExampleReader.process (same as before #295).
+    let src = "class ExampleReader {\n    fun process() { readFromDisk() }\n}\nfun entry() {\n    ExampleReader().process()\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges
+            .iter()
+            .any(|(c, k)| c == "entry" && k == "ExampleReader.process"),
+        "constructor-call receiver qualifies: {edges:?}"
+    );
+}
+
+// ── delegated property receiver resolution (issue #296) ─────────────────────
+
+#[test]
+fn lazy_block_delegate_receiver_qualifies() {
+    // `private val client by lazy { ExampleClient() }` — the property type is
+    // what the lambda constructs, so client.send() keys ExampleClient.send.
+    let src = "class ExampleClient {\n    fun send() { doSend() }\n}\nclass ViaByLazyBlock {\n    private val client by lazy { ExampleClient() }\n    fun go() { client.send() }\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges
+            .iter()
+            .any(|(c, k)| c == "ViaByLazyBlock.go" && k == "ExampleClient.send"),
+        "lazy-block delegate receiver resolves: {edges:?}"
+    );
+}
+
+#[test]
+fn lazy_param_delegate_receiver_qualifies() {
+    // `val client by client` with `client: Lazy<ExampleClient>` — the
+    // property type is Lazy<T>.getValue's T, not Lazy<ExampleClient>.
+    let src = "class ExampleClient {\n    fun send() { doSend() }\n}\nclass ViaLazyDelegateParam(client: Lazy<ExampleClient>) {\n    private val client by client\n    fun go() { client.send() }\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        edges
+            .iter()
+            .any(|(c, k)| c == "ViaLazyDelegateParam.go" && k == "ExampleClient.send"),
+        "Lazy-param delegate receiver resolves: {edges:?}"
+    );
+    assert!(
+        !edges.iter().any(|(_, k)| k == "Lazy.send"),
+        "delegate's own type is not used: {edges:?}"
+    );
+}
+
+#[test]
+fn custom_delegate_stays_bare() {
+    // `val x by SomeCustomDelegate()` — the property type is not statically
+    // knowable (no lazy / Lazy shape); the receiver stays bare-named.
+    let src = "class SomeCustomDelegate\nfun entry() {\n    val x by SomeCustomDelegate()\n    x.go()\n}\n";
+    let edges = crate::parser::extract_call_edges(src, crate::Language::Kotlin);
+    eprintln!("edges: {edges:?}");
+    assert!(
+        !edges.iter().any(|(_, k)| k == "SomeCustomDelegate.go"),
+        "unknown delegate type must not qualify: {edges:?}"
+    );
+}
