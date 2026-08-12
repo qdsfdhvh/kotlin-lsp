@@ -126,7 +126,7 @@ fn infer_variable_type_impl(idx: &Indexer, var_name: &str, uri: &Url, depth: u8)
                 .iter()
                 .find(|(_, n, _, _)| n == var_name)
                 .map(|(_, _, recv, method)| (recv.clone(), method.clone()));
-            let lines = data.lines.clone();
+            let lines = data.lines.filled_arc();
             // Drop DashMap guard before any potential recursive call.
             drop(data);
             if let Some(ty) = rhs_match {
@@ -182,7 +182,7 @@ fn infer_variable_type_raw_impl(
                 .iter()
                 .find(|(_, n, _, _)| n == var_name)
                 .map(|(_, _, recv, method)| (recv.clone(), method.clone()));
-            let lines = data.lines.clone();
+            let lines = data.lines.filled_arc();
             drop(data);
             if let Some(ty) = rhs_match {
                 return Some(ty);

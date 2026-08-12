@@ -1,10 +1,9 @@
 //! Unit tests for `indexer::cache`.
 
-use std::sync::Arc;
 use tower_lsp::lsp_types::{SymbolKind, Url};
 
 use super::*;
-use crate::types::{FileData, SymbolEntry, Visibility};
+use crate::types::{FileData, LazyLines, SymbolEntry, Visibility};
 
 fn uri(path: &str) -> Url {
     Url::parse(&format!("file:///test{path}")).unwrap()
@@ -18,7 +17,7 @@ use crate::indexer::test_helpers::with_xdg_cache;
 fn cache_entry_to_file_result_supertypes_extracted() {
     let u = uri("/Cat.kt");
     let mut data = FileData {
-        lines: Arc::new(vec![
+        lines: LazyLines::from_vec(vec![
             "class Cat : IAnimal {".into(),
             "    fun meow() {}".into(),
             "}".into(),
@@ -74,7 +73,7 @@ fn cache_entry_to_file_result_supertypes_extracted() {
 fn cache_entry_to_file_result_preserves_hash() {
     let u = uri("/Foo.kt");
     let mut data = FileData {
-        lines: Arc::new(vec!["class Foo".into()]),
+        lines: LazyLines::from_vec(vec!["class Foo".into()]),
         ..FileData::default()
     };
     data.symbols.push(SymbolEntry {
@@ -222,4 +221,76 @@ fn dir_freshness_uses_mtime_without_payload() {
         !super::library_cache_dirs_fresh(std::slice::from_ref(&src), &cache),
         "dir newer than cache is stale"
     );
+}
+
+// ── LazyLines: cache hits deserialize empty, fill() re-reads disk (issue #304) ─
+
+#[test]
+fn lazy_lines_fill_from_disk_on_cache_hit() {
+    use std::io::Write;
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let path = dir.path().join("Source.kt");
+    std::fs::File::create(&path)
+        .expect("create")
+        .write_all(b"class Cat\n    fun meow()\n")
+        .expect("write");
+
+    // A cache-hit FileData has empty lines (serde skip).
+    let data = FileData::default();
+    assert!(!data.lines.is_filled());
+    assert!(data.lines.is_empty());
+
+    // fill() pulls them from disk.
+    data.lines.fill(&path);
+    assert!(data.lines.is_filled());
+    assert_eq!(data.lines.len(), 2);
+    assert_eq!(data.lines[0], "class Cat");
+    assert_eq!(data.lines[1], "    fun meow()");
+
+    // fill() is idempotent; from_content stays eager.
+    data.lines.fill(&path);
+    assert_eq!(data.lines.len(), 2);
+    let eager = LazyLines::from_content("a\nb\n");
+    assert!(eager.is_filled());
+    assert_eq!(eager.len(), 2);
+}
+
+#[test]
+fn lazy_lines_share_via_clone() {
+    let lines = LazyLines::from_content("x\ny\n");
+    let clone = lines.clone();
+    assert_eq!(clone.len(), 2);
+    assert_eq!(clone[1], "y");
+}
+
+#[test]
+fn cache_roundtrip_skips_lines() {
+    // bincode round-trip: lines are not serialized; everything else survives.
+    let mut data = FileData {
+        lines: LazyLines::from_content("class Cat\n"),
+        ..Default::default()
+    };
+    data.symbols.push(SymbolEntry {
+        name: "Cat".into(),
+        kind: SymbolKind::CLASS,
+        visibility: Visibility::Public,
+        range: Default::default(),
+        selection_range: Default::default(),
+        detail: "class Cat".into(),
+        type_params: Vec::new(),
+        extension_receiver: String::new(),
+        deprecated: false,
+        parent_fq_name: None,
+        return_type: None,
+        parameters: Vec::new(),
+        documentation: None,
+        is_sealed: false,
+        is_typealias: false,
+    });
+    let bytes = bincode::serialize(&data).expect("serialize");
+    let back: FileData = bincode::deserialize(&bytes).expect("deserialize");
+    assert!(!back.lines.is_filled(), "lines must not survive the cache");
+    assert_eq!(back.symbols.len(), 1);
+    assert_eq!(back.symbols[0].name, "Cat");
+    assert_eq!(back.symbols[0].detail, "class Cat");
 }

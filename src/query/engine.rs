@@ -79,13 +79,19 @@ impl WorkspaceQueryEngine {
     }
 
     pub(crate) fn file_data(&self, uri: &Url) -> Option<Arc<FileData>> {
-        self.index.files.get(uri.as_str()).map(|v| v.clone())
+        self.index.files.get(uri.as_str()).map(|v| {
+            crate::indexer::Indexer::fill_lines(v.value(), uri.as_str());
+            v.clone()
+        })
     }
 
     /// Fast access to files DashMap (for bulk iteration patterns that
     /// don't have a clean query-engine equivalent yet).
     pub(crate) fn file_by_uri_str(&self, uri_str: &str) -> Option<Arc<FileData>> {
-        self.index.files.get(uri_str).map(|v| v.clone())
+        self.index.files.get(uri_str).map(|v| {
+            crate::indexer::Indexer::fill_lines(v.value(), uri_str);
+            v.clone()
+        })
     }
 
     pub(crate) fn callers_of(&self, name: &str) -> Vec<(String, String)> {

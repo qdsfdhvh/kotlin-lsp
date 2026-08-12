@@ -125,7 +125,7 @@ thread_local! {
 
 fn new_file_data(content: &str) -> FileData {
     FileData {
-        lines: std::sync::Arc::new(content.lines().map(str::to_owned).collect()),
+        lines: crate::types::LazyLines::from_content(content),
         ..Default::default()
     }
 }
@@ -1155,7 +1155,7 @@ fn extract_fun_interfaces(root: Node, bytes: &[u8], data: &mut FileData) {
                 });
             if let Some(child) = name_node {
                 if let Ok(name) = child.utf8_text(bytes) {
-                    let lines = data.lines.clone();
+                    let lines = data.lines.filled_arc();
                     push_interface_symbol(name, &node, child.range(), bytes, data, lines);
                 }
             }
@@ -1174,7 +1174,7 @@ fn extract_fun_interfaces(root: Node, bytes: &[u8], data: &mut FileData) {
                         && s.selection_start() == sel.start.line
                         && matches!(s.kind, SymbolKind::FUNCTION | SymbolKind::METHOD))
                 });
-                let lines = data.lines.clone();
+                let lines = data.lines.filled_arc();
                 push_interface_symbol(name, &node, name_ts_range, bytes, data, lines);
             }
             // Still recurse into children to find nested fun interfaces.

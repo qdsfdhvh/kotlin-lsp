@@ -266,7 +266,7 @@ pub(crate) fn symbols_to_filedata(
         symbols: file_symbols,
         imports: Vec::new(),
         package: None,
-        lines: std::sync::Arc::new(Vec::new()),
+        lines: Default::default(),
         declared_names: Vec::new(),
         supers: Vec::new(),
         rhs_types: Vec::new(),

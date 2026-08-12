@@ -105,6 +105,7 @@ impl Indexer {
             Some(f) => f,
             None => return (None, None),
         };
+        Self::fill_lines(file.value(), uri.as_str());
         for line in file.lines.iter() {
             let t = line.trim();
             if !t.starts_with("import ") {

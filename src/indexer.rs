@@ -383,7 +383,7 @@ impl Indexer {
         if let Some(live) = self.live_lines.get(uri) {
             return Some(live.clone());
         }
-        self.files.get(uri).map(|f| f.lines.clone())
+        self.files.get(uri).map(|f| f.lines.filled_arc())
     }
 
     pub(crate) fn definition_locations(&self, name: &str) -> Vec<Location> {
@@ -588,7 +588,9 @@ impl Indexer {
         if let Some(ll) = self.live_lines.get(uri.as_str()) {
             return ll.get(idx).cloned();
         }
-        self.files.get(uri.as_str())?.lines.get(idx).cloned()
+        let f = self.files.get(uri.as_str())?;
+        Self::fill_lines(f.value(), uri.as_str());
+        f.value().lines.get(idx).cloned()
     }
 
     /// Resolves the element type for an `it`/`this`/named-param dot-receiver.
@@ -823,8 +825,22 @@ impl Indexer {
 
 impl Indexer {
     /// Lazily load FileData from the on-disk library cache.
+    /// Lazy-fill source lines from disk when a caller actually needs them
+    /// (issue #304: lines are not serialized into the cache anymore).
+    pub(crate) fn fill_lines(data: &FileData, uri: &str) {
+        if data.lines.is_filled() {
+            return;
+        }
+        if let Ok(url) = Url::parse(uri) {
+            if let Ok(path) = url.to_file_path() {
+                data.lines.fill(&path);
+            }
+        }
+    }
+
     pub(crate) fn lazy_load_library_file(&self, uri: &str) -> Option<Arc<FileData>> {
         if let Some(data) = self.files.get(uri) {
+            Self::fill_lines(data.value(), uri);
             return Some(Arc::clone(data.value()));
         }
         let cache_path = self.library_cache_path.read().expect("lock").clone()?;
@@ -890,8 +906,10 @@ impl Indexer {
     /// Get FileData for a URI, with transparent lazy loading from library cache.
     /// This is the primary access point — callers that used `self.files.get()`
     /// should use this instead so library files are available after fast start.
+    /// Lazy-fills source lines from disk on first access (issue #304).
     pub(crate) fn get_file(&self, uri: &str) -> Option<Arc<FileData>> {
         if let Some(data) = self.files.get(uri) {
+            Self::fill_lines(data.value(), uri);
             return Some(Arc::clone(data.value()));
         }
         self.lazy_load_library_file(uri)

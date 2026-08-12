@@ -16,6 +16,7 @@ use crate::queries::{
     KIND_CLASS_DECL, KIND_COMPANION_OBJ, KIND_INTERFACE_DECL, KIND_LAMBDA_LIT, KIND_OBJECT_DECL,
 };
 use crate::types::CursorPos;
+use crate::types::FileData;
 use crate::StrExt;
 
 /// Lines to scan backward when resolving variable types and lambda receivers from scope.
@@ -92,6 +93,16 @@ impl Indexer {
         Some((word, range))
     }
 
+    /// Lazy-fill indexed source lines from disk (issue #304).
+    fn fill_indexed_lines(&self, data: &FileData, uri: &Url) {
+        if data.lines.is_filled() {
+            return;
+        }
+        if let Ok(path) = uri.to_file_path() {
+            data.lines.fill(&path);
+        }
+    }
+
     /// Returns a clone of the live (possibly unsaved) lines for a URI.
     pub(crate) fn lines_for(&self, uri: &Url) -> Option<Arc<Vec<String>>> {
         // Prefer live (unsaved) lines, fall back to indexed file.
@@ -99,7 +110,8 @@ impl Indexer {
             return Some(live.clone());
         }
         if let Some(f) = self.files.get(uri.as_str()) {
-            return Some(f.lines.clone());
+            self.fill_indexed_lines(f.value(), uri);
+            return Some(f.lines.filled_arc());
         }
         // File not indexed yet (cold start / indexing in progress) — read from disk
         // so that word_at / word_and_qualifier_at work and rg fallbacks can fire.
@@ -328,7 +340,12 @@ impl Indexer {
         self.live_lines
             .get(uri.as_str())
             .map(|lines| lines.clone())
-            .or_else(|| self.files.get(uri.as_str()).map(|file| file.lines.clone()))
+            .or_else(|| {
+                self.files.get(uri.as_str()).map(|file| {
+                    self.fill_indexed_lines(file.value(), uri);
+                    file.lines.filled_arc()
+                })
+            })
             .unwrap_or_default()
     }
 
@@ -345,7 +362,12 @@ impl Indexer {
             .live_lines
             .get(uri.as_str())
             .map(|ll| ll.clone())
-            .or_else(|| self.files.get(uri.as_str()).map(|f| f.lines.clone()))?;
+            .or_else(|| {
+                self.files.get(uri.as_str()).map(|f| {
+                    self.fill_indexed_lines(f.value(), uri);
+                    f.lines.filled_arc()
+                })
+            })?;
 
         let scan_start = cursor_line.saturating_sub(SCOPE_SCAN_BACK_LINES);
         for ln in (scan_start..=cursor_line).rev() {
