@@ -172,6 +172,8 @@ struct SearchDoc {
     doc: Option<String>,
     /// Pre-tokenized combined text.
     tokens: Vec<String>,
+    /// Tool-generated file — ranks below a real implementation on a tie.
+    generated: bool,
 }
 
 /// TF-IDF search index over workspace symbols.
@@ -266,6 +268,9 @@ impl TfIdfIndex {
         ranked.sort_by(|a, b| {
             b.1.partial_cmp(&a.1)
                 .unwrap_or(std::cmp::Ordering::Equal)
+                // Tie-break: generated stubs rank below real implementations
+                // with the same score (codegraph relevance-hint philosophy).
+                .then_with(|| self.docs[a.0].generated.cmp(&self.docs[b.0].generated))
                 .then_with(|| a.0.cmp(&b.0))
         });
 
@@ -284,6 +289,7 @@ impl TfIdfIndex {
                     line: doc.line,
                     signature: doc.signature.clone(),
                     doc: doc.doc.clone(),
+                    generated: doc.generated,
                     score: if max_score > 0.0 {
                         (score / max_score).min(1.0)
                     } else {
@@ -305,6 +311,8 @@ struct SearchResult {
     line: u32,
     signature: String,
     doc: Option<String>,
+    /// True when the declaring file is tool-generated (path or banner signal).
+    generated: bool,
     /// Relevance score 0.0–1.0.
     score: f64,
 }
@@ -628,6 +636,7 @@ pub(crate) async fn run_search(
                 signature: sym.detail.clone(),
                 doc: sym.documentation.clone(),
                 tokens: tokens.clone(),
+                generated: file_data.generated,
             };
             // Field filters narrow the candidate set before TF-IDF scoring.
             if !doc_passes_filters(&doc, &parsed, language_from_path(file_path)) {
@@ -645,7 +654,11 @@ pub(crate) async fn run_search(
     // to score, so return everything that passed the filters, ordered by name.
     let results = if all_query_tokens.is_empty() {
         let mut docs: Vec<&SearchDoc> = tfidf.docs.iter().collect();
-        docs.sort_by(|a, b| a.name.cmp(&b.name));
+        docs.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.generated.cmp(&b.generated))
+        });
         docs.truncate(max_results);
         docs.into_iter()
             .map(|d| SearchResult {
@@ -655,6 +668,7 @@ pub(crate) async fn run_search(
                 line: d.line,
                 signature: d.signature.clone(),
                 doc: d.doc.clone(),
+                generated: d.generated,
                 score: 1.0,
             })
             .collect()
@@ -674,6 +688,9 @@ pub(crate) async fn run_search(
             println!("{} results for '{}':", results.len(), query);
             for r in &results {
                 print!("  {:.0}%  {} {}", r.score * 100.0, r.kind, r.name);
+                if r.generated {
+                    print!(" (generated)");
+                }
                 if !r.signature.is_empty() {
                     print!(" — {}", r.signature);
                 }
@@ -820,6 +837,7 @@ mod tests {
             signature: String::new(),
             doc: None,
             tokens: vec![],
+            generated: false,
         }
     }
 
@@ -940,6 +958,7 @@ mod tests {
             signature: String::new(),
             doc: None,
             tokens: tokens.clone(),
+            generated: false,
         });
         tfidf.add(0, &tokens);
         tfidf.finalize();
@@ -962,6 +981,7 @@ mod tests {
             signature: String::new(),
             doc: None,
             tokens: tokens.clone(),
+            generated: false,
         });
         tfidf.add(0, &tokens);
         tfidf.finalize();
@@ -982,6 +1002,7 @@ mod tests {
             signature: String::new(),
             doc: None,
             tokens: tokens.clone(),
+            generated: false,
         });
         tfidf.add(0, &tokens);
         tfidf.finalize();
@@ -1008,6 +1029,7 @@ mod tests {
                 t.extend(tokenize_query("Refreshes the auth token"));
                 t
             },
+            generated: false,
         });
         tfidf.add(0, &{
             let mut t = t1.clone();
@@ -1028,6 +1050,7 @@ mod tests {
                 t.extend(tokenize_query("Handles login screen state"));
                 t
             },
+            generated: false,
         });
         tfidf.add(1, &{
             let mut t = t2.clone();
@@ -1041,5 +1064,38 @@ mod tests {
         let results = tfidf.search(&["token".to_string()], 5);
         assert!(!results.is_empty());
         assert_eq!(results[0].name, "TokenRefreshUseCase");
+    }
+
+    #[test]
+    fn test_tfidf_generated_tie_breaks_after_real_implementation() {
+        let mut tfidf = TfIdfIndex::new();
+
+        // Two classes with the same name and identical tokens — one in a
+        // hand-written file, one in a generated protobuf file. On an exact
+        // score tie the real implementation must win.
+        for (file, generated) in [("impl/Send.kt", false), ("proto/Send.pb.kt", true)] {
+            let tokens = tokenize_identifier("Send");
+            let id = tfidf.docs.len();
+            tfidf.docs.push(SearchDoc {
+                name: "Send".into(),
+                kind: "class".into(),
+                file: file.into(),
+                line: 1,
+                signature: String::new(),
+                doc: None,
+                tokens: tokens.clone(),
+                generated,
+            });
+            tfidf.add(id, &tokens);
+        }
+        tfidf.finalize();
+
+        let results = tfidf.search(&["send".to_string()], 5);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].name, "Send");
+        assert!(!results[0].generated, "real implementation must rank first");
+        assert!(results[1].generated, "generated stub must rank second");
+        // Both carry the generated flag in the output.
+        assert!(results[1].file.contains("proto"));
     }
 }

@@ -400,6 +400,9 @@ impl Indexer {
         let lang = crate::Language::from_path(uri.path());
         data.call_edges = crate::parser::extract_call_edges(content, lang);
         data.annotation_edges = crate::parser::extract_annotation_edges(content);
+        // Generated-file verdict: path convention OR header banner, judged
+        // once here (content already in memory) and persisted on FileData.
+        data.generated = crate::indexer::detect_generated(uri.path(), content);
 
         // Set parent_fq_name: for each non-class symbol, find enclosing class by range.
         let class_symbols: Vec<(String, tower_lsp::lsp_types::Range)> = data

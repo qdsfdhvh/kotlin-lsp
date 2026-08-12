@@ -63,6 +63,9 @@ pub(crate) use self::cache::{cache_dir, try_load_cache, workspace_cache_path};
 
 mod discover;
 
+mod generated;
+pub(crate) use generated::detect_generated;
+
 mod scan;
 pub(crate) const MAX_FILES_UNLIMITED: usize = usize::MAX;
 
@@ -963,3 +966,6 @@ mod tests;
 
 #[cfg(test)]
 mod symbol_graph_tests;
+
+#[cfg(test)]
+mod generated_tests;
