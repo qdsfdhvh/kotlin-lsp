@@ -708,7 +708,10 @@ impl IndexRead for super::Indexer {
     }
 
     fn get_file_data(&self, uri: &str) -> Option<Arc<FileData>> {
-        self.files.get(uri).map(|rf| rf.clone())
+        self.files.get(uri).map(|rf| {
+            Self::fill_lines(rf.value(), uri);
+            rf.clone()
+        })
     }
 
     fn resolve_locations(

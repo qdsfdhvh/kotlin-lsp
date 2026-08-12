@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::indexer::Indexer;
 use crate::query::engine::WorkspaceQueryEngine;
-use crate::types::FileData;
+use crate::types::{FileData, LazyLines};
 
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
@@ -33,7 +33,7 @@ fn location(uri: &str, line: u32, col: u32) -> Location {
 fn engine_with_file(uri: &str, lines: Vec<String>) -> WorkspaceQueryEngine {
     let engine = empty_engine();
     let fd = FileData {
-        lines: Arc::new(lines),
+        lines: LazyLines::from_vec(lines),
         ..FileData::default()
     };
     engine.index.files.insert(uri.to_string(), Arc::new(fd));

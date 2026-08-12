@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::path::Path;
+use std::sync::{Arc, OnceLock};
 use tower_lsp::lsp_types::{Range, SymbolKind};
 
 /// File language, derived from path extension.
@@ -176,6 +177,80 @@ pub(crate) struct SyntaxError {
     pub message: String,
 }
 
+/// Lazily-loaded raw source lines.
+///
+/// Parse-time files carry their lines eagerly (built from content already in
+/// memory). Cache hits deserialize with empty lines — `#[serde(skip)]` keeps
+/// raw source out of index.bin, which is the bulk of its payload — and
+/// [`fill`](LazyLines::fill) re-reads them from disk only when a caller
+/// actually needs them (hover/complete/find). Iter-based commands
+/// (search/docs/imports) never touch the disk. Sharing is `Arc`-based so
+/// `clone()` stays a refcount bump, same as the old `Arc<Vec<String>>`.
+#[derive(Debug, Default)]
+pub(crate) struct LazyLines {
+    inner: Arc<OnceLock<Arc<Vec<String>>>>,
+}
+
+fn empty_lines() -> &'static Vec<String> {
+    static EMPTY: Vec<String> = Vec::new();
+    &EMPTY
+}
+
+impl LazyLines {
+    /// Eagerly fill from source text already in memory (the parse path).
+    pub(crate) fn from_content(content: &str) -> Self {
+        let inner = Arc::new(OnceLock::new());
+        let _ = inner.set(Arc::new(content.lines().map(str::to_owned).collect()));
+        Self { inner }
+    }
+
+    /// Eagerly fill from pre-split lines (test fixtures).
+    #[cfg(test)]
+    pub(crate) fn from_vec(lines: Vec<String>) -> Self {
+        let inner = Arc::new(OnceLock::new());
+        let _ = inner.set(Arc::new(lines));
+        Self { inner }
+    }
+
+    /// Fill from disk if not already filled. No-op when already filled or the
+    /// file cannot be read (deleted files keep empty lines).
+    pub(crate) fn fill(&self, path: &Path) {
+        self.inner.get_or_init(|| {
+            std::fs::read_to_string(path)
+                .map(|c| Arc::new(c.lines().map(str::to_owned).collect()))
+                .unwrap_or_default()
+        });
+    }
+
+    pub(crate) fn is_filled(&self) -> bool {
+        self.inner.get().is_some()
+    }
+
+    /// The shared lines `Arc` (empty when never filled) — for call sites whose
+    /// API expects `Arc<Vec<String>>`.
+    pub(crate) fn filled_arc(&self) -> Arc<Vec<String>> {
+        self.inner.get().cloned().unwrap_or_default()
+    }
+}
+
+impl Clone for LazyLines {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+impl std::ops::Deref for LazyLines {
+    type Target = Vec<String>;
+    fn deref(&self) -> &Vec<String> {
+        match self.inner.get() {
+            Some(a) => a.as_ref(),
+            None => empty_lines(),
+        }
+    }
+}
+
 /// All data we keep in memory for one source file.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct FileData {
@@ -184,9 +259,11 @@ pub(crate) struct FileData {
     /// Package declaration, e.g. `"com.example.app"`.
     pub package: Option<String>,
     /// Raw source lines — kept for `word_at()` lookups without hitting disk.
-    /// Wrapped in Arc so that `clone()` is a cheap atomic refcount bump,
-    /// not a full Vec<String> copy (which allocates one heap block per line).
-    pub lines: Arc<Vec<String>>,
+    /// Lazily loaded: filled at parse time, or from disk on first use after a
+    /// cache hit; not serialized to the disk cache (issue #304 — raw source
+    /// was the bulk of index.bin).
+    #[serde(skip)]
+    pub lines: LazyLines,
     /// Lower-cased identifiers found before `:` on non-comment lines.
     /// Populated once at parse time; used by completion without re-scanning.
     pub declared_names: Vec<String>,

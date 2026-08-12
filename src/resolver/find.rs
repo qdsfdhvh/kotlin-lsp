@@ -120,7 +120,7 @@ pub(crate) fn find_local_declaration(idx: &Indexer, name: &str, uri: &Url) -> Ve
     let lines: Arc<Vec<String>> = if let Some(ll) = idx.live_lines.get(uri.as_str()) {
         ll.clone()
     } else if let Some(data) = idx.get_file(uri.as_str()) {
-        data.lines.clone()
+        data.lines.filled_arc()
     } else {
         return vec![];
     };

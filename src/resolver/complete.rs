@@ -230,7 +230,9 @@ impl ExtensionCompletionContext {
             };
         };
 
-        let lines = live_lines.clone().unwrap_or_else(|| file.lines.clone());
+        let lines = live_lines
+            .clone()
+            .unwrap_or_else(|| file.lines.filled_arc());
         let imports = if live_lines.is_some() {
             lines.parse_imports()
         } else {
@@ -855,7 +857,9 @@ impl CurrentFileCompletionContext {
             .files
             .get(from_uri.as_str())
             .map(|file| {
-                let lines = live_lines.clone().unwrap_or_else(|| file.lines.clone());
+                let lines = live_lines
+                    .clone()
+                    .unwrap_or_else(|| file.lines.filled_arc());
                 let imports = if live_lines.is_some() {
                     lines.parse_imports()
                 } else {
