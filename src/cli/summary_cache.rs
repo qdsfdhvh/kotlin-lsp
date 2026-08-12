@@ -7,7 +7,7 @@
 //! - `summary-cache stats` — show cache stats (count, freshness)
 //! - `summarize <name> --cached` — use cached summary instead of re-parsing
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -159,9 +159,9 @@ pub(crate) fn lookup_summary(cache: &SummaryCache, name: &str) -> Vec<CachedSumm
 // ── CLI commands ────────────────────────────────────────────────────────────
 
 /// Run `summary-cache stats` — print cache statistics.
-pub(crate) async fn run_summary_cache_stats() {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_summary_cache_stats(root: Option<&Path>, no_stdlib: bool) {
+    let root = crate::cli::run::resolve_root_for_file(root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
 
     let cache = build_summary_cache(&index);
 

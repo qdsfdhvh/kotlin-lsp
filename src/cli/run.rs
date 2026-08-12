@@ -1440,7 +1440,13 @@ pub(crate) async fn run(args: CliArgs) {
                 crate::cli::modules::run_module_files(&module, json);
             }
             ModuleSub::Packages { package } => {
-                crate::cli::symbol_queries::run_package_deps(&package, json).await;
+                crate::cli::symbol_queries::run_package_deps(
+                    &package,
+                    json,
+                    args.root.as_deref(),
+                    args.no_stdlib,
+                )
+                .await;
             }
         },
         Subcommand::Summarize {
@@ -1455,7 +1461,11 @@ pub(crate) async fn run(args: CliArgs) {
             }
         }
         Subcommand::SummaryCacheStats => {
-            crate::cli::summary_cache::run_summary_cache_stats().await;
+            crate::cli::summary_cache::run_summary_cache_stats(
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::Capabilities => {
             print_capabilities(json);
@@ -1591,13 +1601,31 @@ pub(crate) async fn run(args: CliArgs) {
             }
         },
         Subcommand::ImportsOf { name } => {
-            crate::cli::symbol_queries::run_imports_of(&name, json).await;
+            crate::cli::symbol_queries::run_imports_of(
+                &name,
+                json,
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::Annotated { annotation } => {
-            crate::cli::symbol_queries::run_annotated(&annotation, json).await;
+            crate::cli::symbol_queries::run_annotated(
+                &annotation,
+                json,
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::Docs { query } => {
-            crate::cli::symbol_queries::run_docs(&query, json).await;
+            crate::cli::symbol_queries::run_docs(
+                &query,
+                json,
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::Search {
             query,

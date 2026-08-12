@@ -2,13 +2,13 @@
 //! All computed from existing index data — no additional parsing needed.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ── imports-of ──────────────────────────────────────────────────────────────
 
-pub(crate) async fn run_imports_of(name: &str, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_imports_of(name: &str, json: bool, root: Option<&Path>, no_stdlib: bool) {
+    let root = crate::cli::run::resolve_root_for_file(root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
 
     let mut importing_files: Vec<String> = Vec::new();
 
@@ -44,9 +44,14 @@ pub(crate) async fn run_imports_of(name: &str, json: bool) {
 
 // ── annotated ───────────────────────────────────────────────────────────────
 
-pub(crate) async fn run_annotated(annotation: &str, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_annotated(
+    annotation: &str,
+    json: bool,
+    root: Option<&Path>,
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
 
     // Use pre-built annotation edge index (O(1) lookup) instead of
     // scanning all files' symbol details with string contains.
@@ -89,9 +94,14 @@ pub(crate) async fn run_annotated(annotation: &str, json: bool) {
 
 // ── package-deps ────────────────────────────────────────────────────────────
 
-pub(crate) async fn run_package_deps(package: &str, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_package_deps(
+    package: &str,
+    json: bool,
+    root: Option<&Path>,
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
 
     let mut deps: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -133,9 +143,9 @@ pub(crate) async fn run_package_deps(package: &str, json: bool) {
 
 // ── docs ─────────────────────────────────────────────────────────────────────
 
-pub(crate) async fn run_docs(query: &str, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_docs(query: &str, json: bool, root: Option<&Path>, no_stdlib: bool) {
+    let root = crate::cli::run::resolve_root_for_file(root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
 
     let mut results: Vec<serde_json::Value> = Vec::new();
     let query_lower = query.to_lowercase();
