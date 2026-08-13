@@ -73,6 +73,10 @@ No mocking framework; real `Indexer` populated with test code snippets.
   - `resolver/tests.rs`: 60 KB (comprehensive)
   - `indexer_tests.rs`: 75 KB (workspace indexing, symbol extraction)
   - `parser_tests.rs`: 61 KB (tree-sitter grammar tests)
+  - `cli/search_corpus_tests.rs`: real-world-style search quality battery — a
+    fixed OkHttp/Okio-shaped corpus parsed through the real production path
+    with a fixed query set (acronyms, field filters, KDoc prose, generated
+    down-ranking); guards search regressions across the whole pipeline
 
 ### 6) Continuous Integration
 

@@ -7,6 +7,7 @@ All commands work standalone — no editor, no daemon, no JVM.
 | Command | What it does |
 |---------|-------------|
 | `find` | Declaration search — qualified name, `--owner`, `--kind`, `--module`, `--source-set`, `--limit` |
+| `search` | TF-IDF semantic search — field filters (`kind:`, `lang:`, `path:`, `name:`), filters-only queries, acronym/camelCase segmentation, generated stubs down-ranked |
 | `refs` | All references — same filters, plus `--explain` for provenance |
 | `hover` | Signature, visibility, KDoc, deprecated warning, data class properties |
 | `complete` | Dot-completion, auto-import, scored ranking, stdlib entries |
