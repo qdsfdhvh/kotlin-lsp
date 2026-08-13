@@ -86,6 +86,23 @@ pub(crate) fn workspace_cache_path(root: &Path) -> PathBuf {
     project_local
 }
 
+/// Cache path for a language-scoped index (`index --lang kotlin` →
+/// `index-kotlin.bin`): kt/java/swift caches are separate files so building
+/// one never invalidates another (issue #317 follow-up).
+pub(crate) fn cache_path_for(root: &Path, lang: Option<crate::types::Language>) -> PathBuf {
+    match lang {
+        None => workspace_cache_path(root),
+        Some(l) => {
+            let name = format!("index-{}.bin", format!("{l:?}").to_lowercase());
+            let p = root.join(".cache").join("kotlin-lsp").join(name);
+            if let Some(parent) = p.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            p
+        }
+    }
+}
+
 // ─── Status file ─────────────────────────────────────────────────────────────
 
 /// Write a human-readable status blob to `~/.cache/kotlin-lsp/status.json`.
@@ -114,7 +131,14 @@ pub(super) fn zstd_decompress(bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 
 /// Load and validate the on-disk cache.  Returns `None` if absent / stale / corrupt.
 pub(crate) fn try_load_cache(root: &Path) -> Option<IndexCache> {
-    let path = workspace_cache_path(root);
+    try_load_cache_for(root, None)
+}
+
+pub(crate) fn try_load_cache_for(
+    root: &Path,
+    lang: Option<crate::types::Language>,
+) -> Option<IndexCache> {
+    let path = cache_path_for(root, lang);
     let raw_bytes = std::fs::read(&path).ok()?;
     let raw_len = raw_bytes.len();
     // Try zstd decompression first; fall back to raw bincode for legacy caches.
@@ -198,6 +222,7 @@ pub(crate) fn cache_entry_to_file_result(uri: &Url, entry: &FileCacheEntry) -> F
 /// Does **not** overwrite a larger complete cache with a smaller incomplete one,
 /// to prevent an editor server (which may load only part of the workspace) from
 /// truncating a cache built by `--index-only`.
+#[cfg(test)]
 pub(crate) fn save_cache(
     root: &Path,
     files: &DashMap<String, Arc<FileData>>,
@@ -205,7 +230,25 @@ pub(crate) fn save_cache(
     library_uris: &DashSet<String>,
     complete_scan: bool,
 ) {
-    let cache_path = workspace_cache_path(root);
+    save_cache_for(
+        root,
+        None,
+        files,
+        content_hashes,
+        library_uris,
+        complete_scan,
+    );
+}
+
+pub(crate) fn save_cache_for(
+    root: &Path,
+    lang: Option<crate::types::Language>,
+    files: &DashMap<String, Arc<FileData>>,
+    content_hashes: &DashMap<String, u64>,
+    library_uris: &DashSet<String>,
+    complete_scan: bool,
+) {
+    let cache_path = cache_path_for(root, lang);
     if let Some(parent) = cache_path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
             log::warn!("Cache: could not create directory: {e}");

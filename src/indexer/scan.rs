@@ -18,7 +18,7 @@ use tower_lsp::lsp_types::*;
 const MAX_READ_FAILURES_LOGGED: usize = 5;
 
 use crate::indexer::{
-    cache::{cache_entry_to_file_result, save_cache, try_load_cache, write_status_file},
+    cache::{cache_entry_to_file_result, save_cache_for, try_load_cache_for, write_status_file},
     discover::{find_source_files, warm_discover_files},
     Indexer, MAX_FILES_UNLIMITED,
 };
@@ -284,9 +284,9 @@ fn prepare_scan(indexer: &Arc<Indexer>, root: &Path, max: usize) -> ScanSetup {
     let start_gen = indexer
         .root_generation
         .load(std::sync::atomic::Ordering::SeqCst);
-    let cache = try_load_cache(root);
     let matcher: Option<Arc<IgnoreMatcher>> = indexer.ignore_matcher.read().unwrap().clone();
     let lang = *indexer.lang_filter.read().unwrap();
+    let cache = try_load_cache_for(root, lang);
     let discovered = discover_workspace_paths(root, max, &cache, matcher.as_deref(), lang);
 
     ScanSetup {
@@ -1036,8 +1036,10 @@ impl Indexer {
         let complete_scan = self
             .last_scan_complete
             .load(std::sync::atomic::Ordering::Acquire);
-        save_cache(
+        let lang = *self.lang_filter.read().unwrap();
+        save_cache_for(
             root,
+            lang,
             &self.files,
             &self.content_hashes,
             &self.library_uris,
