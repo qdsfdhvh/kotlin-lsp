@@ -52,6 +52,12 @@ pub(crate) struct IndexCache {
     pub(crate) entries: HashMap<String, FileCacheEntry>,
 }
 
+impl IndexCache {
+    pub(crate) fn version(&self) -> u32 {
+        self.version
+    }
+}
+
 // ─── Path helpers ─────────────────────────────────────────────────────────────
 
 fn xdg_cache_base() -> PathBuf {

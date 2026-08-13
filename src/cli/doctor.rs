@@ -138,6 +138,20 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
             status: "ok",
             message: has_cache,
         });
+        let ws_cache = crate::indexer::try_load_cache(&root);
+        results.push(CheckResult {
+            name: "workspace-index",
+            status: if ws_cache.is_some() { "ok" } else { "error" },
+            message: ws_cache
+                .as_ref()
+                .map(|c| format!("{} files, version {}", c.entries.len(), c.version()))
+                .unwrap_or_else(|| {
+                    format!(
+                        "missing/corrupt/stale: {}",
+                        crate::indexer::workspace_cache_path(&root).display()
+                    )
+                }),
+        });
         results.push(CheckResult {
             name: "rg",
             status: if which("rg").is_some() { "ok" } else { "warn" },
@@ -274,6 +288,29 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
             if verbose {
                 println!("     expected: {}", cd.display());
             }
+        }
+    }
+
+    // ── 4b. Workspace index loads (version + deserialize) ─────────────
+    match crate::indexer::try_load_cache(&root) {
+        Some(c) => {
+            println!(
+                "[✓] workspace index loads ({} files, version {})",
+                c.entries.len(),
+                c.version()
+            );
+        }
+        None => {
+            let path = crate::indexer::workspace_cache_path(&root);
+            if path.exists() {
+                println!(
+                    "[!] workspace index corrupt or stale version — run `kotlin-lsp index` to rebuild: {}",
+                    path.display()
+                );
+            } else {
+                println!("[!] no workspace index (run `kotlin-lsp index` to build one)");
+            }
+            all_ok = false;
         }
     }
 

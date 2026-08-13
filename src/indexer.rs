@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock};
 use dashmap::{DashMap, DashSet};
 use tower_lsp::lsp_types::*;
 
-use crate::types::{CursorPos, FileData};
+use crate::types::{CursorPos, FileData, Language};
 use crate::StrExt;
 
 // Re-export rg-module items that existing callers reach via `crate::indexer::`.
@@ -145,6 +145,8 @@ pub(crate) struct Indexer {
     pub(crate) packages: DashMap<String, Vec<String>>,
     /// Absolute path to the workspace root, set once on first `index_workspace`.
     pub(crate) workspace_root: RwLock<Option<PathBuf>>,
+    /// When set, only files of this language are indexed (`index --lang`).
+    pub(crate) lang_filter: RwLock<Option<Language>>,
     /// URI string → xxHash of last indexed content (skip identical re-parses).
     content_hashes: DashMap<String, u64>,
     /// Semaphore capping concurrent parse workers.
@@ -288,6 +290,7 @@ impl Indexer {
             qualified: DashMap::new(),
             packages: DashMap::new(),
             workspace_root: RwLock::new(None),
+            lang_filter: RwLock::new(None),
             content_hashes: DashMap::new(),
             // Allow configurable concurrent parse workers. Default to number of CPU cores.
             // Use env KOTLIN_LSP_PARSE_WORKERS to override.

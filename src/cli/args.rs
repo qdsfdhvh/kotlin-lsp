@@ -69,9 +69,10 @@ pub(crate) enum Subcommand {
         /// Returns only workspace symbols. Much faster (~2s vs ~10s).
         no_stdlib: bool,
     },
-    /// Build the workspace cache; honors `--no-stdlib`.
+    /// Build the workspace cache; honors `--no-stdlib` and `--lang`.
     Index {
         no_stdlib: bool,
+        lang: Option<String>,
     },
     /// Dump semantic tokens for a file (debug).
     Tokens {
@@ -502,6 +503,8 @@ struct ParsedCliFlags {
     dot: bool,
     eol: bool,
     no_stdlib: bool,
+    /// `--lang`: index only this language (kotlin|java|swift).
+    lang_filter: Option<String>,
     relative: bool,
     absolute: bool,
     flat: bool,
@@ -583,6 +586,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         dot: false,
         eol: false,
         no_stdlib: false,
+        lang_filter: None,
         relative: false,
         absolute: false,
         flat: false,
@@ -650,6 +654,15 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Short('d') | lexopt::Arg::Long("dot")) => parsed.dot = true,
             Some(lexopt::Arg::Short('e') | lexopt::Arg::Long("eol")) => parsed.eol = true,
             Some(lexopt::Arg::Long("no-stdlib")) => parsed.no_stdlib = true,
+            Some(lexopt::Arg::Long("lang")) | Some(lexopt::Arg::Long("language")) => {
+                let value = args.value().map_err(|e| e.to_string())?;
+                let v = value.to_string_lossy().to_lowercase();
+                if matches!(v.as_str(), "kotlin" | "java" | "swift") {
+                    parsed.lang_filter = Some(v);
+                } else {
+                    return Err(format!("--lang expects kotlin|java|swift, got '{v}'"));
+                }
+            }
             Some(lexopt::Arg::Long("relative")) => parsed.relative = true,
             Some(lexopt::Arg::Long("apply")) => parsed.apply_action = true,
             Some(lexopt::Arg::Long("subtypes")) => parsed.type_subtypes = true,
@@ -829,6 +842,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
         "complete" => build_complete_subcommand(positionals, dot, eol, no_stdlib),
         "index" => Ok(Subcommand::Index {
             no_stdlib: parsed.no_stdlib,
+            lang: parsed.lang_filter.clone(),
         }),
         "index-jars" => {
             let root = positionals.first().map(PathBuf::from);

@@ -84,7 +84,10 @@ fn has_generated_banner(line: &str) -> bool {
 /// `/*` leaders); string literals and prose that merely contain the words are
 /// not flagged.
 pub(crate) fn has_generated_header(content: &str) -> bool {
-    let head = &content[..content.len().min(HEADER_SCAN_CHARS)];
+    // Byte-slice at a char boundary: an 8 KiB cap can otherwise land inside a
+    // multi-byte char (e.g. CJK in large Swift files) and panic — the user
+    // hit this on a full rebuild in 0.32.0 (exit 134).
+    let head = &content[..content.floor_char_boundary(content.len().min(HEADER_SCAN_CHARS))];
     if !head.to_lowercase().contains("generat") {
         return false;
     }
