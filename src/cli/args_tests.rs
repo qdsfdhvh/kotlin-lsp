@@ -490,6 +490,21 @@ fn search_semantic_explicit_parses_query() {
 }
 
 #[test]
+fn index_parses_lang_flag() {
+    let args = parse(&["index", "--lang", "swift"]).unwrap().unwrap();
+    match args.subcommand {
+        Subcommand::Index { lang, .. } => assert_eq!(lang.as_deref(), Some("swift")),
+        other => panic!("expected Index, got {other:?}"),
+    }
+}
+
+#[test]
+fn index_rejects_invalid_lang() {
+    let err = parse(&["index", "--lang", "ruby"]).unwrap_err();
+    assert!(err.contains("kotlin|java|swift"), "got: {err}");
+}
+
+#[test]
 fn search_requires_query() {
     let err = parse(&["search"]).unwrap_err();
     assert!(err.contains("QUERY"), "got: {err}");

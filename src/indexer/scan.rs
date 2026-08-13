@@ -286,7 +286,8 @@ fn prepare_scan(indexer: &Arc<Indexer>, root: &Path, max: usize) -> ScanSetup {
         .load(std::sync::atomic::Ordering::SeqCst);
     let cache = try_load_cache(root);
     let matcher: Option<Arc<IgnoreMatcher>> = indexer.ignore_matcher.read().unwrap().clone();
-    let discovered = discover_workspace_paths(root, max, &cache, matcher.as_deref());
+    let lang = *indexer.lang_filter.read().unwrap();
+    let discovered = discover_workspace_paths(root, max, &cache, matcher.as_deref(), lang);
 
     ScanSetup {
         guard,
@@ -301,6 +302,7 @@ fn discover_workspace_paths(
     max: usize,
     cache: &Option<super::cache::IndexCache>,
     matcher_ref: Option<&IgnoreMatcher>,
+    lang: Option<crate::types::Language>,
 ) -> DiscoveredPaths {
     let mut paths = if let Some(cache) = cache.as_ref().filter(|c| c.complete_scan) {
         warm_discover_files(root, cache, matcher_ref)
@@ -314,6 +316,9 @@ fn discover_workspace_paths(
         max
     };
 
+    if let Some(lang) = lang {
+        paths.retain(|p| crate::types::Language::from_path(&p.to_string_lossy()) == lang);
+    }
     paths.sort_by_key(|p| p.components().count());
     let paths: Vec<_> = paths.into_iter().take(effective_max).collect();
     let indexed_count = paths.len();

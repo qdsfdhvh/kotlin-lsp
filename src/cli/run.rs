@@ -150,11 +150,26 @@ fn cache_exists(root: &Path) -> bool {
 /// 2. `~/.kotlin-lsp/sources` — the default `extract-sources` output dir
 ///    (skipped when `no_stdlib` is true)
 pub(crate) async fn build_index(root: &Path, no_stdlib: bool) -> Arc<Indexer> {
-    build_index_inner(root, collect_cli_source_paths(root, no_stdlib), false).await
+    build_index_inner(root, collect_cli_source_paths(root, no_stdlib), false, None).await
+}
+
+/// Build a workspace index restricted to one language (`index --lang`).
+pub(crate) async fn build_index_for_lang(
+    root: &Path,
+    no_stdlib: bool,
+    lang: crate::types::Language,
+) -> Arc<Indexer> {
+    build_index_inner(
+        root,
+        collect_cli_source_paths(root, no_stdlib),
+        false,
+        Some(lang),
+    )
+    .await
 }
 
 pub(crate) async fn build_index_with_gradle(root: &Path, no_stdlib: bool) -> Arc<Indexer> {
-    build_index_inner(root, collect_cli_source_paths(root, no_stdlib), true).await
+    build_index_inner(root, collect_cli_source_paths(root, no_stdlib), true, None).await
 }
 
 /// Build a full workspace index with explicitly provided source paths.
@@ -169,15 +184,19 @@ pub(crate) async fn build_index_with_sources(
         .into_iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    build_index_inner(root, strs, false).await
+    build_index_inner(root, strs, false, None).await
 }
 
 async fn build_index_inner(
     root: &Path,
     source_paths: Vec<String>,
     use_gradle: bool,
+    lang: Option<crate::types::Language>,
 ) -> Arc<Indexer> {
     let idx = Arc::new(Indexer::new());
+    if let Some(lang) = lang {
+        *idx.lang_filter.write().expect("lang_filter lock") = Some(lang);
+    }
     if !source_paths.is_empty() {
         *idx.source_paths_raw.write().expect("source_paths lock") = source_paths;
     }
@@ -504,9 +523,9 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Query => {
             crate::cli::batch_query::run_query(json).await;
         }
-        Subcommand::Index { no_stdlib } => {
+        Subcommand::Index { no_stdlib, lang } => {
             let root = resolve_root(args.root.as_deref());
-            run_index(&root, verbose, no_stdlib).await
+            run_index(&root, verbose, no_stdlib, lang).await
         }
         Subcommand::IndexJars { root } => {
             let root = resolve_root(root.as_deref().or(args.root.as_deref()));
@@ -1645,11 +1664,25 @@ pub(crate) async fn run(args: CliArgs) {
     }
 }
 
-async fn run_index(root: &Path, verbose: bool, no_stdlib: bool) {
+async fn run_index(root: &Path, verbose: bool, no_stdlib: bool, lang: Option<String>) {
     if verbose {
         eprintln!("Indexing workspace: {}", root.display());
     }
-    let index = build_index(root, no_stdlib).await;
+    let index = match lang.as_deref() {
+        Some("java") => {
+            eprintln!("Indexing java only");
+            build_index_for_lang(root, no_stdlib, crate::types::Language::Java).await
+        }
+        Some("swift") => {
+            eprintln!("Indexing swift only");
+            build_index_for_lang(root, no_stdlib, crate::types::Language::Swift).await
+        }
+        Some("kotlin") => {
+            eprintln!("Indexing kotlin only");
+            build_index_for_lang(root, no_stdlib, crate::types::Language::Kotlin).await
+        }
+        _ => build_index(root, no_stdlib).await,
+    };
     if verbose {
         eprintln!(
             "Done: {} files, {} symbols",
