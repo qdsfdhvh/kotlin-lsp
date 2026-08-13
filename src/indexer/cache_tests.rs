@@ -294,3 +294,26 @@ fn cache_roundtrip_skips_lines() {
     assert_eq!(back.symbols[0].name, "Cat");
     assert_eq!(back.symbols[0].detail, "class Cat");
 }
+
+#[test]
+fn lang_cache_paths_are_separate_files() {
+    // `index --lang kotlin` / `--lang swift` must not share index.bin
+    // (issue #317 follow-up: per-language caches).
+    use crate::types::Language;
+    let root = std::path::Path::new("/tmp/fake-project");
+    let all = super::cache_path_for(root, None);
+    let kt = super::cache_path_for(root, Some(Language::Kotlin));
+    let swift = super::cache_path_for(root, Some(Language::Swift));
+    assert_ne!(all, kt);
+    assert_ne!(kt, swift);
+    assert!(kt
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .ends_with("index-kotlin.bin"));
+    assert!(swift
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .ends_with("index-swift.bin"));
+}
