@@ -75,7 +75,7 @@ kotlin-lsp cache stats                # cache info
 | `context <file> <line> <col>` | One-stop: def + sig + doc + refs |
 | `impact <file> <line> <col>` | Impact / risk analysis |
 | `check <file>...` | Syntax errors, imports, deprecation |
-| `index [--root <dir>]` | Build workspace cache |
+| `index [--root <dir>] [--lang <lang>]` | Build workspace cache; `--lang kotlin\|java\|swift` for a per-language cache (`index-<lang>.bin`) |
 | `index-jars [root]` | Index library JARs |
 | `extract-sources` | Unpack `*-sources.jar` |
 | `sources` | List auto-discovered source roots |

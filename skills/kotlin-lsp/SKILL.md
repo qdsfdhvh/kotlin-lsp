@@ -148,7 +148,7 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Summary cache | `kotlin-lsp search cache-stats` |
 | Find tests | `kotlin-lsp search find-test <file> <line> <col>` |
 | KMP expect/actual | `kotlin-lsp search expect-actual <name>` |
-| Index workspace | `kotlin-lsp index [--root <dir>] [--gradle]` |
+| Index workspace | `kotlin-lsp index [--root <dir>] [--gradle] [--lang kotlin\|java\|swift]` — `--lang` builds a per-language cache (`index-<lang>.bin`), handy when only Kotlin (or Swift) matters |
 | Index JARs | `kotlin-lsp index-jars [root]` |
 | Gradle deps | `kotlin-lsp gradle-deps` |
 | Extract sources | `kotlin-lsp extract-sources [lib...]` |

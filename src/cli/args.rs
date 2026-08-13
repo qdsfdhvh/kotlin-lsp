@@ -1786,7 +1786,7 @@ SUBCOMMANDS:
     context <file> <line> <col>        Definition + signature + refs summary
     check <file>...                    Check syntax errors without LSP
     impact <file> <line> <col>         Impact analysis: what depends on this?
-    index [--root <dir>]               Index workspace (auto-detect build system)
+    index [--root <dir>] [--lang <lang>]  Index workspace (auto-detect build system)
     index-jars [root]                  Index JAR/class files for navigation
     sources                            List auto-discovered source roots
     extract-sources [lib...]           Unpack *-sources.jar files
@@ -1859,6 +1859,8 @@ OPTIONS:
     -d, --dot           (complete) Resolve col to just after the last '.' on the line
     -e, --eol           (complete) Resolve col to end of trimmed content on the line
     --no-stdlib         (complete) Skip ~/.kotlin-lsp/sources; workspace symbols only (~2s)
+    --lang <lang>       (index) Index only one language: kotlin|java|swift
+                        (per-language cache: index-kotlin.bin etc.)
     --include-libraries (snapshot) Include ~/.kotlin-lsp/sources library symbols;
                         output can be hundreds of MB (default: workspace only)
     --relative          (find, refs) Print paths relative to --root. Auto-enabled
@@ -1999,7 +2001,7 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
         ("context", &["--json", "--root", "--expand"]),
         ("check", &["--json", "--root"]),
         ("impact", &["--json", "--root"]),
-        ("index", &["--root", "--gradle", "--no-stdlib"]),
+        ("index", &["--root", "--gradle", "--no-stdlib", "--lang"]),
         ("index-jars", &["--root"]),
         ("sources", &["--root"]),
         (
