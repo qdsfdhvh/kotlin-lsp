@@ -1,3 +1,17 @@
+## 0.32.2 (2026-08-13)
+
+### fix: doctor --json exit code + index --lang CLI surface (#321, #322, #323)
+
+- **`tool doctor --json`** exited 0 even when `workspace-index` reported an
+  error (text mode exited 1). The json branch now mirrors the text failure
+  rules: `workspace-root`/`workspace-index` errors and a missing `rg` fail
+  the run (exit 1); `fd`/`ktlint`/`source-files` warnings stay advisory.
+- **`index --lang kotlin|java|swift`** is now on the CLI surface: `--help`
+  (index line + flag docs), the generated `capabilities --json` manifest
+  (`index.flags` includes `--lang`), `docs/commands.md`, and
+  `skills/kotlin-lsp/SKILL.md` — including the per-language cache files
+  (`index-kotlin.bin` / `index-swift.bin`).
+
 ## 0.32.1 (2026-08-13)
 
 ### fix: 0.32.0 rebuild regression — multi-byte panic, doctor blind spot, per-language caches (#317, #318, #319)
