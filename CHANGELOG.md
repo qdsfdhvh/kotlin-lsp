@@ -1,3 +1,19 @@
+## 0.32.1 (2026-08-13)
+
+### fix: 0.32.0 rebuild regression — multi-byte panic, doctor blind spot, per-language caches (#317, #318, #319)
+
+- **`has_generated_header` panicked** (exit 134) when the 8 KiB head cap
+  byte-sliced inside a multi-byte char (CJK text in a large Swift file) —
+  forced by the 0.31.x→0.32.0 cache version bump. The slice now lands on a
+  char boundary via `str::floor_char_boundary`.
+- **`tool doctor`** only checked the cache directory was non-empty; a corrupt
+  or stale-version index passed as green. It now loads the workspace index
+  (version + deserialize) and reports `workspace index loads (N files,
+  version V)` or a rebuild hint — text and `--json`.
+- **`index --lang kotlin|java|swift`** indexes a single language; caches are
+  per-language files (`index-kotlin.bin` / `index-swift.bin`), so building
+  one never invalidates another.
+
 ## 0.32.0 (2026-08-12)
 
 ### feat: codegraph-parity semantic search (acronym segmentation, field filters, generated down-ranking) (#298, #299, #302, #305)
