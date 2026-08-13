@@ -180,6 +180,17 @@ pub(crate) fn run_doctor(root: Option<&Path>, verbose: bool, json: bool) {
             "checks": results,
         });
         println!("{}", serde_json::to_string_pretty(&output).expect("json"));
+        // Exit code must mirror the text mode (issue #322): workspace root /
+        // index failures and a missing rg fail the run; fd/ktlint/source-files
+        // warnings are advisory only.
+        let failed = results.iter().any(|c| match c.name {
+            "workspace-root" | "workspace-index" => c.status == "error",
+            "rg" => c.status != "ok",
+            _ => false,
+        });
+        if failed {
+            std::process::exit(1);
+        }
         return;
     }
 
