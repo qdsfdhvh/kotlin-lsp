@@ -2,6 +2,13 @@
 
 use super::skills;
 
+/// Normalize CRLF to LF so content assertions hold regardless of how the
+/// runner checked out the repo (Windows CI converts LF→CRLF on checkout,
+/// and `include_str!` embeds the on-disk bytes).
+fn lf(content: &str) -> String {
+    content.replace("\r\n", "\n")
+}
+
 // ── format_list ───────────────────────────────────────────────────────────────
 
 #[test]
@@ -35,7 +42,7 @@ fn read_kotlin_lsp_skill_exists() {
 
 #[test]
 fn read_kotlin_lsp_is_valid_markdown() {
-    let content = skills::format_read("kotlin-lsp").unwrap();
+    let content = lf(&skills::format_read("kotlin-lsp").unwrap());
     // Must have YAML frontmatter and body.
     assert!(
         content.starts_with("---\n"),
@@ -96,7 +103,7 @@ fn read_nonexistent_lists_available() {
 fn all_skills_have_valid_frontmatter() {
     // Use builtin_skills() via format_read since builtin_skills is module-private.
     // Read kotlin-lsp and parse frontmatter lines.
-    let content = skills::format_read("kotlin-lsp").unwrap();
+    let content = lf(&skills::format_read("kotlin-lsp").unwrap());
     // Extract frontmatter: everything between first --- and second ---.
     let end = content
         .strip_prefix("---\n")
@@ -117,9 +124,47 @@ fn all_skills_have_valid_frontmatter() {
 
 // ── Built-in skill invariants ────────────────────────────────────────────────
 
+// ── Bundled references consistency ──────────────────────────────────────────
+
+#[test]
+fn every_references_file_is_cited_by_skill() {
+    // Every `references/*.md` shipped next to SKILL.md must be cited by
+    // SKILL.md itself. An uncited reference file is invisible to agents and
+    // rots silently (#326: references/indexing.md was unreachable while
+    // SKILL.md linked out to a GitHub URL instead of the local file).
+    let skill_dir = std::path::Path::new("skills/kotlin-lsp");
+    let references_dir = skill_dir.join("references");
+    let skill = std::fs::read_to_string(skill_dir.join("SKILL.md"))
+        .expect("read skills/kotlin-lsp/SKILL.md (tests run from crate root)");
+
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&references_dir)
+        .unwrap_or_else(|e| panic!("read skills/kotlin-lsp/references: {e}"))
+    {
+        let path = entry.expect("read_dir entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        checked += 1;
+        let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let cite = format!("references/{file_name}");
+        assert!(
+            skill.contains(&cite),
+            "SKILL.md must cite '{cite}' — the file at \
+             skills/kotlin-lsp/references/{file_name} is unreachable to agents"
+        );
+    }
+    assert!(
+        checked > 0,
+        "expected at least one references/*.md to check"
+    );
+}
+
 #[test]
 fn read_output_is_utf8_and_printable() {
-    let content = skills::format_read("kotlin-lsp").unwrap();
+    // Normalize CRLF first: `\r` is a control character, so the check below
+    // would flag every line of a CRLF checkout (Windows CI).
+    let content = lf(&skills::format_read("kotlin-lsp").unwrap());
     // The content must be valid UTF-8 (already guaranteed by String).
     // Check it doesn't contain null bytes or control characters (aside from \n).
     for ch in content.chars() {

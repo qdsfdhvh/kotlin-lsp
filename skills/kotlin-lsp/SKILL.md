@@ -170,13 +170,7 @@ Full command reference → references/commands.md
 
 ## Performance modes
 
-| Mode | When |
-|------|------|
-| _(default)_ | Auto — cached index or `rg`/`fd` fallback |
-| `--fast` | Always `rg`/`fd`; instant |
-| `--smart` | Require pre-built index |
-
-Indexing setup → https://github.com/qdsfdhvh/kotlin-lsp/blob/main/docs/features.md
+Indexing and library sources → references/indexing.md
 
 ## Anti-patterns
 
