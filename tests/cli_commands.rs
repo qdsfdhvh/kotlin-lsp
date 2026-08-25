@@ -391,6 +391,74 @@ fn code_action_relative_path_does_not_panic() {
     );
 }
 
+// ── index --root validation (issue #328) ────────────────────────────────
+
+#[test]
+fn index_nonexistent_root_exits_one_with_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("no-such-root");
+    let output = Command::new(BIN)
+        .args(["index", "--root"])
+        .arg(&missing)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "index on a missing --root must exit 1"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("does not exist"),
+        "stderr should mention the missing root: {stderr}"
+    );
+}
+
+#[test]
+fn index_file_as_root_exits_one_with_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("NotARoot.kt");
+    std::fs::write(&file, "class NotARoot").unwrap();
+    let output = Command::new(BIN)
+        .args(["index", "--root"])
+        .arg(&file)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "index --root on a file must exit 1"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not a directory"),
+        "stderr should say the root is not a directory: {stderr}"
+    );
+}
+
+#[test]
+fn index_empty_root_warns_but_exits_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    // --no-stdlib keeps this deterministic: the global ~/.kotlin-lsp/sources
+    // default is skipped, so an empty root indexes exactly zero files.
+    let output = Command::new(BIN)
+        .args(["index", "--root"])
+        .arg(dir.path())
+        .arg("--no-stdlib")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "index on an empty root should stay exit 0: {:?}",
+        output
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no source files found under"),
+        "stderr should warn about zero source files: {stderr}"
+    );
+}
+
 // ── uninstall ──────────────────────────────────────────────────────────────
 
 #[test]
@@ -442,11 +510,31 @@ fn uninstall_other_input_cancels() {
 // ── call diff (complete: git-diff defaults, inference, CTA) ─────────────────
 
 fn git_in(cwd: &Path, args: &[&str]) {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .unwrap();
+    // Scrub inherited git environment — when the pre-commit hook runs these
+    // tests inside an outer `git commit`, inherited GIT_DIR/GIT_INDEX_FILE/
+    // GIT_OBJECT_DIRECTORY/GIT_CONFIG_* point at the real repo; nested git
+    // would corrupt it instead of operating on the temp fixture repo.
+    let mut cmd = Command::new("git");
+    for var in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_QUARANTINE_PATH",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ] {
+        cmd.env_remove(var);
+    }
+    for i in 0..10 {
+        cmd.env_remove(format!("GIT_CONFIG_KEY_{i}"));
+        cmd.env_remove(format!("GIT_CONFIG_VALUE_{i}"));
+    }
+    let out = cmd.args(args).current_dir(cwd).output().unwrap();
     assert!(
         out.status.success(),
         "git {args:?} failed: {}",
