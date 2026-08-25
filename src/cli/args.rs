@@ -1849,6 +1849,7 @@ OPTIONS:
     --cst-only          (tokens) Force CST-only mode (default, kept for clarity)
     --phases            (tokens) Show per-phase token breakdown with dedup markers
     --tree              (tokens) Also print the parse tree after tokens
+    --gradle            (index, gradle-deps) Enable Gradle dependency resolution
     --gradle-home <dir> (extract-sources) Gradle home (default: $GRADLE_USER_HOME or ~/.gradle)
     --output <dir>      (extract-sources) Output root (default: ~/.kotlin-lsp/sources)
     --dry-run           (extract-sources, batch, batch-imports) Preview only
