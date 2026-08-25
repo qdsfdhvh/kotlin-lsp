@@ -13,6 +13,7 @@
   the exit code stays 0 because a library-only root may legitimately be empty.
 
 
+
 ### fix: preserve the client workspace root for LSP navigation (#325)
 
 - `initialize` no longer widens a client-provided nested project root to an
@@ -21,6 +22,32 @@
   found even when an ancestor repository ignores the nested project path.
  (fix(lsp): preserve client workspace root)
 
+
+
+### fix: sync bundled skill command reference with the CLI (#327)
+
+- **`skills/kotlin-lsp/SKILL.md`** decision tree pointed batch queries at
+  `kotlin-lsp query --json` — a top-level command the parser rejects
+  (`unknown subcommand 'query'`). The working form is
+  `kotlin-lsp tool query --json`; the tree now uses it, and the "All commands"
+  table gained a concrete JSON payload example
+  (`[{"type":"definition","name":"MyViewModel"}]`) instead of the bare `[...]`.
+- **`edit insert <file> <kind>`** documented a kind-based "Semantic insert" that
+  does not exist. `edit insert` inserts a snippet at a line
+  (`edit insert <file> <line> --after --content <text>`); the row is now
+  labelled "Insert snippet" with the correct argument. The dead `insert-import`/
+  `insert-member`/`insert-function`/`insert-override` aliases were verified
+  non-invocable and are not documented.
+- **`--gradle`** was accepted by `index` (and `gradle-deps`) but absent from
+  `--help` OPTIONS. Added a `--gradle` OPTIONS line (scoped `(index, gradle-deps)`),
+  and synced `docs/commands.md`'s `index` row.
+- **Missing-but-working commands** added to the skill tables: `refs <name> explain`,
+  `edit batch <rule-json>`, `call hierarchy <name>`, `docs <query>`, `capabilities`,
+  `format check|apply <file/dir>...`, and `type hierarchy --subtypes/--supertypes`.
+- Removed a duplicate `Full command reference → references/commands.md` line.
+ (fix(skill): sync bundled skill command reference with the CLI)
+ (fix(skill): sync bundled skill command reference with the CLI)
+ (fix(skill): sync bundled skill command reference with the CLI)
 ### fix: bundled skill reference docs — indexing.md reachable, releasing.md unshipped (#326)
 
 - **`skills/kotlin-lsp/SKILL.md`** linked the Performance modes section to a

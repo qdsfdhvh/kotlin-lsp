@@ -31,7 +31,7 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Caller/callee tree → kotlin-lsp call hierarchy
    ├─ Implementation tree → kotlin-lsp type hierarchy
    ├─ Composable analysis → kotlin-lsp android composables <file> --call-graph/--state/--preview
-   ├─ Batch queries → echo '[...]' | kotlin-lsp query --json
+   ├─ Batch queries → echo '[...]' | kotlin-lsp tool query --json
    ├─ Import analysis → kotlin-lsp search imports
    ├─ Annotation query → kotlin-lsp search annotated
    ├─ Signature search → kotlin-lsp search docs
@@ -39,8 +39,6 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ Cached summaries → kotlin-lsp search summarize <name> --cached | search cache-stats
    └─ Full project snapshot → kotlin-lsp tool snapshot / tool graph
 ```
-
-Full command reference → references/commands.md
 
 ## How it saves tokens
 
@@ -61,6 +59,7 @@ Output defaults:
 # Find declarations / references
 kotlin-lsp find <Name> [--limit N] [--kind class,fun]
 kotlin-lsp refs <Name> [--limit N]
+kotlin-lsp refs <Name> explain [--limit N]  # label each hit with its reference kind (type-use, call, read, write, …)
 kotlin-lsp hover <file> <line> <col>
 kotlin-lsp context <file> <line> <col>
 
@@ -82,10 +81,11 @@ kotlin-lsp search expect-actual <name>
 
 # Call graph
 kotlin-lsp call hierarchy <file> <line> <col>
+kotlin-lsp call hierarchy <name>  # by-name form (no position lookup needed)
 kotlin-lsp call diff [<ref1> [<ref2>]] [<name>]  # call-tree diff (git-diff style; inferred entries when name omitted)
 kotlin-lsp call reach <entry> [--to <target>]  # every call path entry→target
 # Type hierarchy
-kotlin-lsp type hierarchy <Name>
+kotlin-lsp type hierarchy <Name> [--subtypes|--supertypes]
 kotlin-lsp type sealed <Name>
 
 # Edit group (code modification)
@@ -105,8 +105,8 @@ kotlin-lsp tool code-action <file> <line> <col>
 
 # Syntax / format
 kotlin-lsp check <file>...
-kotlin-lsp format check <dir>...
-kotlin-lsp format apply <dir>...
+kotlin-lsp format check <file/dir>...
+kotlin-lsp format apply <file/dir>...
 
 # Android / Compose
 kotlin-lsp android composables <file> --call-graph/--state/--preview
@@ -117,25 +117,29 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 |------|---------|
 | Find definition | `kotlin-lsp find <name>` |
 | Find references | `kotlin-lsp refs <name>` |
+| Reference kinds | `kotlin-lsp refs <name> explain` |
 | Hover / signature | `kotlin-lsp hover <file> <line> <col>` |
 | Completions | `kotlin-lsp complete <file> <line> [col]` |
 | One-stop context | `kotlin-lsp context <file> <line> <col>` |
 | Semantic search | `kotlin-lsp search "query"` |
 | KDoc search | `kotlin-lsp search docs "query"` |
+| KDoc search (alias) | `kotlin-lsp docs <query>` |
 | Syntax check | `kotlin-lsp check <file>...` |
-| Format check | `kotlin-lsp format check <dir>...` |
-| Format apply | `kotlin-lsp format apply <dir>...` |
+| Format check | `kotlin-lsp format check <file/dir>...` |
+| Format apply | `kotlin-lsp format apply <file/dir>...` |
 | Code actions | `kotlin-lsp tool code-action <file> <line> <col>` |
 | Organize imports | `kotlin-lsp edit organize <file>...` |
 | Batch imports | `kotlin-lsp edit imports <file>` |
 | Rename | `kotlin-lsp edit rename <file> <line> <col> <new>` |
-| Semantic insert | `kotlin-lsp edit insert <file> <kind>` |
+| Batch edit | `kotlin-lsp edit batch <rule-json>` |
+| Insert snippet | `kotlin-lsp edit insert <file> <line> --after --content <text>` |
 | Inject types | `kotlin-lsp edit inject <file>` |
 | Call hierarchy | `kotlin-lsp call hierarchy <file> <line> <col>` |
+| Call hierarchy (by name) | `kotlin-lsp call hierarchy <name>` |
 | Call-tree diff | `kotlin-lsp call diff [<ref1> [<ref2>]] [<name>]` — branch-aware call-tree diff between git refs (HEAD vs worktree by default) |
 | Call reach | `kotlin-lsp call reach <entry> [--to <target>]` — all call paths from an entrypoint |
 | Impact analysis | `kotlin-lsp impact <file> <line> <col>` |
-| Type hierarchy | `kotlin-lsp type hierarchy <name>` |
+| Type hierarchy | `kotlin-lsp type hierarchy <name> [--subtypes\|--supertypes]` |
 | Module list | `kotlin-lsp module list` |
 | Module deps | `kotlin-lsp module deps <name>` |
 | Module files | `kotlin-lsp module files <name>` |
@@ -155,10 +159,11 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Source roots | `kotlin-lsp sources` |
 | Cache stats | `kotlin-lsp cache stats` |
 | Doctor | `kotlin-lsp tool doctor [--json]` |
+| CLI capabilities | `kotlin-lsp capabilities [--json]` |
 | Workspace overview | `kotlin-lsp tool workspace` |
 | Snapshot | `kotlin-lsp tool snapshot` (workspace symbols; add `--include-libraries` for the ~/.kotlin-lsp/sources library cache, `--limit <n>` to cap) |
 | Symbol graph | `kotlin-lsp tool graph` |
-| Batch query | `echo '[...]' \| kotlin-lsp tool query --json` |
+| Batch query | `echo '[{"type":"definition","name":"MyViewModel"}]' \| kotlin-lsp tool query --json` |
 | File inspect | `kotlin-lsp tool inspect <file>` |
 | Tokens (debug) | `kotlin-lsp tool tokens <file>` |
 | Parse tree (debug) | `kotlin-lsp tool tree <file>` |
