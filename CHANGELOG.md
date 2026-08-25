@@ -1,5 +1,4 @@
-## Unreleased
-
+## 0.32.3 (2026-08-25)
 
 ### fix: index --root validates the path exists before indexing (#328)
 
@@ -12,17 +11,14 @@
   (`warning: no source files found under <path>`) after indexing finishes;
   the exit code stays 0 because a library-only root may legitimately be empty.
 
-
-
 ### fix: preserve the client workspace root for LSP navigation (#325)
 
 - `initialize` no longer widens a client-provided nested project root to an
   ancestor Git repository. Workspace indexing and the `rg` definition fallback
   now stay in the root selected by the editor, so same-project definitions are
   found even when an ancestor repository ignores the nested project path.
- (fix(lsp): preserve client workspace root)
-
-
+- Regression tests cover both `rootUri` and `workspace_folders` (first folder
+  nested under an ancestor git repository is preserved, not widened).
 
 ### fix: sync bundled skill command reference with the CLI (#327)
 
@@ -45,9 +41,7 @@
   `edit batch <rule-json>`, `call hierarchy <name>`, `docs <query>`, `capabilities`,
   `format check|apply <file/dir>...`, and `type hierarchy --subtypes/--supertypes`.
 - Removed a duplicate `Full command reference → references/commands.md` line.
- (fix(skill): sync bundled skill command reference with the CLI)
- (fix(skill): sync bundled skill command reference with the CLI)
- (fix(skill): sync bundled skill command reference with the CLI)
+
 ### fix: bundled skill reference docs — indexing.md reachable, releasing.md unshipped (#326)
 
 - **`skills/kotlin-lsp/SKILL.md`** linked the Performance modes section to a
@@ -62,6 +56,15 @@
 - Added a `skills_tests` guardrail asserting every `references/*.md` is cited
   by `SKILL.md`, so an unreachable reference file fails the build instead of
   rotting silently.
+
+### fix: scrub inherited git env in nested git callers (#332)
+
+- Nested `git` spawned by tests and by `call diff` inherited the outer
+  commit's git environment (`GIT_DIR`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`,
+  `GIT_QUARANTINE_PATH`, `GIT_CONFIG_*`) when run inside the pre-commit hook —
+  writing `user.*`/`core.bare` into the real repo config and committing into
+  the worktree instead of temp fixtures. Nested git now scrubs the inherited
+  env so it operates on its own repository in any context.
 
 ## 0.32.2 (2026-08-13)
 
