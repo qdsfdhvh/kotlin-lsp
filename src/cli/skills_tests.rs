@@ -2,6 +2,13 @@
 
 use super::skills;
 
+/// Normalize CRLF to LF so content assertions hold regardless of how the
+/// runner checked out the repo (Windows CI converts LF→CRLF on checkout,
+/// and `include_str!` embeds the on-disk bytes).
+fn lf(content: &str) -> String {
+    content.replace("\r\n", "\n")
+}
+
 // ── format_list ───────────────────────────────────────────────────────────────
 
 #[test]
@@ -35,7 +42,7 @@ fn read_kotlin_lsp_skill_exists() {
 
 #[test]
 fn read_kotlin_lsp_is_valid_markdown() {
-    let content = skills::format_read("kotlin-lsp").unwrap();
+    let content = lf(&skills::format_read("kotlin-lsp").unwrap());
     // Must have YAML frontmatter and body.
     assert!(
         content.starts_with("---\n"),
@@ -96,7 +103,7 @@ fn read_nonexistent_lists_available() {
 fn all_skills_have_valid_frontmatter() {
     // Use builtin_skills() via format_read since builtin_skills is module-private.
     // Read kotlin-lsp and parse frontmatter lines.
-    let content = skills::format_read("kotlin-lsp").unwrap();
+    let content = lf(&skills::format_read("kotlin-lsp").unwrap());
     // Extract frontmatter: everything between first --- and second ---.
     let end = content
         .strip_prefix("---\n")
@@ -155,7 +162,9 @@ fn every_references_file_is_cited_by_skill() {
 
 #[test]
 fn read_output_is_utf8_and_printable() {
-    let content = skills::format_read("kotlin-lsp").unwrap();
+    // Normalize CRLF first: `\r` is a control character, so the check below
+    // would flag every line of a CRLF checkout (Windows CI).
+    let content = lf(&skills::format_read("kotlin-lsp").unwrap());
     // The content must be valid UTF-8 (already guaranteed by String).
     // Check it doesn't contain null bytes or control characters (aside from \n).
     for ch in content.chars() {
