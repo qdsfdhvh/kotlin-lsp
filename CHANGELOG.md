@@ -1,5 +1,6 @@
 ## Unreleased
 
+
 ### fix: index --root validates the path exists before indexing (#328)
 
 - **`index --root <path>`** now errors out immediately when the root is
@@ -10,6 +11,15 @@
 - **Empty workspaces** now print a stderr warning
   (`warning: no source files found under <path>`) after indexing finishes;
   the exit code stays 0 because a library-only root may legitimately be empty.
+
+
+### fix: preserve the client workspace root for LSP navigation (#325)
+
+- `initialize` no longer widens a client-provided nested project root to an
+  ancestor Git repository. Workspace indexing and the `rg` definition fallback
+  now stay in the root selected by the editor, so same-project definitions are
+  found even when an ancestor repository ignores the nested project path.
+ (fix(lsp): preserve client workspace root)
 
 ### fix: bundled skill reference docs — indexing.md reachable, releasing.md unshipped (#326)
 
