@@ -391,6 +391,74 @@ fn code_action_relative_path_does_not_panic() {
     );
 }
 
+// ── index --root validation (issue #328) ────────────────────────────────
+
+#[test]
+fn index_nonexistent_root_exits_one_with_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("no-such-root");
+    let output = Command::new(BIN)
+        .args(["index", "--root"])
+        .arg(&missing)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "index on a missing --root must exit 1"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("does not exist"),
+        "stderr should mention the missing root: {stderr}"
+    );
+}
+
+#[test]
+fn index_file_as_root_exits_one_with_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("NotARoot.kt");
+    std::fs::write(&file, "class NotARoot").unwrap();
+    let output = Command::new(BIN)
+        .args(["index", "--root"])
+        .arg(&file)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "index --root on a file must exit 1"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not a directory"),
+        "stderr should say the root is not a directory: {stderr}"
+    );
+}
+
+#[test]
+fn index_empty_root_warns_but_exits_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    // --no-stdlib keeps this deterministic: the global ~/.kotlin-lsp/sources
+    // default is skipped, so an empty root indexes exactly zero files.
+    let output = Command::new(BIN)
+        .args(["index", "--root"])
+        .arg(dir.path())
+        .arg("--no-stdlib")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "index on an empty root should stay exit 0: {:?}",
+        output
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no source files found under"),
+        "stderr should warn about zero source files: {stderr}"
+    );
+}
+
 // ── uninstall ──────────────────────────────────────────────────────────────
 
 #[test]

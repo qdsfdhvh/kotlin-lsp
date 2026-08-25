@@ -1665,6 +1665,17 @@ pub(crate) async fn run(args: CliArgs) {
 }
 
 async fn run_index(root: &Path, verbose: bool, no_stdlib: bool, lang: Option<String>) {
+    // Validate the root before any announce or long-running work: a typo'd
+    // --root used to silently churn on nothing and later `find` reported
+    // `No declarations found`, indistinguishable from the no-index case (issue #328).
+    if !root.exists() {
+        eprintln!("error: --root {} does not exist", root.display());
+        std::process::exit(1);
+    }
+    if !root.is_dir() {
+        eprintln!("error: --root {} is not a directory", root.display());
+        std::process::exit(1);
+    }
     if verbose {
         eprintln!("Indexing workspace: {}", root.display());
     }
@@ -1683,6 +1694,12 @@ async fn run_index(root: &Path, verbose: bool, no_stdlib: bool, lang: Option<Str
         }
         _ => build_index(root, no_stdlib).await,
     };
+    // Empty workspace: warn (exit stays 0 — a library-only root may
+    // legitimately contain no source files) so the no-index case is not
+    // silently confused with a successful empty index (issue #328).
+    if index.files.is_empty() {
+        eprintln!("warning: no source files found under {}", root.display());
+    }
     if verbose {
         eprintln!(
             "Done: {} files, {} symbols",
