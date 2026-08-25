@@ -50,7 +50,6 @@ impl Backend {
         Self::initialize_root_uri(params)
             .and_then(|root_uri| root_uri.to_file_path().ok())
             .filter(|workspace_root| workspace_root.is_dir())
-            .map(|workspace_root| Self::walk_up_to_git_root(&workspace_root))
     }
 
     fn initialize_root_uri(params: &InitializeParams) -> Option<Url> {
@@ -61,19 +60,6 @@ impl Backend {
                 .and_then(|workspace_folders| workspace_folders.first())
                 .map(|workspace_folder| workspace_folder.uri.clone())
         })
-    }
-
-    fn walk_up_to_git_root(workspace_root: &Path) -> PathBuf {
-        let mut current_directory = workspace_root;
-        loop {
-            if current_directory.join(".git").exists() {
-                return current_directory.to_path_buf();
-            }
-            match current_directory.parent() {
-                Some(parent_directory) => current_directory = parent_directory,
-                None => return workspace_root.to_path_buf(),
-            }
-        }
     }
 
     fn workspace_root_from_config() -> Option<PathBuf> {
@@ -262,3 +248,7 @@ impl Backend {
         (!collected_values.is_empty()).then_some(collected_values)
     }
 }
+
+#[cfg(test)]
+#[path = "init_tests.rs"]
+mod tests;
