@@ -24,7 +24,33 @@ pub(crate) const DEFAULT_MAX_DEPTH: u32 = 12;
 // ── git helpers ──────────────────────────────────────────────────────────────
 
 fn git(args: &[&str], cwd: &Path) -> Result<String, String> {
-    let out = Command::new("git")
+    // Scrub inherited git environment: when this command runs inside a git
+    // hook (e.g. the repo's own pre-commit hook), GIT_DIR/GIT_INDEX_FILE/
+    // GIT_OBJECT_DIRECTORY/GIT_CONFIG_* point at the outer commit's repo
+    // state. `call diff` wants the repository as the user sees it, so nested
+    // git must not inherit hook-only env (this also keeps the pre-commit
+    // hook's test run from corrupting the real repo).
+    let mut cmd = Command::new("git");
+    for var in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_QUARANTINE_PATH",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ] {
+        cmd.env_remove(var);
+    }
+    for i in 0..10 {
+        cmd.env_remove(format!("GIT_CONFIG_KEY_{i}"));
+        cmd.env_remove(format!("GIT_CONFIG_VALUE_{i}"));
+    }
+    let out = cmd
         .args(args)
         .current_dir(cwd)
         .output()

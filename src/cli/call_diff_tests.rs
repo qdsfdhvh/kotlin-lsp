@@ -318,11 +318,34 @@ fn render_branch_children_omit_rail() {
 // ── git-diff semantics ───────────────────────────────────────────────────────
 
 fn git(cwd: &Path, args: &[&str]) {
-    let out = std::process::Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .expect("run git");
+    // Scrub inherited git environment: when these tests run inside the
+    // pre-commit hook (spawned by the outer `git commit`), GIT_DIR /
+    // GIT_INDEX_FILE / GIT_OBJECT_DIRECTORY / GIT_CONFIG_* point at the
+    // OUTER repo, so nested `git init`/`config`/`commit` would write into
+    // the real repository (corrupting its config and index) instead of the
+    // temp fixture repo. Unsetting them makes each nested git operate on its
+    // own temp repo regardless of the caller's context.
+    let mut cmd = std::process::Command::new("git");
+    for var in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_QUARANTINE_PATH",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ] {
+        cmd.env_remove(var);
+    }
+    for i in 0..10 {
+        cmd.env_remove(format!("GIT_CONFIG_KEY_{i}"));
+        cmd.env_remove(format!("GIT_CONFIG_VALUE_{i}"));
+    }
+    let out = cmd.args(args).current_dir(cwd).output().expect("run git");
     assert!(
         out.status.success(),
         "git {args:?} failed: {}",

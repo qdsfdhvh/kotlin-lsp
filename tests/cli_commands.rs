@@ -510,11 +510,31 @@ fn uninstall_other_input_cancels() {
 // ── call diff (complete: git-diff defaults, inference, CTA) ─────────────────
 
 fn git_in(cwd: &Path, args: &[&str]) {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .unwrap();
+    // Scrub inherited git environment — when the pre-commit hook runs these
+    // tests inside an outer `git commit`, inherited GIT_DIR/GIT_INDEX_FILE/
+    // GIT_OBJECT_DIRECTORY/GIT_CONFIG_* point at the real repo; nested git
+    // would corrupt it instead of operating on the temp fixture repo.
+    let mut cmd = Command::new("git");
+    for var in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_QUARANTINE_PATH",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ] {
+        cmd.env_remove(var);
+    }
+    for i in 0..10 {
+        cmd.env_remove(format!("GIT_CONFIG_KEY_{i}"));
+        cmd.env_remove(format!("GIT_CONFIG_VALUE_{i}"));
+    }
+    let out = cmd.args(args).current_dir(cwd).output().unwrap();
     assert!(
         out.status.success(),
         "git {args:?} failed: {}",
