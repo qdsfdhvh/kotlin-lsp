@@ -117,6 +117,42 @@ fn all_skills_have_valid_frontmatter() {
 
 // ── Built-in skill invariants ────────────────────────────────────────────────
 
+// ── Bundled references consistency ──────────────────────────────────────────
+
+#[test]
+fn every_references_file_is_cited_by_skill() {
+    // Every `references/*.md` shipped next to SKILL.md must be cited by
+    // SKILL.md itself. An uncited reference file is invisible to agents and
+    // rots silently (#326: references/indexing.md was unreachable while
+    // SKILL.md linked out to a GitHub URL instead of the local file).
+    let skill_dir = std::path::Path::new("skills/kotlin-lsp");
+    let references_dir = skill_dir.join("references");
+    let skill = std::fs::read_to_string(skill_dir.join("SKILL.md"))
+        .expect("read skills/kotlin-lsp/SKILL.md (tests run from crate root)");
+
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&references_dir)
+        .unwrap_or_else(|e| panic!("read skills/kotlin-lsp/references: {e}"))
+    {
+        let path = entry.expect("read_dir entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        checked += 1;
+        let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let cite = format!("references/{file_name}");
+        assert!(
+            skill.contains(&cite),
+            "SKILL.md must cite '{cite}' — the file at \
+             skills/kotlin-lsp/references/{file_name} is unreachable to agents"
+        );
+    }
+    assert!(
+        checked > 0,
+        "expected at least one references/*.md to check"
+    );
+}
+
 #[test]
 fn read_output_is_utf8_and_printable() {
     let content = skills::format_read("kotlin-lsp").unwrap();

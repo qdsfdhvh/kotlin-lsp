@@ -44,6 +44,9 @@ mod workspace;
 mod integration_tests;
 
 #[cfg(test)]
+mod skills_tests;
+
+#[cfg(test)]
 mod format_tests;
 
 #[cfg(test)]

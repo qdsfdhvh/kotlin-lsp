@@ -1,3 +1,20 @@
+## Unreleased
+
+### fix: bundled skill reference docs — indexing.md reachable, releasing.md unshipped (#326)
+
+- **`skills/kotlin-lsp/SKILL.md`** linked the Performance modes section to a
+  GitHub URL (`docs/features.md`) even though `references/indexing.md` — the
+  exact content, with the full flag table (`--root <dir>`, `--no-stdlib`) —
+  ships next to it. The bundled skill now cites `references/indexing.md`
+  locally instead of requiring network access for indexing setup.
+- **`references/releasing.md`** (a repo-maintainer release runbook) shipped to
+  consumers in the bundled skill payload. Removed from `skills/kotlin-lsp/`;
+  the authoritative runbook stays in the repo at
+  `.agents/rules/releasing/RULE.md`.
+- Added a `skills_tests` guardrail asserting every `references/*.md` is cited
+  by `SKILL.md`, so an unreachable reference file fails the build instead of
+  rotting silently.
+
 ## 0.32.2 (2026-08-13)
 
 ### fix: doctor --json exit code + index --lang CLI surface (#321, #322, #323)
