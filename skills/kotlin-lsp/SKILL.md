@@ -28,7 +28,7 @@ Query is about Kotlin/Java/Swift symbols?
    ├─ One-stop info (def + sig + doc) → kotlin-lsp context
    ├─ Syntax check → kotlin-lsp check
    ├─ Format check → kotlin-lsp format check
-   ├─ Caller/callee tree → kotlin-lsp call hierarchy
+   ├─ Direct callers/callees → kotlin-lsp call hierarchy
    ├─ Implementation tree → kotlin-lsp type hierarchy
    ├─ Composable analysis → kotlin-lsp android composables <file> --call-graph/--state/--preview
    ├─ Batch queries → echo '[...]' | kotlin-lsp tool query --json
@@ -65,6 +65,10 @@ kotlin-lsp context <file> <line> <col>
 
 # Search group (symbol discovery)
 kotlin-lsp search semantic "login repo" [--limit N]
+kotlin-lsp search "login repo" --json --json-envelope --limit 1  # same semantic query
+# --json alone: compact array, default limit 20. Envelope: {results,truncated}.
+# truncated means eligible matches exceed the limit; at 0, true iff any match.
+# Envelope requires --json and is rejected by all non-semantic commands.
 kotlin-lsp search semantic "kind:class name:ViewModel login" [--kind class]  # field filters + flag
 # Field filters: kind: (class|fun|method|...), lang:/language: (kotlin|java|swift),
 # path:/name: (case-insensitive substring); unknown prefixes are plain text;
@@ -81,7 +85,18 @@ kotlin-lsp search expect-actual <name>
 
 # Call graph
 kotlin-lsp call hierarchy <file> <line> <col>
-kotlin-lsp call hierarchy <name>  # by-name form (no position lookup needed)
+kotlin-lsp call hierarchy <name> [--incoming] [--outgoing] --root <project> --no-stdlib
+# Exact function/method name or unique Class.method (nearest enclosing type).
+# Declarations, including override methods, and call identifiers use 1-based
+# UTF-16 positions. Relative files use explicit --root, otherwise cwd.
+# Neither/both direction flags = both; one flag = that direction. One hop only;
+# depth is rejected (use call reach). Missing/invalid/ambiguous queries exit 1.
+# JSON keeps name/incoming/outgoing; both arrays are sorted unique string graph
+# keys, not locations or call-site counts. Incoming no longer contains rg snippets.
+# Outgoing can include unresolved/external keys. Ambiguity lists candidates;
+# use a declaration position, not a guessed first match. Same-file overload bodies
+# cannot be separated. Grammar/name-based, not package/overload/source-set binding.
+# Full lookup/output boundaries: docs/commands.md → Direct call hierarchy.
 kotlin-lsp call diff [<ref1> [<ref2>]] [<name>]  # call-tree diff (git-diff style; inferred entries when name omitted)
 kotlin-lsp call reach <entry> [--to <target>]  # every call path entry→target
 # Type hierarchy
@@ -111,6 +126,36 @@ kotlin-lsp format apply <file/dir>...
 # Android / Compose
 kotlin-lsp android composables <file> --call-graph/--state/--preview
 ```
+### Applying shared-engine edits
+
+For `edit rename --apply`, `edit imports --apply`, and `tool code-action --apply`,
+inspect the report and exit status: preflight errors write nothing; late errors
+can leave accurately reported partial success. Rename without `--apply` and
+imports with `--json` are previews; dry-run summary counts are prospective, not
+writes. Cursor arguments are 1-based UTF-16; generated `TextEdit` ranges are
+0-based UTF-16. Replacements preserve untouched bytes and use `new_text` verbatim;
+equal-position inserts keep request order. Per-file replacement is atomic, not a
+batch transaction. Identity conflicts can deliberately leave a temporary file
+rather than delete through an untrusted path. Full guarantees, root applicability,
+newline/permission behavior and remaining races: `docs/commands.md` →
+**Shared-engine edit safety**. Other edit/format routes do not inherit these guarantees.
+
+## Installation and command compatibility
+
+Install/update from GitHub Release prebuilt assets; see `README.md` →
+**Install / update** for asset names and older installer caveats. Local Cargo
+builds are development/test binaries, not machine installations.
+`docs <query>` is a live alias for `search docs <query>`; `search <query>` is
+semantic-search shorthand. Removed flat names (including `benchmark`, `inject`,
+`call-hierarchy`, `query`, `snapshot`) fail with exit 1 and an unknown-subcommand
+message on stderr, not a JSON envelope. Use the grouped commands below; dead
+internal handlers are not available aliases.
+
+For call-graph package/overload/source-set collisions, consult
+`docs/codebase/GRAPH_IDENTITY.md`. Hierarchy refuses ambiguous names/same-file
+outgoing overloads; reach may merge bodies and snapshot relationship pairs lose
+file identity. These are not compiler-resolved paths.
+
 ## All commands
 
 | Need | Command |
@@ -124,7 +169,7 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Semantic search | `kotlin-lsp search "query"` |
 | KDoc search | `kotlin-lsp search docs "query"` |
 | KDoc search (alias) | `kotlin-lsp docs <query>` |
-| Syntax check | `kotlin-lsp check <file>...` |
+| Syntax check | `kotlin-lsp check <file>...` — exits 1 on syntax errors or missing/unreadable inputs; source-less dirs → `empty_dirs`, not an error unless `--diagnose` has no checkable file (exit 1, JSON `errors`) |
 | Format check | `kotlin-lsp format check <file/dir>...` |
 | Format apply | `kotlin-lsp format apply <file/dir>...` |
 | Code actions | `kotlin-lsp tool code-action <file> <line> <col>` |
@@ -155,7 +200,7 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Index workspace | `kotlin-lsp index [--root <dir>] [--gradle] [--lang kotlin\|java\|swift]` — `--lang` builds a per-language cache (`index-<lang>.bin`), handy when only Kotlin (or Swift) matters |
 | Index JARs | `kotlin-lsp index-jars [root]` |
 | Gradle deps | `kotlin-lsp gradle-deps` |
-| Extract sources | `kotlin-lsp extract-sources [lib...]` |
+| Extract sources | `kotlin-lsp extract-sources [lib...] [--gradle-home <dir>] [--output <dir>] [--dry-run]` |
 | Source roots | `kotlin-lsp sources` |
 | Cache stats | `kotlin-lsp cache stats` |
 | Doctor | `kotlin-lsp tool doctor [--json]` |
@@ -163,7 +208,7 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Workspace overview | `kotlin-lsp tool workspace` |
 | Snapshot | `kotlin-lsp tool snapshot` (workspace symbols; add `--include-libraries` for the ~/.kotlin-lsp/sources library cache, `--limit <n>` to cap) |
 | Symbol graph | `kotlin-lsp tool graph` |
-| Batch query | `echo '[{"type":"definition","name":"MyViewModel"}]' \| kotlin-lsp tool query --json` |
+| Batch query | `echo '[{"type":"definition","name":"MyViewModel"}]' \| kotlin-lsp tool query --json --root ./project --no-stdlib` |
 | File inspect | `kotlin-lsp tool inspect <file>` |
 | Tokens (debug) | `kotlin-lsp tool tokens <file>` |
 | Parse tree (debug) | `kotlin-lsp tool tree <file>` |
@@ -172,6 +217,80 @@ kotlin-lsp android composables <file> --call-graph/--state/--preview
 | Agent skills | `kotlin-lsp tool skills list \| read <name>` |
 
 Full command reference → references/commands.md
+
+## Batch queries
+
+Use `tool query --json --root <project> [--no-stdlib]` to share one index across
+a stdin JSON array. Consume the compact result array in request order; preserve
+successful items even if the process exits 1 for another item's `error`.
+
+- `definition`, `references`, `summarize`, `implementations`, `subclasses`: supply `name`.
+- `hover`, `callers`: supply `file`, `line`, `col` (1-based **UTF-16**). Relative files
+  use explicit `--root`, otherwise cwd. Unavailable/ambiguous hover signatures are null.
+- `references.refKind`: `call|read|write|override|import|type-use|declaration`.
+  Omitted/`all`/`reference` follows normal smart refs (includes declarations,
+  excludes imports/packages and comments/string text). Use `call` for invocations,
+  `import` for imports. Interpolation expressions remain references; Swift property
+  bindings are declarations and assignment targets are writes. Invalid filters are
+  errors, not ignored flags.
+- `callers.depth`: omit or use `1`; other depths error. Results use name-based
+  call edges (max 20), not overload-resolved identities. Subtype results cap at 50.
+
+`--no-stdlib` excludes `~/.kotlin-lsp/sources`; `--root` selects the indexed
+workspace even when cwd differs. See the project's `docs/commands.md` for item fields.
+
+## Flag scope
+
+Use command-specific contracts, not parser acceptance: capability group flags
+are unions, not a promise for each member. Semantic search supports `--root`,
+`--no-stdlib`, `--kind`, `--limit` and the opt-in JSON envelope. Its array fields
+and scoring stay unchanged; generated-only matches remain searchable. Remaining
+ties and prefix scoring are deterministic across processes/cache states.
+For `context`, `impact`, `search summarize` (also `--cached`), `search find-test`,
+`search expect-actual` and `tool inspect`, use `--root` to select the index and
+`--no-stdlib` to skip canonical home sources. Configured nonhome external paths
+remain included. For `find`/`refs`/`hover`, `--no-stdlib` applies to indexed modes
+only: `--smart` requires a pre-built index; auto find/refs fall back to fast
+workspace search without one. Hover auto-builds an index and rejects `--fast`.
+`type hierarchy --root` keeps its workspace-only default (home sources excluded).
+So do `check --diagnose`, `tool tokens --resolve`, `tool code-action` and `tool bench`.
+Library inclusion does not expand workspace-scoped refs/impact/find-test/expect-actual
+candidate discovery. JSON whitespace is command-specific, not globally compact.
+
+**File base:** these queries keep relative operands cwd-relative even with an
+alternate `--root`; absolute operands remain absolute. A cwd file outside the
+selected index may have no indexed symbol; hover can index the requested file
+on demand. Neither silently rebases to a same-named file under the root. Missing
+roots, unreadable files and invalid positions fail rather than return successful
+results. Without `--root`, nearest `.git`/cwd discovery is retained. Only `tool query`
+and `call hierarchy` use their documented explicit root-relative operand base.
+
+`extract-sources` rejects `--root`: it scans a Gradle cache, not a workspace.
+Use `--gradle-home` / `--output` to select input/destination, and `--dry-run` to
+preview.
+
+**Workspace selection:** `module list/deps/files`, `tool graph/workspace/snapshot`
+and `android activities` honor `--root` throughout modules, sources and project
+metadata. Relative roots use cwd. Missing/file roots fail; empty directories are
+valid empty projects. Without root, module commands retain Gradle-settings
+ancestor discovery; tools/activities keep existing `.git`/cwd discovery and
+nested Gradle module discovery. Module file discovery stays Kotlin/Java-only.
+Snapshot defaults to workspace plus configured nonhome external sources, excluding
+home sources. `--include-libraries` includes home symbol metadata cold and warm;
+`--exclude-relationships` omits relationships. Home files never contribute workspace
+relationships, even with inclusion. Snapshot does not use `--no-stdlib`.
+
+**File-only/utility boundaries:** `tool tree`, `android composables`, format,
+ordinary check and file-only edits keep cwd-relative operands. Root only affects
+already-defined indexing/containment (for example check `--diagnose`); existing
+`edit inject` policy is unchanged. Capabilities and `tool skills` have no workspace
+operation. Group flags are unions, not every-member promises. See
+`docs/commands.md` → Workspace and file-only options / Indexed query options.
+
+Indexed `hover --smart` resolves declarations and uniquely named unqualified
+identifier references. Qualified/ambiguous reference fallbacks remain unresolved
+(exit 1), rather than guessing a declaration. Use 1-based UTF-16 positions;
+file operands remain cwd-relative. See `docs/commands.md` → Indexed hover.
 
 ## Performance modes
 

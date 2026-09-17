@@ -22,9 +22,16 @@ struct TestResults {
     tests: Vec<TestInfo>,
 }
 
-pub(crate) async fn run_find_test(file: &Path, line: u32, col: u32, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, file);
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_find_test(
+    file: &Path,
+    line: u32,
+    col: u32,
+    json: bool,
+    explicit_root: Option<&std::path::Path>,
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, file);
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
     let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = Url::from_file_path(&abs_file).expect("valid file path");
 
@@ -289,7 +296,9 @@ fn extract_word_at_position(
     line: u32,
     col: u32,
 ) -> String {
-    let lines = index.mem_lines_for(uri.as_str());
+    let lines = index
+        .get_file(uri.as_str())
+        .map(|file| file.lines.filled_arc());
     lines
         .as_ref()
         .and_then(|l| {

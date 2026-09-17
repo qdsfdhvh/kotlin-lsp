@@ -846,6 +846,8 @@ impl Indexer {
             Self::fill_lines(data.value(), uri);
             return Some(Arc::clone(data.value()));
         }
+        // Library caches retain native path keys; the in-memory map uses URIs.
+        let path = Url::parse(uri).ok()?.to_file_path().ok()?;
         let cache_path = self.library_cache_path.read().expect("lock").clone()?;
         // One-shot deserialization: keep the map in memory for the process
         // lifetime instead of decoding the whole cache per file (issue #270).
@@ -855,8 +857,9 @@ impl Indexer {
             *self.library_cache_entries.write().expect("lock") = loaded;
         }
         let lib_cache = self.library_cache_entries.read().expect("lock").clone()?;
-        lib_cache.get(uri).map(|entry| {
+        lib_cache.get(path.to_string_lossy().as_ref()).map(|entry| {
             let arc = Arc::new(entry.file_data.clone());
+            Self::fill_lines(&arc, uri);
             self.files.insert(uri.to_string(), Arc::clone(&arc));
             arc
         })
@@ -984,6 +987,10 @@ pub(crate) fn param_names_from_sig(raw: &str) -> Vec<String> {
 #[cfg(test)]
 #[path = "indexer_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "indexer/lazy_library_tests.rs"]
+mod lazy_library_tests;
 
 #[cfg(test)]
 mod symbol_graph_tests;

@@ -196,10 +196,22 @@ pub(crate) async fn run_summary_cache_stats(root: Option<&Path>, no_stdlib: bool
 }
 
 /// Run `summarize <name> --cached` — use cached summary instead of re-parsing.
-pub(crate) async fn run_summarize_cached(name: &str, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_summarize_cached(
+    name: &str,
+    json: bool,
+    explicit_root: Option<&std::path::Path>,
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
 
+    // Cached summaries return every matching file, including library matches
+    // when the workspace already declares this name. Load compact declarations,
+    // then materialize only candidate files, not the whole library.
+    index.lazy_load_library_symbols();
+    for location in index.definition_locations(name) {
+        index.get_file(location.uri.as_str());
+    }
     let cache = build_summary_cache(&index);
     let summaries = lookup_summary(&cache, name);
 

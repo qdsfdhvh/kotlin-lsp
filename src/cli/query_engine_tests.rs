@@ -36,9 +36,15 @@ fn definitions_returns_empty_for_unknown() {
 
 #[test]
 fn references_returns_locations() {
-    let (engine, _uri) = test_engine("/Ref.kt", "package com.example\nfun topLevel() {}");
+    let (engine, _uri) = test_engine(
+        "/Ref.kt",
+        "package com.example\nfun topLevel() {}\nfun entry() { topLevel() }",
+    );
     let locs = engine.references("topLevel");
-    assert!(!locs.is_empty());
+    assert!(
+        locs.iter().any(|loc| loc.range.start.line == 2),
+        "must include invocation, not only definition"
+    );
 }
 
 #[test]
@@ -210,4 +216,37 @@ fn importing_files_returns_empty_for_no_match() {
     let (engine, _uri) = test_engine("/ImportEmpty.kt", "package com.example\nclass NoImports");
     let files = engine.importing_files("com.nonexistent.Whatever");
     assert!(files.is_empty());
+}
+
+#[test]
+fn references_unicode_names_have_exact_utf16_start_and_end_ranges() {
+    let dir = tempfile::tempdir().expect("fixture");
+    let path = dir.path().join("Unicode.kt");
+    let source = "fun café() {}\nfun entry() { val 文 = \"😀\"; café(); café() }\n";
+    std::fs::write(&path, source).expect("source");
+    let uri = Url::from_file_path(&path).expect("URI");
+    let index = std::sync::Arc::new(crate::indexer::Indexer::new());
+    index.index_content(&uri, source);
+    let engine = IndexQueryEngine::new(index);
+    // Zero-based UTF-16: `fun entry() { ` = 14, `val 文 = ` = 8,
+    // `"😀"; ` = 6, so the first café starts at 28. Each `café(); ` = 8.
+    let locations = engine.references("café");
+    assert_eq!(
+        locations,
+        vec![
+            Location::new(
+                uri.clone(),
+                Range::new(Position::new(0, 4), Position::new(0, 8))
+            ),
+            Location::new(
+                uri.clone(),
+                Range::new(Position::new(1, 28), Position::new(1, 32))
+            ),
+            Location::new(uri, Range::new(Position::new(1, 36), Position::new(1, 40))),
+        ]
+    );
+    let calls = engine
+        .references_with_kind("café", Some("call"))
+        .expect("call filter");
+    assert_eq!(calls, locations[1..]);
 }

@@ -4,70 +4,24 @@
 # Usage:
 #   curl -fsSL https://github.com/qdsfdhvh/kotlin-lsp/releases/latest/download/install.sh | bash
 #
-# Tries in order:
-#   1. cargo install (preferred — builds from source, puts in ~/.cargo/bin)
-#   2. GitHub Release binary download (fallback if cargo isn't available)
+# Installs or updates exclusively from GitHub Release prebuilt assets.
 #
 # Environment variables:
-#   KOTLIN_LSP_VERSION   pin a version (e.g. v0.29.0). Default: latest release.
-#   KOTLIN_LSP_REPO      override the source repo (default: qdsfdhvh/kotlin-lsp).
-#   KOTLIN_LSP_PREFIX    install directory for binary download. Default: $HOME/.local/bin
-#                        (falls back to /usr/local/bin if writable and HOME/.local/bin is not on PATH).
-#   KOTLIN_LSP_FORCE_BINARY  set to 1 to force GitHub Release download even if cargo is present.
+#   KOTLIN_LSP_VERSION   release tag. Default: latest release.
+#   KOTLIN_LSP_REPO      release repo (default: qdsfdhvh/kotlin-lsp).
+#   KOTLIN_LSP_PREFIX    install directory. Default: $HOME/.local/bin.
+# KOTLIN_LSP_FORCE_BINARY is no longer needed; all installs use Release assets.
 set -euo pipefail
 
 REPO="${KOTLIN_LSP_REPO:-qdsfdhvh/kotlin-lsp}"
 REPO_URL="https://github.com/${REPO}"
 VERSION="${KOTLIN_LSP_VERSION:-latest}"
 PREFIX="${KOTLIN_LSP_PREFIX:-$HOME/.local/bin}"
-FORCE_BINARY="${KOTLIN_LSP_FORCE_BINARY:-0}"
 
 err() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 info() { printf '\033[36m::\033[0m %s\n' "$*"; }
-warn() { printf '\033[33m!\033[0m %s\n' "$*"; }
 
-# ── check for cargo first (preferred) ──────────────────────────────
-try_cargo() {
-  if [ "$FORCE_BINARY" = "1" ]; then
-    info "KOTLIN_LSP_FORCE_BINARY=1 — skipping cargo, using binary download"
-    return 1
-  fi
-  # Detect real cargo binary (not rustup wrapper symlink)
-  local cargo_bin=""
-  if command -v cargo >/dev/null 2>&1; then
-    local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
-    local tc=$(ls -d "$rustup_home/toolchains"/stable-*/bin/cargo 2>/dev/null | head -1)
-    if [ -n "$tc" ] && [ -x "$tc" ]; then
-      cargo_bin="$tc"
-    elif "$(command -v cargo)" --version >/dev/null 2>&1; then
-      cargo_bin="$(command -v cargo)"
-    fi
-  fi
-  if [ -z "$cargo_bin" ]; then
-    warn "cargo not found — falling back to binary download"
-    info "  install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-    return 1
-  fi
-  if ! command -v pkg-config >/dev/null 2>&1; then
-    warn "pkg-config not found — cargo build may fail; falling back to binary"
-    return 1
-  fi
-
-  local pkg="kotlin-lsp"
-  if [ "$VERSION" != "latest" ]; then
-    pkg="kotlin-lsp@${VERSION#v}"
-  fi
-  local url="${REPO_URL}.git"
-  info "installing via cargo from ${url}"
-  "$cargo_bin" install --git "$url" --tag "$VERSION" "$pkg" 2>&1 || {
-    warn "cargo install failed — falling back to binary download"
-    return 1
-  }
-  info "installed via cargo → $(command -v kotlin-lsp 2>/dev/null || echo '~/.cargo/bin/kotlin-lsp')"
-  return 0
-}
-
-# ── binary download fallback ───────────────────────────────────────
+# ── Release binary download ───────────────────────────────────────
 download_binary() {
   # detect platform
   local uname_s="$(uname -s)"
@@ -82,10 +36,7 @@ download_binary() {
   case "$uname_m" in
     x86_64|amd64)
       if [ "$os" = "darwin" ]; then
-        # darwin-x86_64 assets were discontinued (2026-08, no users). Intel
-        # Macs get the arm64 build via Rosetta 2.
-        warn "darwin-x86_64 releases are discontinued — using the arm64 build (requires Rosetta 2: \"softwareupdate --install-rosetta\")"
-        arch="aarch64"
+        err "no Release asset for a Darwin x86_64 environment; on Apple Silicon use a native arm64 shell. Intel Macs are unsupported (Rosetta cannot run arm64 on Intel)."
       else
         arch="x86_64"
       fi
@@ -151,22 +102,14 @@ download_binary() {
 
 # ── verify ─────────────────────────────────────────────────────────
 verify() {
-  local bin="kotlin-lsp"
-  if ! command -v "$bin" >/dev/null 2>&1; then
-    # maybe just installed via cargo and not yet on PATH in this shell
-    if [ -f "$HOME/.cargo/bin/kotlin-lsp" ]; then
-      bin="$HOME/.cargo/bin/kotlin-lsp"
-    else
-      err "kotlin-lsp not found on PATH"
-    fi
-  fi
+  local bin="$PREFIX/kotlin-lsp"
   if ! "$bin" --version >/dev/null 2>&1; then
     err "binary did not run cleanly — try '$bin --version' to debug"
   fi
   info "$("$bin" --version)"
 
   # PATH hint
-  local dir="$(dirname "$(command -v "$bin" 2>/dev/null || echo "$bin")")"
+  local dir="$PREFIX"
   case ":${PATH:-}:" in
     *":$dir:"*) ;;
     *)
@@ -182,17 +125,6 @@ EOF
 }
 
 # ── main ───────────────────────────────────────────────────────────
-if try_cargo; then
-  verify
-  cat <<'EOF'
-
-Next: wire up your editor — see docs at
-  https://github.com/qdsfdhvh/kotlin-lsp#setup
-
-EOF
-  exit 0
-fi
-
 download_binary
 verify
 cat <<'EOF'

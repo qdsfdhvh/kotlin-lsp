@@ -29,11 +29,21 @@ struct MemberSummary {
     signature: Option<String>,
 }
 
-pub(crate) async fn run_summarize(name: &str, expand: bool, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_summarize(
+    name: &str,
+    expand: bool,
+    json: bool,
+    explicit_root: Option<&std::path::Path>,
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, &PathBuf::from("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
 
-    let locs = index.definition_locations(name);
+    let mut locs = index.definition_locations(name);
+    if locs.is_empty() {
+        index.lazy_load_library_symbols();
+        locs = index.definition_locations(name);
+    }
     if locs.is_empty() {
         eprintln!("Symbol not found: {name}");
         std::process::exit(1);
@@ -60,7 +70,7 @@ pub(crate) async fn run_summarize(name: &str, expand: bool, json: bool) {
     // Try fast path: read symbol metadata from indexed FileData.
     // Only re-parse source for KDoc (and members in --expand).
     let uri_str = loc.uri.to_string();
-    let indexed_sym = index.files.get(&uri_str).and_then(|f| {
+    let indexed_sym = index.get_file(&uri_str).and_then(|f| {
         f.symbols
             .iter()
             .find(|s| s.name == name && s.selection_range.start.line == loc.range.start.line)

@@ -450,9 +450,11 @@ fn search_shorthand_parses_query() {
     match args.subcommand {
         Subcommand::Search {
             query,
+            json_envelope,
             limit,
             kinds,
         } => {
+            assert!(!json_envelope);
             assert_eq!(query, "login view model");
             assert_eq!(limit, 20); // default
             assert!(kinds.is_empty());
@@ -1008,4 +1010,134 @@ fn capabilities_json_flag_is_accepted() {
     // --json should not cause a parse error
     let args = parse(&["capabilities", "--json"]).unwrap().unwrap();
     assert!(matches!(args.subcommand, Subcommand::Capabilities));
+}
+
+#[test]
+fn help_batch_query_contract_and_capabilities_flags() {
+    let args = parse(&["tool", "query", "--json", "--root", "B", "--no-stdlib"])
+        .expect("query flags parse")
+        .expect("CLI args");
+    assert!(matches!(args.subcommand, Subcommand::Query));
+    assert_eq!(args.root, Some(std::path::PathBuf::from("B")));
+    assert!(args.no_stdlib);
+    let help = help_text();
+    assert!(help.contains("TOOL QUERY INPUT:"));
+    for token in [
+        "definition",
+        "references",
+        "hover",
+        "summarize",
+        "callers",
+        "implementations",
+        "subclasses",
+        "refKind",
+        "Swift",
+        "Interpolation",
+        "UTF-16",
+        "depth",
+    ] {
+        assert!(
+            help.split("TOOL QUERY INPUT:")
+                .nth(1)
+                .expect("query help")
+                .contains(token),
+            "{token}"
+        );
+    }
+    let caps = capabilities_manifest();
+    let flags = caps["commands"]["tool"]["flags"]
+        .as_array()
+        .expect("tool flags");
+    for flag in ["--json", "--root", "--no-stdlib"] {
+        assert!(flags.contains(&serde_json::json!(flag)));
+    }
+}
+
+#[test]
+fn help_query_option_scope_and_generated_flags_match_parser() {
+    for argv in [
+        vec!["context", "Use.kt", "1", "1"],
+        vec!["impact", "Use.kt", "1", "1"],
+        vec!["search", "summarize", "Target"],
+        vec!["search", "summarize", "Target", "--cached"],
+        vec!["search", "find-test", "Use.kt", "1", "1"],
+        vec!["search", "expect-actual", "Target"],
+        vec!["tool", "inspect", "Use.kt"],
+        vec!["find", "Target", "--smart"],
+        vec!["refs", "Target", "--smart"],
+        vec!["hover", "Use.kt", "1", "1", "--smart"],
+    ] {
+        let mut argv = argv;
+        argv.extend(["--root", "B", "--no-stdlib"]);
+        let args = parse(&argv).expect("query flags parse").expect("CLI args");
+        assert_eq!(args.root, Some(std::path::PathBuf::from("B")));
+        assert!(args.no_stdlib);
+    }
+    let caps = capabilities_manifest();
+    for command in [
+        "find", "refs", "hover", "context", "impact", "search", "tool", "docs",
+    ] {
+        let flags = caps["commands"][command]["flags"]
+            .as_array()
+            .expect("flags");
+        for flag in ["--root", "--no-stdlib"] {
+            assert!(
+                flags.contains(&serde_json::json!(flag)),
+                "{command}: {flag}"
+            );
+        }
+    }
+    let hover_flags = caps["commands"]["hover"]["flags"]
+        .as_array()
+        .expect("hover flags");
+    assert!(hover_flags.contains(&serde_json::json!("--smart")));
+    assert!(!hover_flags.contains(&serde_json::json!("--fast")));
+    let help = help_text();
+    for text in [
+        "INDEXED QUERY OPTIONS:",
+        "cwd-relative",
+        "type hierarchy",
+        "search summarize",
+        "search find-test",
+        "search expect-actual",
+        "tool inspect",
+        "workspace-only defaults",
+        "indexed modes only",
+    ] {
+        assert!(help.contains(text), "missing help contract: {text}");
+    }
+}
+
+#[test]
+fn help_workspace_options_preserve_group_union_and_file_only_boundaries() {
+    for argv in [
+        vec!["module", "list"],
+        vec!["module", "deps", ":app"],
+        vec!["module", "files", ":app"],
+        vec!["tool", "graph"],
+        vec!["tool", "workspace"],
+        vec!["tool", "snapshot"],
+        vec!["android", "activities"],
+    ] {
+        let mut argv = argv;
+        argv.extend(["--root", "B"]);
+        assert_eq!(
+            parse(&argv).expect("parse").expect("CLI").root,
+            Some(std::path::PathBuf::from("B"))
+        );
+    }
+    let caps = capabilities_manifest();
+    assert!(!caps["commands"]["format"]["flags"]
+        .as_array()
+        .expect("flags")
+        .contains(&serde_json::json!("--root")));
+    for contract in [
+        "WORKSPACE OPTIONS:",
+        "Gradle-settings ancestors",
+        "Empty projects do not fall back",
+        "Snapshot does not use",
+        "capabilities and tool skills have no workspace operation",
+    ] {
+        assert!(help_text().contains(contract), "{contract}");
+    }
 }

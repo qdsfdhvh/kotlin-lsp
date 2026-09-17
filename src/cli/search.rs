@@ -181,6 +181,20 @@ struct SearchDoc {
     generated: bool,
 }
 
+impl SearchDoc {
+    /// Observable tie-breakers, independent of index/cache traversal order.
+    fn cmp_identity(&self, other: &Self) -> std::cmp::Ordering {
+        self.name
+            .cmp(&other.name)
+            .then_with(|| self.file.cmp(&other.file))
+            .then_with(|| self.line.cmp(&other.line))
+            .then_with(|| self.signature.cmp(&other.signature))
+            .then_with(|| self.kind.cmp(&other.kind))
+            .then_with(|| self.doc.cmp(&other.doc))
+            .then_with(|| self.generated.cmp(&other.generated))
+    }
+}
+
 impl Clone for SearchDoc {
     fn clone(&self) -> Self {
         Self {
@@ -263,17 +277,22 @@ impl TfIdfIndex {
                     scores[doc_id] += idf * tf_norm;
                 }
             }
-            // Also try partial prefix match for incomplete tokens
-            for (term, posting) in &self.inverted {
-                if term.starts_with(qt.as_str()) && term != qt {
-                    let df = *self.doc_freq.get(term).unwrap_or(&1) as f64;
-                    let idf = ((n - df + 0.5) / (df + 0.5) + 1.0).ln().max(0.0) * 0.5; // reduced weight
-                    for (&doc_id, &tf) in posting {
-                        let doc_len = self.docs[doc_id].tokens.len() as f64;
-                        let tf_norm = (tf as f64 * (k1 + 1.0))
-                            / (tf as f64 + k1 * (1.0 - b + b * doc_len / avgdl));
-                        scores[doc_id] += idf * tf_norm;
-                    }
+            // Prefix contributions must be summed in term order: HashMap order
+            // otherwise changes floating-point scores between CLI processes.
+            let mut prefixes: Vec<_> = self
+                .inverted
+                .iter()
+                .filter(|(term, _)| term.starts_with(qt.as_str()) && *term != qt)
+                .collect();
+            prefixes.sort_unstable_by(|a, b| a.0.cmp(b.0));
+            for (term, posting) in prefixes {
+                let df = *self.doc_freq.get(term).unwrap_or(&1) as f64;
+                let idf = ((n - df + 0.5) / (df + 0.5) + 1.0).ln().max(0.0) * 0.5; // reduced weight
+                for (&doc_id, &tf) in posting {
+                    let doc_len = self.docs[doc_id].tokens.len() as f64;
+                    let tf_norm = (tf as f64 * (k1 + 1.0))
+                        / (tf as f64 + k1 * (1.0 - b + b * doc_len / avgdl));
+                    scores[doc_id] += idf * tf_norm;
                 }
             }
         }
@@ -309,7 +328,7 @@ impl TfIdfIndex {
             a_defer
                 .cmp(&b_defer)
                 .then_with(|| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal))
-                .then_with(|| ia.cmp(&ib))
+                .then_with(|| self.docs[ia].cmp_identity(&self.docs[ib]))
         });
 
         ranked.truncate(max_results);
@@ -608,6 +627,7 @@ fn doc_tokens(sym: &SymbolEntry) -> Vec<String> {
 pub(crate) async fn run_search(
     query: &str,
     json: bool,
+    json_envelope: bool,
     max_results: usize,
     root: Option<&Path>,
     flag_kinds: &[String],
@@ -691,14 +711,18 @@ pub(crate) async fn run_search(
 
     // Filters-only query (`search "kind:class path:src/api"`): no free text
     // to score, so return everything that passed the filters, ordered by name.
-    let results = if all_query_tokens.is_empty() {
+    // One eligible result beyond the cap proves truncation, including limit=0.
+    // Saturation preserves the unlimited usize::MAX case without overflow.
+    let lookahead = max_results.saturating_add(1);
+    let mut results = if all_query_tokens.is_empty() {
         let mut docs: Vec<&SearchDoc> = tfidf.docs.iter().collect();
         docs.sort_by(|a, b| {
             a.name
                 .cmp(&b.name)
                 .then_with(|| a.generated.cmp(&b.generated))
+                .then_with(|| a.cmp_identity(b))
         });
-        docs.truncate(max_results);
+        docs.truncate(lookahead);
         docs.into_iter()
             .map(|d| SearchResult {
                 name: d.name.clone(),
@@ -712,14 +736,18 @@ pub(crate) async fn run_search(
             })
             .collect()
     } else {
-        tfidf.search(&all_query_tokens, max_results)
+        tfidf.search(&all_query_tokens, lookahead)
     };
+    let truncated = results.len() > max_results;
+    results.truncate(max_results);
 
     if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&results).expect("serialize JSON")
-        );
+        let output = if json_envelope {
+            serde_json::to_string(&serde_json::json!({"results": results, "truncated": truncated}))
+        } else {
+            serde_json::to_string(&results)
+        };
+        println!("{}", output.expect("serialize search JSON"));
     } else {
         if results.is_empty() {
             println!("No symbols found matching '{}'", query);

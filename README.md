@@ -11,42 +11,57 @@ zero external runtime.
 
 ---
 
-## Install
+## Install / update
+
+Install and update only from [GitHub Release prebuilt assets](https://github.com/qdsfdhvh/kotlin-lsp/releases/latest).
+Local builds are for development/testing, not machine installation.
 
 ### macOS / Linux
 
+Download the matching archive from the Release page:
+
+| Environment | Asset |
+|---|---|
+| macOS Apple Silicon (native arm64 shell) | `kotlin-lsp-darwin-aarch64.tar.gz` |
+| Linux x86_64 | `kotlin-lsp-linux-x86_64.tar.gz` |
+| Linux arm64 | `kotlin-lsp-linux-aarch64.tar.gz` |
+
+Extract it, then place the contained `kotlin-lsp-<os>-<arch>` binary on PATH as
+`kotlin-lsp`. For example, after downloading the Apple Silicon archive:
+
 ```bash
-# Primary: build from source via cargo (→ ~/.cargo/bin)
-cargo install --git https://github.com/qdsfdhvh/kotlin-lsp --tag v0.29.0
-
-# Fallback: pre-built binary
-curl -fsSL https://github.com/qdsfdhvh/kotlin-lsp/releases/latest/download/install.sh | bash
-
-kotlin-lsp --version
+tar -xzf kotlin-lsp-darwin-aarch64.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 0755 kotlin-lsp-darwin-aarch64 "$HOME/.local/bin/kotlin-lsp"
+"$HOME/.local/bin/kotlin-lsp" --version
 ```
+
+Add `$HOME/.local/bin` to PATH if needed. Repeat with the new Release asset to
+update, and verify the exact destination's version matches the selected tag.
+There is no current Intel macOS asset; Rosetta cannot run arm64 binaries on Intel.
+Prefer this manual Release path until the updated `scripts/install.sh` is
+published: older Release installer scripts try Cargo first and may verify an
+unrelated binary on PATH. The repository script now uses Release assets only.
 
 ### Windows
 
 ```powershell
-# PowerShell
 iwr -useb https://github.com/qdsfdhvh/kotlin-lsp/releases/latest/download/install.ps1 | iex
-kotlin-lsp --version
+& "$env:USERPROFILE\.kotlin-lsp\bin\kotlin-lsp.exe" --version
 ```
 
-### Manual
+The installer selects `kotlin-lsp-windows-x86_64.zip` or
+`kotlin-lsp-windows-aarch64.zip`. Manual extraction contains
+`<asset>/kotlin-lsp.exe`; place that binary on PATH. Re-run for updates.
 
-Download from [releases](https://github.com/qdsfdhvh/kotlin-lsp/releases/latest)
-and place the binary on your `PATH`.
-
-### Build from source
+### Local development (not installation)
 
 ```bash
-git clone https://github.com/qdsfdhvh/kotlin-lsp
-cd kotlin-lsp
-cargo build --release
-# binary at target/release/kotlin-lsp
+cargo build
+cargo test --test benches
+# Run the development binary in place; do not copy it into an install directory.
+./target/debug/kotlin-lsp --help
 ```
-
 
 **Recommended:** install `fd` and `rg` (ripgrep) for faster file discovery.
 
@@ -58,13 +73,19 @@ cargo build --release
 
 - **[docs/commands.md](docs/commands.md)** — full command reference, examples, flags
 
+Semantic search keeps `--json` as a compact array. Opt into truthful limit
+metadata with `kotlin-lsp search "login repo" --json --json-envelope --limit 1`
+(`{results,truncated}`). Flags are command-specific; capability group flags are
+unions, not promises for every member.
+
 Call-graph tooling for agents (tree-sitter based, no JVM):
 
 ```bash
 kotlin-lsp call reach entry --to target    # every call path entry→target
 kotlin-lsp call diff                        # call-tree diff HEAD vs worktree (branch-aware, inferred entries)
 kotlin-lsp call diff main feature --entry boot
-kotlin-lsp call hierarchy F.kt 42 10        # callers / callees
+kotlin-lsp call hierarchy F.kt 42 10        # direct callers / callees (both by default)
+kotlin-lsp call hierarchy entry --outgoing  # exact callable name; one hop
 kotlin-lsp --version                        # tool + tree-sitter grammar versions
 ```
 

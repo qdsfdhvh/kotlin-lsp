@@ -7,7 +7,7 @@ use tower_lsp::lsp_types::{Location, Url};
 
 use crate::indexer::{Indexer, NoopReporter};
 use crate::query::engine::WorkspaceQueryEngine;
-use crate::rg::{rg_find_definition, rg_word_search, RgSearchRequest};
+use crate::rg::{rg_find_definition, rg_word_search};
 
 use super::args::{
     AndroidSub, CallSub, CliArgs, Mode, ModuleSub, OutputFmt, ResultFilters, Subcommand, TypeSub,
@@ -33,7 +33,7 @@ fn resolve_effective_relative(mut filters: ResultFilters, absolute_flag: bool) -
 // ── Root resolution ───────────────────────────────────────────────────────────
 
 /// Resolve the workspace root: explicit --root, then nearest .git ancestor, then cwd.
-fn resolve_root(explicit: Option<&Path>) -> PathBuf {
+pub(crate) fn resolve_root(explicit: Option<&Path>) -> PathBuf {
     if let Some(r) = explicit {
         return r.to_path_buf();
     }
@@ -357,7 +357,7 @@ pub(crate) fn enrich_result_kinds(results: &mut [CliResult], engine: &WorkspaceQ
         }
         if let Ok(uri) = tower_lsp::lsp_types::Url::from_file_path(std::path::Path::new(&r.file)) {
             let uri_str = uri.as_str();
-            if let Some(fd) = engine.file_by_uri_str(uri_str) {
+            if let Some(fd) = engine.get_file(uri_str) {
                 if let Some(sym) = fd
                     .symbols
                     .iter()
@@ -381,27 +381,9 @@ fn find_first_kt_uri(root: &Path) -> Option<tower_lsp::lsp_types::Url> {
 
 // ── Smart-mode refs ───────────────────────────────────────────────────────────
 
-fn smart_refs(engine: &WorkspaceQueryEngine, name: &str, root: &Path) -> Vec<CliResult> {
-    let mut decl_locs = engine.definition_locations(name);
-    if decl_locs.is_empty() {
-        // Issue #275: library symbols load on first query miss.
-        engine.index.lazy_load_library_symbols();
-        decl_locs = engine.definition_locations(name);
-    }
-    let decl_files: Vec<String> = decl_locs
-        .iter()
-        .filter_map(|l| l.uri.to_file_path().ok())
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
-
-    let dummy_uri: tower_lsp::lsp_types::Url = tower_lsp::lsp_types::Url::from_file_path(root)
-        .unwrap_or_else(|_| "file:///".parse().expect("serialize JSON"));
-
-    let source_roots = cli_workspace_source_roots(root);
-    let request = RgSearchRequest::new(name, None, None, Some(root), true, &dummy_uri, &decl_files)
-        .with_source_paths(&source_roots);
-    let locs = crate::rg::rg_find_references(&request, None);
-    locs_to_results(locs, name, "")
+fn smart_refs(engine: &WorkspaceQueryEngine, name: &str, _root: &Path) -> Vec<CliResult> {
+    let locations = crate::query::references::reference_locations(&engine.index, name, false);
+    locs_to_results(locations, name, "")
 }
 
 // ── Fast-mode find ────────────────────────────────────────────────────────────
@@ -513,15 +495,109 @@ fn print_capabilities(json: bool) {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-pub(crate) async fn run(args: CliArgs) {
+pub(crate) async fn run(mut args: CliArgs) {
+    // Workspace operations share explicit-root validation, not implicit discovery:
+    // module commands still search Gradle-settings ancestors when root is absent.
+    if matches!(
+        &args.subcommand,
+        Subcommand::Module {
+            sub: ModuleSub::List | ModuleSub::Deps { .. } | ModuleSub::Files { .. }
+        } | Subcommand::SymbolGraph
+            | Subcommand::Workspace
+            | Subcommand::Snapshot { .. }
+            | Subcommand::Android {
+                sub: AndroidSub::Activities
+            }
+    ) {
+        if let Some(root) = args.root.as_ref() {
+            if !root.is_dir() {
+                eprintln!(
+                    "error: --root {} must be an existing directory",
+                    root.display()
+                );
+                std::process::exit(1);
+            }
+            args.root = Some(root.canonicalize().unwrap_or_else(|error| {
+                eprintln!(
+                    "error: --root {} directory cannot be resolved: {error}",
+                    root.display()
+                );
+                std::process::exit(1);
+            }));
+        }
+    }
+
     let json = args.fmt == OutputFmt::Json;
     let verbose = args.verbose;
     let absolute = args.absolute;
     let flat = args.flat;
 
+    // These query options select an index, never a different operand base.
+    // Validate only the selected command family; other groups retain their contracts.
+    if matches!(
+        &args.subcommand,
+        Subcommand::Context { .. }
+            | Subcommand::Impact { .. }
+            | Subcommand::FindTest { .. }
+            | Subcommand::Summarize { .. }
+            | Subcommand::ExpectActual { .. }
+            | Subcommand::Type {
+                sub: TypeSub::Hierarchy { .. }
+            }
+            | Subcommand::Find { .. }
+            | Subcommand::Refs { .. }
+            | Subcommand::Hover { .. }
+            | Subcommand::Inspect { .. }
+    ) {
+        if let Some(root) = args.root.as_deref() {
+            if !root.exists() {
+                eprintln!("error: --root {} does not exist", root.display());
+                std::process::exit(1);
+            }
+            if !root.is_dir() {
+                eprintln!("error: --root {} is not a directory", root.display());
+                std::process::exit(1);
+            }
+        }
+    }
+
+    match &args.subcommand {
+        Subcommand::Context { file, .. }
+        | Subcommand::Impact { file, .. }
+        | Subcommand::FindTest { file, .. }
+        | Subcommand::Hover { file, .. }
+        | Subcommand::Inspect { file, .. } => {
+            // Read cwd-relative operands before indexing: missing relative paths
+            // cannot be converted to file URIs and must not panic or look empty.
+            let source = std::fs::read_to_string(file).unwrap_or_else(|error| {
+                eprintln!("Cannot read file {}: {error}", file.display());
+                std::process::exit(1);
+            });
+            let cursor = match &args.subcommand {
+                Subcommand::Context { line, col, .. }
+                | Subcommand::Impact { line, col, .. }
+                | Subcommand::FindTest { line, col, .. }
+                | Subcommand::Hover { line, col, .. } => Some((*line, *col)),
+                _ => None,
+            };
+            if let Some((line, col)) = cursor {
+                let text = source.lines().nth(line.saturating_sub(1) as usize);
+                if text.is_none_or(|text| col as usize > text.encode_utf16().count() + 1) {
+                    if matches!(&args.subcommand, Subcommand::Hover { .. }) {
+                        eprintln!("No symbol found at {}:{}:{}", file.display(), line, col);
+                    } else {
+                        eprintln!("No symbol: cursor is outside the file or line");
+                    }
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => {}
+    }
+
     match args.subcommand {
         Subcommand::Query => {
-            crate::cli::batch_query::run_query(json).await;
+            crate::cli::batch_query::run_query(json, args.root.as_deref(), args.no_stdlib).await;
         }
         Subcommand::Index { no_stdlib, lang } => {
             let root = resolve_root(args.root.as_deref());
@@ -726,6 +802,7 @@ pub(crate) async fn run(args: CliArgs) {
                 verbose,
                 &search_name,
                 &filters,
+                args.no_stdlib,
             )
             .await
         }
@@ -749,12 +826,23 @@ pub(crate) async fn run(args: CliArgs) {
                 &search_name,
                 &filters,
                 explain,
+                args.no_stdlib,
             )
             .await
         }
         Subcommand::Hover { file, line, col } => {
             let root = resolve_root_for_file(args.root.as_deref(), &file);
-            run_hover(&root, args.mode, json, verbose, &file, line, col).await
+            run_hover(
+                &root,
+                args.mode,
+                json,
+                verbose,
+                &file,
+                line,
+                col,
+                args.no_stdlib,
+            )
+            .await
         }
         Subcommand::Complete {
             file,
@@ -996,8 +1084,12 @@ pub(crate) async fn run(args: CliArgs) {
             let root = resolve_root_for_file(args.root.as_deref(), &file);
             let index = crate::cli::run::build_index(&root, args.no_stdlib).await;
             let engine = WorkspaceQueryEngine::new(index.clone());
-            let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
-            let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid path");
+            let abs_file = file.canonicalize().unwrap_or_else(|error| {
+                eprintln!("rename: {}: {error}", file.display());
+                std::process::exit(1);
+            });
+            let uri =
+                tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("canonical file path");
             engine.index.ensure_indexed(&uri);
 
             let pos =
@@ -1049,7 +1141,7 @@ pub(crate) async fn run(args: CliArgs) {
                         ),
                         end: tower_lsp::lsp_types::Position::new(
                             r.line.saturating_sub(1),
-                            r.col.saturating_sub(1) + r.name.len() as u32,
+                            r.col.saturating_sub(1) + r.name.encode_utf16().count() as u32,
                         ),
                     },
                     new_text: new_name.clone(),
@@ -1072,7 +1164,10 @@ pub(crate) async fn run(args: CliArgs) {
                 if json {
                     println!("{}", serde_json::to_string(&summary).expect("json"));
                 } else {
-                    println!("Renamed '{}' -> '{}'", word, new_name);
+                    println!(
+                        "Rename '{}' -> '{}': {} files modified",
+                        word, new_name, summary.files_modified
+                    );
                     for f in &summary.files {
                         match f {
                             crate::cli::edit::FileEditResult::Ok {
@@ -1089,6 +1184,7 @@ pub(crate) async fn run(args: CliArgs) {
                         }
                     }
                 }
+                summary.exit_if_failed();
             } else {
                 let summary = crate::cli::edit::apply_file_edits(&file_edits, Some(&root), true);
                 if json {
@@ -1111,6 +1207,7 @@ pub(crate) async fn run(args: CliArgs) {
                         }
                     }
                 }
+                summary.exit_if_failed();
             }
         }
         Subcommand::Inject { file } => {
@@ -1127,12 +1224,22 @@ pub(crate) async fn run(args: CliArgs) {
                 eprintln!("check requires at least one FILE argument");
                 std::process::exit(1);
             }
-            let expanded = super::check::expand_file_list(&files);
+            let mut expanded = super::check::expand_file_list(&files);
+            if diagnose && expanded.files.is_empty() {
+                for dir in &expanded.empty_dirs {
+                    expanded.input_errors.push(super::check::InputError {
+                        file: dir.to_string_lossy().into_owned(),
+                        message: "diagnose requires at least one checkable file".to_string(),
+                    });
+                }
+            }
             super::check::run_check(&expanded, json, when_exhaustive);
             if diagnose {
-                let root = resolve_root_for_file(args.root.as_deref(), &expanded[0]);
-                let index = build_index(&root, true).await;
-                super::diagnose::run_diagnose(&expanded, &index, json);
+                if let Some(file) = expanded.files.first() {
+                    let root = resolve_root_for_file(args.root.as_deref(), file);
+                    let index = build_index(&root, true).await;
+                    super::diagnose::run_diagnose(&expanded.files, &index, json);
+                }
             }
         }
         Subcommand::CodeAction {
@@ -1144,13 +1251,29 @@ pub(crate) async fn run(args: CliArgs) {
         } => {
             let root = resolve_root_for_file(args.root.as_deref(), &file);
             let json = args.fmt == OutputFmt::Json;
+            let abs_file = file.canonicalize().unwrap_or_else(|error| {
+                eprintln!("code-action: {}: {error}", file.display());
+                std::process::exit(1);
+            });
+            let uri = Url::from_file_path(&abs_file).expect("canonical file path");
+            let src = std::fs::read_to_string(&file).unwrap_or_else(|error| {
+                eprintln!("code-action: read error: {error}");
+                std::process::exit(1);
+            });
+            let line = line - 1; // CLI parser requires 1-based nonzero coordinates.
+            let col = col - 1;
+            let position = tower_lsp::lsp_types::Position::new(line, col);
+            let validation = tower_lsp::lsp_types::TextEdit {
+                range: tower_lsp::lsp_types::Range::new(position, position),
+                new_text: String::new(),
+            };
+            if let Err(error) = crate::cli::edit::apply_text_edits(&src, &[validation]) {
+                eprintln!("code-action: {error}");
+                std::process::exit(1);
+            }
             let index = build_index(&root, true).await;
 
-            let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
-            let uri = Url::from_file_path(&abs_file).expect("valid file path");
-
-            // Run parser diagnostics for the cursor position
-            let src = std::fs::read_to_string(&file).unwrap_or_default();
+            // Run parser diagnostics for the cursor position.
             let file_data = crate::parser::parse_by_extension(&file.to_string_lossy(), &src);
             let diagnostics: Vec<_> = file_data
                 .syntax_errors
@@ -1211,7 +1334,10 @@ pub(crate) async fn run(args: CliArgs) {
                                             serde_json::to_string(&summary).expect("json")
                                         );
                                     } else {
-                                        println!("Applied: {}", ca.title);
+                                        println!(
+                                            "Action: {} ({} files modified)",
+                                            ca.title, summary.files_modified
+                                        );
                                         for f in &summary.files {
                                             match f {
                                                 crate::cli::edit::FileEditResult::Ok {
@@ -1241,6 +1367,7 @@ pub(crate) async fn run(args: CliArgs) {
                                             }
                                         }
                                     }
+                                    summary.exit_if_failed();
                                 }
                                 Err(e) => {
                                     eprintln!("error: failed to process edit: {e}");
@@ -1357,17 +1484,22 @@ pub(crate) async fn run(args: CliArgs) {
             dry_run,
         } => {
             let expanded = super::check::expand_file_list(&files);
-            if expanded.is_empty() {
+            // Preserve the historical format behavior: warn about unprocessable
+            // inputs on stderr; only fail when nothing remains to format.
+            for input_error in &expanded.input_errors {
+                eprintln!("warning: {}: {}", input_error.file, input_error.message);
+            }
+            if expanded.files.is_empty() {
                 eprintln!("error: no .kt or .kts files found in given paths");
                 std::process::exit(1);
             }
             let ljson = args.fmt == OutputFmt::Json;
             match sub {
                 super::args::FormatSub::Check => {
-                    super::format::run_format_check(&expanded, ljson);
+                    super::format::run_format_check(&expanded.files, ljson);
                 }
                 super::args::FormatSub::Apply => {
-                    super::format::run_format_apply(&expanded, ljson, dry_run);
+                    super::format::run_format_apply(&expanded.files, ljson, dry_run);
                 }
             }
         }
@@ -1382,7 +1514,7 @@ pub(crate) async fn run(args: CliArgs) {
         Subcommand::Inspect { file, expand } => {
             let index = crate::cli::run::build_index(
                 &resolve_root_for_file(args.root.as_deref(), &file),
-                false,
+                args.no_stdlib,
             )
             .await;
             let engine = WorkspaceQueryEngine::new(index);
@@ -1397,7 +1529,16 @@ pub(crate) async fn run(args: CliArgs) {
             col,
             expand,
         } => {
-            run_context(&file, line, col, json, expand).await;
+            run_context(
+                &file,
+                line,
+                col,
+                json,
+                expand,
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::Call { sub } => match sub {
             CallSub::Hierarchy {
@@ -1409,10 +1550,40 @@ pub(crate) async fn run(args: CliArgs) {
                 outgoing,
                 depth: _depth,
             } => {
-                if let Some(sym) = name {
-                    run_call_hierarchy_by_name(&sym, incoming, outgoing, json).await;
+                let root = if name.is_some() {
+                    resolve_root(args.root.as_deref())
                 } else {
-                    run_call_hierarchy(&file, line, col, incoming, outgoing, json).await;
+                    resolve_root_for_file(args.root.as_deref(), &file)
+                };
+                let root = root.canonicalize().unwrap_or_else(|error| {
+                    super::call_hierarchy::fail(
+                        &format!("Invalid hierarchy root {}: {error}", root.display()),
+                        json,
+                    )
+                });
+                if !root.is_dir() {
+                    super::call_hierarchy::fail(
+                        "Invalid hierarchy root: expected a directory",
+                        json,
+                    );
+                }
+                // Name resolution and both directions share this single index.
+                let index = build_index(&root, args.no_stdlib).await;
+                let engine = WorkspaceQueryEngine::new(index);
+                let query = match name {
+                    Some(name) => Ok(super::call_hierarchy::Query::Name(name)),
+                    None => super::call_hierarchy::query_at(
+                        args.root.as_deref().unwrap_or_else(|| Path::new(".")),
+                        &file,
+                        line,
+                        col,
+                    ),
+                };
+                match query {
+                    Ok(query) => {
+                        super::call_hierarchy::run(&engine, &query, incoming, outgoing, json)
+                    }
+                    Err(error) => super::call_hierarchy::fail(&error, json),
                 }
             }
             CallSub::Diff {
@@ -1448,15 +1619,28 @@ pub(crate) async fn run(args: CliArgs) {
             }
         },
         Subcommand::Impact { file, line, col } => {
-            crate::cli::impact::run_impact(&file, line, col, json).await;
+            crate::cli::impact::run_impact(
+                &file,
+                line,
+                col,
+                json,
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::Module { sub } => match sub {
-            ModuleSub::List => crate::cli::modules::run_modules(json),
+            ModuleSub::List => crate::cli::modules::run_modules(json, args.root.as_deref()),
             ModuleSub::Deps { module, direction } => {
-                crate::cli::modules::run_module_deps(&module, &direction, json);
+                crate::cli::modules::run_module_deps(
+                    &module,
+                    &direction,
+                    json,
+                    args.root.as_deref(),
+                );
             }
             ModuleSub::Files { module } => {
-                crate::cli::modules::run_module_files(&module, json);
+                crate::cli::modules::run_module_files(&module, json, args.root.as_deref());
             }
             ModuleSub::Packages { package } => {
                 crate::cli::symbol_queries::run_package_deps(
@@ -1474,9 +1658,22 @@ pub(crate) async fn run(args: CliArgs) {
             cached,
         } => {
             if cached {
-                crate::cli::summary_cache::run_summarize_cached(&name, json).await;
+                crate::cli::summary_cache::run_summarize_cached(
+                    &name,
+                    json,
+                    args.root.as_deref(),
+                    args.no_stdlib,
+                )
+                .await;
             } else {
-                crate::cli::summarize::run_summarize(&name, expand, json).await;
+                crate::cli::summarize::run_summarize(
+                    &name,
+                    expand,
+                    json,
+                    args.root.as_deref(),
+                    args.no_stdlib,
+                )
+                .await;
             }
         }
         Subcommand::SummaryCacheStats => {
@@ -1490,14 +1687,28 @@ pub(crate) async fn run(args: CliArgs) {
             print_capabilities(json);
         }
         Subcommand::FindTest { file, line, col } => {
-            crate::cli::find_test::run_find_test(&file, line, col, json).await;
+            crate::cli::find_test::run_find_test(
+                &file,
+                line,
+                col,
+                json,
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::ExpectActual { name } => {
-            crate::cli::expect_actual::run_expect_actual(&name, json).await;
+            crate::cli::expect_actual::run_expect_actual(
+                &name,
+                json,
+                args.root.as_deref(),
+                args.no_stdlib,
+            )
+            .await;
         }
         Subcommand::Android { sub } => match sub {
             AndroidSub::Activities => {
-                let r = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
+                let r = resolve_root_for_file(args.root.as_deref(), &PathBuf::from("."));
                 crate::cli::android::run_android_activities(&r, json);
             }
             AndroidSub::Composables {
@@ -1512,7 +1723,7 @@ pub(crate) async fn run(args: CliArgs) {
             }
         },
         Subcommand::SymbolGraph => {
-            crate::cli::symbol_graph::run_symbol_graph(json).await;
+            crate::cli::symbol_graph::run_symbol_graph(json, args.root.as_deref()).await;
         }
         Subcommand::Snapshot {
             filter_kind,
@@ -1526,11 +1737,12 @@ pub(crate) async fn run(args: CliArgs) {
                 include_libraries,
                 limit,
                 json,
+                args.root.as_deref(),
             )
             .await;
         }
         Subcommand::Workspace => {
-            crate::cli::workspace::run_workspace(json);
+            crate::cli::workspace::run_workspace(json, args.root.as_deref());
         }
         Subcommand::Benchmark => {
             let root = resolve_root(args.root.as_deref());
@@ -1616,7 +1828,16 @@ pub(crate) async fn run(args: CliArgs) {
                 graph,
                 depth,
             } => {
-                run_type_hierarchy(&name, subtypes, supertypes, graph, depth, json).await;
+                run_type_hierarchy(
+                    &name,
+                    subtypes,
+                    supertypes,
+                    graph,
+                    depth,
+                    json,
+                    args.root.as_deref(),
+                )
+                .await;
             }
         },
         Subcommand::ImportsOf { name } => {
@@ -1648,12 +1869,14 @@ pub(crate) async fn run(args: CliArgs) {
         }
         Subcommand::Search {
             query,
+            json_envelope,
             limit,
             kinds,
         } => {
             crate::cli::search::run_search(
                 &query,
                 json,
+                json_envelope,
                 limit,
                 args.root.as_deref(),
                 &kinds,
@@ -1709,6 +1932,8 @@ async fn run_index(root: &Path, verbose: bool, no_stdlib: bool, lang: Option<Str
     }
 }
 
+// Keep CLI presentation and index-scope options explicit at this dispatch boundary.
+#[allow(clippy::too_many_arguments)]
 async fn run_find(
     root: &Path,
     mode: Mode,
@@ -1717,11 +1942,12 @@ async fn run_find(
     verbose: bool,
     name: &str,
     filters: &ResultFilters,
+    no_stdlib: bool,
 ) {
     let mut results = match effective_mode(mode, root, "find", verbose) {
         Mode::Fast => fast_find(name, root),
         _ => {
-            let index = build_index(root, false).await;
+            let index = build_index(root, no_stdlib).await;
             let engine = WorkspaceQueryEngine::new(index);
             smart_find(&engine, name, root, filters)
         }
@@ -1756,6 +1982,7 @@ async fn run_find(
     );
 }
 
+// Keep CLI presentation, reference filtering, and index scope explicit.
 #[allow(clippy::too_many_arguments)]
 async fn run_refs(
     root: &Path,
@@ -1766,11 +1993,12 @@ async fn run_refs(
     name: &str,
     filters: &ResultFilters,
     explain: bool,
+    no_stdlib: bool,
 ) {
     let results = match effective_mode(mode, root, "refs", verbose) {
         Mode::Fast => fast_refs(name, root),
         _ => {
-            let index = build_index(root, false).await;
+            let index = build_index(root, no_stdlib).await;
             let engine = WorkspaceQueryEngine::new(index);
             smart_refs(&engine, name, root)
         }
@@ -1926,6 +2154,8 @@ fn apply_filters(
     results
 }
 
+// Keep CLI presentation and index-scope options explicit at this dispatch boundary.
+#[allow(clippy::too_many_arguments)]
 async fn run_hover(
     root: &Path,
     mode: Mode,
@@ -1934,12 +2164,13 @@ async fn run_hover(
     file: &Path,
     line: u32,
     col: u32,
+    no_stdlib: bool,
 ) {
     if effective_mode(mode, root, "hover", verbose) == Mode::Fast {
         eprintln!("hover requires index; run `kotlin-lsp index` first or remove --fast");
         std::process::exit(1);
     }
-    let index = build_index(root, false).await;
+    let index = build_index(root, no_stdlib).await;
     let engine = WorkspaceQueryEngine::new(index);
     let Some(text) = hover_at(&engine, file, line, col) else {
         eprintln!("No symbol found at {}:{}:{}", file.display(), line, col);
@@ -2082,15 +2313,25 @@ pub(crate) fn extract_type_names(sig: &str) -> Vec<String> {
     types
 }
 
-async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize) {
-    let root = resolve_root_for_file(None, file);
-    let index = build_index(&root, false).await;
+async fn run_context(
+    file: &Path,
+    line: u32,
+    col: u32,
+    json: bool,
+    expand: usize,
+    explicit_root: Option<&Path>,
+    no_stdlib: bool,
+) {
+    let root = resolve_root_for_file(explicit_root, file);
+    let index = build_index(&root, no_stdlib).await;
     let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
     let pos = tower_lsp::lsp_types::Position::new(line.saturating_sub(1), col.saturating_sub(1));
 
     let word: String = {
-        let lines = index.mem_lines_for(uri.as_str());
+        let lines = index
+            .get_file(uri.as_str())
+            .map(|file| file.lines.filled_arc());
         lines
             .as_ref()
             .and_then(|l| {
@@ -2139,7 +2380,10 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize
             output["call_site"] = cs;
         }
         if expand > 0 {
-            if let Some(lines) = index.mem_lines_for(uri.as_str()) {
+            if let Some(lines) = index
+                .get_file(uri.as_str())
+                .map(|file| file.lines.filled_arc())
+            {
                 let s = pos.line.saturating_sub(expand.min(1000) as u32) as usize;
                 let e = (pos.line as usize + expand + 1).min(lines.len());
                 let ctx: Vec<String> = lines[s..e].to_vec();
@@ -2171,134 +2415,6 @@ async fn run_context(file: &Path, line: u32, col: u32, json: bool, expand: usize
 }
 
 // ── call-hierarchy ────────────────────────────────────────────────────────────
-
-/// Look up a symbol by name and run call hierarchy from its location.
-async fn run_call_hierarchy_by_name(name: &str, incoming: bool, outgoing: bool, json: bool) {
-    let root = resolve_root(None);
-    let index = build_index(&root, false).await;
-    let engine = WorkspaceQueryEngine::new(index.clone());
-    let filters = ResultFilters::default();
-    let results = smart_find(&engine, name, &root, &filters);
-    if results.is_empty() {
-        if json {
-            println!(
-                "{}",
-                serde_json::json!({"error": format!("No symbol found for '{name}'") })
-            );
-        } else {
-            eprintln!("No symbol found for '{name}'");
-        }
-        return;
-    }
-    if results.len() > 1 {
-        if json {
-            println!(
-                "{}",
-                serde_json::json!({
-                    "error": format!("Ambiguous symbol '{name}' matches {} candidates", results.len()),
-                    "candidates": results.iter().take(20).map(|r| serde_json::json!({
-                        "name": r.name,
-                        "kind": r.kind,
-                        "file": r.file,
-                        "line": r.line,
-                        "col": r.col,
-                    })).collect::<Vec<_>>()
-                })
-            );
-        } else {
-            eprintln!(
-                "{} is ambiguous ({} matches). Try --json to see candidates.",
-                name,
-                results.len()
-            );
-        }
-        return;
-    }
-    let target = &results[0];
-    let target_file = PathBuf::from(&target.file);
-    run_call_hierarchy(
-        &target_file,
-        target.line,
-        target.col,
-        incoming,
-        outgoing,
-        json,
-    )
-    .await;
-}
-
-async fn run_call_hierarchy(
-    file: &Path,
-    line: u32,
-    col: u32,
-    incoming: bool,
-    outgoing: bool,
-    json: bool,
-) {
-    let root = resolve_root_for_file(None, file);
-    let index = build_index(&root, false).await;
-    let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
-    let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
-
-    let word: String = {
-        let lines = index.mem_lines_for(uri.as_str());
-        lines
-            .as_ref()
-            .and_then(|l| {
-                let li = line.saturating_sub(1) as usize;
-                l.get(li).map(|ln| {
-                    crate::StrExt::word_at_utf16_col(ln.as_str(), col.saturating_sub(1) as usize)
-                })
-            })
-            .unwrap_or_default()
-    };
-
-    if word.is_empty() || crate::str_ext::is_kotlin_keyword(&word) {
-        eprintln!("No symbol at cursor");
-        std::process::exit(1);
-    }
-
-    let matcher = index
-        .ignore_matcher
-        .read()
-        .expect("ignore_matcher lock")
-        .clone();
-
-    if json {
-        let incoming_results = if incoming {
-            find_callers_via_rg(&word, &root, matcher.as_deref())
-        } else {
-            vec![]
-        };
-        let output = serde_json::json!({
-            "name": word,
-            "incoming": incoming_results,
-            "outgoing": serde_json::json!([]),
-        });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&output).expect("serialize JSON")
-        );
-    } else {
-        println!("## Call hierarchy for `{word}`\n");
-        if incoming {
-            println!("### Incoming calls (rg-based callers)");
-            let callers = find_callers_via_rg(&word, &root, matcher.as_deref());
-            if callers.is_empty() {
-                println!("  (none)\n");
-            } else {
-                for caller in &callers {
-                    println!("  - {}", caller);
-                }
-                println!();
-            }
-        }
-        if outgoing {
-            println!("### Outgoing calls");
-            println!("  (not yet implemented)\n");
-        }
-    }
-}
 
 async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
     let root = resolve_root_for_file(None, file);
@@ -2419,7 +2535,7 @@ async fn run_refs_at(file: &Path, line: u32, col: u32, json: bool) {
 async fn run_inspect(file: &Path, engine: &WorkspaceQueryEngine, json: bool, _expand: usize) {
     let abs_file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
     let uri = tower_lsp::lsp_types::Url::from_file_path(&abs_file).expect("valid file path");
-    let data = engine.file_by_uri_str(uri.as_str());
+    let data = engine.get_file(uri.as_str());
     let package: String = data
         .as_ref()
         .and_then(|d| d.package.clone())
@@ -2452,31 +2568,6 @@ async fn run_inspect(file: &Path, engine: &WorkspaceQueryEngine, json: bool, _ex
     }
 }
 
-/// Use rg to find functions that call `name`.
-fn find_callers_via_rg(
-    name: &str,
-    root: &Path,
-    _matcher: Option<&crate::rg::IgnoreMatcher>,
-) -> Vec<String> {
-    use std::process::Command;
-    let escaped = crate::rg::regex_escape(name);
-    let mut cmd = Command::new("rg");
-    cmd.args(["--no-heading", "--with-filename", "-n"]);
-    for ext in crate::rg::SOURCE_EXTENSIONS {
-        cmd.args(["--glob", &format!("*.{ext}")]);
-    }
-    cmd.args(["-e", &escaped]);
-    cmd.arg(root);
-    let out = match cmd.output() {
-        Ok(o) => o,
-        Err(_) => return vec![],
-    };
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(|s| s.to_owned())
-        .collect()
-}
-
 // ── type-hierarchy ────────────────────────────────────────────────────────────
 
 async fn run_type_hierarchy(
@@ -2486,8 +2577,9 @@ async fn run_type_hierarchy(
     graph: bool,
     _depth: u32,
     json: bool,
+    explicit_root: Option<&Path>,
 ) {
-    let root = resolve_root(None);
+    let root = resolve_root(explicit_root);
     let index = build_index(&root, true).await;
 
     // Collect supertypes by scanning the definitions index.

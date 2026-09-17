@@ -67,18 +67,28 @@ pub(crate) async fn run_snapshot(
     include_libraries: bool,
     limit: Option<usize>,
     _json: bool,
+    explicit_root: Option<&Path>,
 ) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, &PathBuf::from("."));
     if include_libraries {
         eprintln!(
             "[WARN] tool snapshot --include-libraries: indexing ~/.kotlin-lsp/sources; \
-             output may be hundreds of MB. Omit the flag for workspace-only symbols."
+             output may be hundreds of MB. Omit the flag to exclude home library symbols."
         );
     }
-    // Default to workspace-only: `no_stdlib` skips the global ~/.kotlin-lsp/sources
+    // Default excludes home sources: `no_stdlib` skips ~/.kotlin-lsp/sources
     // cache so a one-file project does not emit the whole library cache (issue #242).
     // `--include-libraries` restores the old behaviour deliberately.
     let index = crate::cli::run::build_index(&root, !include_libraries).await;
+
+    // Snapshot exports every selected source, unlike a name query. Materialize
+    // only libraries already requested by build_index (configured external paths,
+    // plus home sources only with --include-libraries), including warm caches.
+    index.lazy_load_library_symbols();
+    let library_uris: Vec<String> = index.library_uris.iter().map(|uri| uri.clone()).collect();
+    for uri in library_uris {
+        index.get_file(&uri);
+    }
 
     // Collect symbols with full metadata from the index
     let mut symbols: Vec<SymbolSnapshot> = Vec::new();
@@ -143,7 +153,7 @@ pub(crate) async fn run_snapshot(
     }
 
     // Discover modules
-    let modules = crate::cli::modules::discover_modules();
+    let modules = crate::cli::modules::discover_modules(explicit_root);
 
     let output = SnapshotOutput {
         project: ProjectInfo {
@@ -210,6 +220,51 @@ fn collect_relationships(index: &crate::indexer::Indexer) -> Relationships {
         }
     }
 
+    // Warm library loading materializes FileData, not the aggregate edge maps.
+    // Supplement only already-selected nonhome sources, retaining the same
+    // relationship identities as the cold index and deduplicating with its edges.
+    for uri in index.library_uris.iter() {
+        if is_library_path(uri.as_str()) {
+            continue;
+        }
+        let Some(data) = index.files.get(uri.as_str()) else {
+            continue;
+        };
+        calls.extend(data.call_edges.iter().cloned());
+        for import in &data.imports {
+            imports.insert((uri.clone(), import.full_path.clone()));
+        }
+        for sym in &data.symbols {
+            use tower_lsp::lsp_types::SymbolKind;
+            if sym.kind == SymbolKind::METHOD && sym.detail.contains("override") {
+                overrides.insert((
+                    format!(
+                        "{}.{}",
+                        sym.parent_fq_name.as_deref().unwrap_or(""),
+                        sym.name
+                    ),
+                    sym.name.clone(),
+                ));
+            }
+            if matches!(
+                sym.kind,
+                SymbolKind::CLASS
+                    | SymbolKind::INTERFACE
+                    | SymbolKind::STRUCT
+                    | SymbolKind::ENUM
+                    | SymbolKind::OBJECT
+            ) {
+                for (_, super_name, _, _) in data
+                    .supers
+                    .iter()
+                    .filter(|(line, _, _, _)| *line == sym.selection_start())
+                {
+                    extends.insert((sym.name.clone(), super_name.clone()));
+                }
+            }
+        }
+    }
+
     Relationships {
         calls: calls.into_iter().map(|(a, b)| [a, b]).collect(),
         extends: extends.into_iter().map(|(a, b)| [a, b]).collect(),
@@ -225,10 +280,16 @@ fn is_library_path(path: &str) -> bool {
     #[allow(deprecated)]
     let home = std::env::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let lib_root = home.join(".kotlin-lsp").join("sources");
-    // Component-wise comparison (not string prefix): on Windows the caller
-    // path may mix `/` and `\` separators, and string starts_with would miss
-    // `C:\Users\x/.kotlin-lsp/sources/...` (issue #242 CI failure on windows).
-    Path::new(path).starts_with(&lib_root)
+    // Index edges carry file URIs; older callers also supply native paths.
+    // Decode URLs before comparing components, then normalize both identities
+    // symmetrically (macOS /var aliases, Windows verbatim paths, and symlinks).
+    let file_path = tower_lsp::lsp_types::Url::parse(path)
+        .ok()
+        .and_then(|uri| uri.to_file_path().ok())
+        .unwrap_or_else(|| PathBuf::from(path));
+    let file_path = file_path.canonicalize().unwrap_or(file_path);
+    let lib_root = lib_root.canonicalize().unwrap_or(lib_root);
+    file_path.starts_with(lib_root)
 }
 
 fn is_entry_point(name: &str, kind: &str, _pkg: &str) -> bool {

@@ -301,6 +301,8 @@ pub(crate) enum Subcommand {
     /// Semantic search: natural language query over symbol index.
     Search {
         query: String,
+        /// Opt-in compact results/truncated object; requires --json.
+        json_envelope: bool,
         /// Max results to return.
         limit: usize,
         /// `--kind` flag filters, OR'd onto query-string `kind:` filters.
@@ -437,8 +439,8 @@ pub(crate) struct CliArgs {
     /// and index source JARs for external dependencies.
     pub gradle: bool,
     /// `--no-stdlib`: skip `~/.kotlin-lsp/sources` when indexing. Parsed
-    /// globally; every command that builds an index honors it (issue pattern
-    /// from #257 — several commands hardcoded `false`).
+    /// globally, honored by supported commands only. This excludes home source
+    /// files, not every external library or dependency source.
     pub no_stdlib: bool,
 }
 
@@ -468,7 +470,19 @@ impl CliArgs {
         let flat = parsed.flat;
         let gradle = parsed.gradle;
         let no_stdlib = parsed.no_stdlib;
+        let json_envelope = parsed.json_envelope;
         let subcommand = build_subcommand(&subcommand, parsed)?;
+        if json_envelope {
+            if !matches!(subcommand, Subcommand::Search { .. }) {
+                return Err("--json-envelope is only supported by semantic search (search <query> or search semantic <query>)".into());
+            }
+            if fmt != OutputFmt::Json {
+                return Err("--json-envelope requires --json".into());
+            }
+        }
+        if root.is_some() && matches!(subcommand, Subcommand::ExtractSources { .. }) {
+            return Err("extract-sources does not support --root; use --gradle-home for the input cache and --output for extracted sources".into());
+        }
         Ok(Some(Self {
             subcommand,
             mode,
@@ -486,6 +500,7 @@ impl CliArgs {
 struct ParsedCliFlags {
     mode: Mode,
     fmt: OutputFmt,
+    json_envelope: bool,
     root: Option<PathBuf>,
     positionals: Vec<String>,
     cst_only: bool,
@@ -516,6 +531,8 @@ struct ParsedCliFlags {
     type_subtypes: bool,
     type_supertypes: bool,
     type_graph: bool,
+    incoming: bool,
+    outgoing: bool,
     source_set_filter: Vec<String>,
     kind_filter: Option<String>,
     owner_filter: Option<String>,
@@ -569,6 +586,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
     let mut parsed = ParsedCliFlags {
         mode: Mode::Auto,
         fmt: OutputFmt::Text,
+        json_envelope: false,
         root: None,
         positionals: Vec::new(),
         cst_only: false,
@@ -601,6 +619,8 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
         type_subtypes: false,
         type_supertypes: false,
         type_graph: false,
+        incoming: false,
+        outgoing: false,
         expand: 0,
 
         exclude_imports: false,
@@ -626,6 +646,7 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Long("fast")) => parsed.mode = Mode::Fast,
             Some(lexopt::Arg::Long("smart")) => parsed.mode = Mode::Smart,
             Some(lexopt::Arg::Long("json")) => parsed.fmt = OutputFmt::Json,
+            Some(lexopt::Arg::Long("json-envelope")) => parsed.json_envelope = true,
             Some(lexopt::Arg::Long("cst-only")) => parsed.cst_only = true,
             Some(lexopt::Arg::Long("resolve")) => parsed.resolve = true,
             Some(lexopt::Arg::Long("phases")) => parsed.phases = true,
@@ -654,6 +675,8 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
             Some(lexopt::Arg::Short('d') | lexopt::Arg::Long("dot")) => parsed.dot = true,
             Some(lexopt::Arg::Short('e') | lexopt::Arg::Long("eol")) => parsed.eol = true,
             Some(lexopt::Arg::Long("no-stdlib")) => parsed.no_stdlib = true,
+            Some(lexopt::Arg::Long("incoming")) => parsed.incoming = true,
+            Some(lexopt::Arg::Long("outgoing")) => parsed.outgoing = true,
             Some(lexopt::Arg::Long("lang")) | Some(lexopt::Arg::Long("language")) => {
                 let value = args.value().map_err(|e| e.to_string())?;
                 let v = value.to_string_lossy().to_lowercase();
@@ -770,6 +793,11 @@ fn parse_cli_flags(args: &mut lexopt::Parser) -> Result<ParsedCliFlags, String> 
 }
 
 fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcommand, String> {
+    if (parsed.incoming || parsed.outgoing)
+        && !(subcommand == "call" && parsed.positionals.first().is_some_and(|s| s == "hierarchy"))
+    {
+        return Err("--incoming/--outgoing are only supported by call hierarchy".into());
+    }
     let ParsedCliFlags {
         positionals,
         cst_only,
@@ -861,6 +889,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     let limit = parsed.limit.unwrap_or(20);
                     Ok(Subcommand::Search {
                         query,
+                        json_envelope: parsed.json_envelope,
                         limit,
                         kinds: split_kind_filter(kind_filter.as_deref()),
                     })
@@ -909,6 +938,7 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     let limit = parsed.limit.unwrap_or(20);
                     Ok(Subcommand::Search {
                         query: o.to_string(),
+                        json_envelope: parsed.json_envelope,
                         limit,
                         kinds: split_kind_filter(kind_filter.as_deref()),
                     })
@@ -1381,7 +1411,16 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                     })
                 }
                 "hierarchy" => {
+                    if parsed.max_depth.is_some() {
+                        return Err("call hierarchy is direct-only; --max-depth is unsupported (use call reach)".into());
+                    }
                     let pos = &positionals[1..];
+                    if !matches!(pos.len(), 1 | 3) {
+                        return Err(
+                            "call hierarchy requires NAME or FILE LINE COL; depth is unsupported"
+                                .into(),
+                        );
+                    }
                     let (name, file, line, col) = match pos.len() {
                         1 => (Some(pos[0].clone()), PathBuf::new(), 0u32, 0u32),
                         _ => {
@@ -1395,8 +1434,8 @@ fn build_subcommand(subcommand: &str, parsed: ParsedCliFlags) -> Result<Subcomma
                             file,
                             line,
                             col,
-                            incoming: true,
-                            outgoing: true,
+                            incoming: parsed.incoming || !parsed.outgoing,
+                            outgoing: parsed.outgoing || !parsed.incoming,
                             depth: 1,
                         },
                     })
@@ -1775,8 +1814,8 @@ USAGE:
     kotlin-lsp                            # start LSP server (stdio)
 
 Output is tuned for AI agents: text mode is minimal (one record per line,
-grep-friendly), and `--json` emits compact JSON (no pretty-print). Pipe to
-`jq` for human reading.
+grep-friendly). JSON whitespace is command-specific; semantic search, indexed
+hover and tool query emit compact JSON. Pipe to `jq` for human reading.
 
 SUBCOMMANDS:
     find <name>                        Find declarations of a symbol
@@ -1795,8 +1834,8 @@ SUBCOMMANDS:
     docs <query>                       Search symbols by name or signature (alias of `search docs`)
     capabilities                       List CLI capabilities (use --json)
 
-    call hierarchy <file> <line> <col>   Show callers/callees for symbol at position
-    call hierarchy <name>                Show callers/callees for a symbol by name
+    call hierarchy <file> <line> <col>   Direct callers/callees at a declaration or call
+    call hierarchy <name>                Direct callers/callees for a unique callable
     call diff [<ref1> [<ref2>]] [<name>]   Diff call trees between git refs (git-diff style)
     call reach <entry> [--to <target>]   List all call paths from an entrypoint
     type hierarchy <name>                Show subtypes or supertypes
@@ -1836,15 +1875,19 @@ SUBCOMMANDS:
     tool bench                         Run LSP operation benchmarks
     tool doctor                        System health diagnostics
     tool workspace                     Workspace overview
-    tool query                         Batch symbol queries (--json)
+    tool query [--json] [--root <dir>] [--no-stdlib]  Ordered batch symbol queries from stdin
     tool skills <list|read>            List or read bundled agent skills
     tool code-action <file> <line> <col>  List code actions at a position
 
 OPTIONS:
-    --fast              Use rg/fd only; never load index (default when no cache)
-    --smart             Require a pre-built index; fails if missing
-    --json              Output as compact JSON (no whitespace; pipe to `jq` for humans)
-    --root <dir>        Workspace root (default: nearest .git dir or cwd)
+    Flags are command-specific; capability group flags are unions, not promises for every member.
+    --fast              (find, refs) Use rg/fd only; never load index. Hover rejects --fast.
+    --smart             (find, refs, hover) Require a pre-built index; fails if missing
+    --json              Output JSON where supported (whitespace is command-specific)
+    --json-envelope     (semantic search only) Emit {{results,truncated}}; requires --json
+    --root <dir>        Workspace root for supported commands (discovery is command-specific)
+                        File operand bases are command-specific; see contracts below.
+                        extract-sources uses --gradle-home/--output instead (rejects --root).
     --resolve           (tokens) Load index for Phase 2 cross-file resolution
     --cst-only          (tokens) Force CST-only mode (default, kept for clarity)
     --phases            (tokens) Show per-phase token breakdown with dedup markers
@@ -1859,11 +1902,12 @@ OPTIONS:
     --in-place          (insert) Write changes to the file instead of stdout
     -d, --dot           (complete) Resolve col to just after the last '.' on the line
     -e, --eol           (complete) Resolve col to end of trimmed content on the line
-    --no-stdlib         (complete) Skip ~/.kotlin-lsp/sources; workspace symbols only (~2s)
+    --no-stdlib         Skip ~/.kotlin-lsp/sources for supported index consumers.
+                        Not all external dependencies; see INDEXED QUERY OPTIONS below.
     --lang <lang>       (index) Index only one language: kotlin|java|swift
                         (per-language cache: index-kotlin.bin etc.)
     --include-libraries (snapshot) Include ~/.kotlin-lsp/sources library symbols;
-                        output can be hundreds of MB (default: workspace only)
+                        output can be hundreds of MB (default: home sources excluded)
     --relative          (find, refs) Print paths relative to --root. Auto-enabled
                         when stdout is not a TTY (typical AI agent invocation).
                         With --json, the `file` field carries the relative path
@@ -1875,13 +1919,15 @@ OPTIONS:
                         (one full path per line). Default groups by file
                         (path printed once per group, `name` omitted because
                         it's the query) — much cheaper for refs with many hits.
-    --limit <n>         (find, refs, snapshot) Cap result count after filtering
-    --kind <k>          (find, refs) Filter by symbol kind (class,fun,interface,...)
+    --limit <n>         (find, refs, semantic search, snapshot) Cap result count after filtering
+    --kind <k>          (find, refs, semantic search) Filter by symbol kind (class,fun,interface,...)
     --module <fragment> (find, refs) Keep only results whose module path contains <fragment>
     --source-set <set>  (find, refs) Keep only results in the given source set(s).
                         Comma-separate for OR: --source-set commonMain,androidMain
     --owner <name>      (find, refs) Keep only results whose owner (enclosing
                         class/interface/object name) contains <name>
+    --incoming          (call hierarchy) Include callers only (both flags = both)
+    --outgoing          (call hierarchy) Include callees only (neither = both)
     --subtypes          (type-hierarchy) Include subtypes (default)
     --supertypes        (type-hierarchy) Include supertypes
     --package <pkg>     (new-file) Package name for generated file
@@ -1890,6 +1936,76 @@ OPTIONS:
     -v, --verbose       Show progress messages (indexing, cache status)
     -h, --help          Print this help
     -V, --version       Print version
+
+INDEXED QUERY OPTIONS:
+    --root selects the index for context, impact, type hierarchy, search summarize
+    (including --cached), search find-test, search expect-actual, find, refs, hover
+    and tool inspect. Their relative file operands stay cwd-relative; absolute
+    operands stay absolute. Without --root, nearest .git/cwd discovery is retained.
+    Explicit roots must be existing directories; unreadable files and invalid
+    file-query positions fail on stderr, without successful results.
+    --no-stdlib applies to context, impact, search summarize (including --cached),
+    search find-test, search expect-actual, tool inspect, and find/refs/hover in
+    indexed modes only. Fast find/refs remain workspace-scoped; hover rejects --fast.
+    Semantic search, search docs/imports/annotated/cache-stats, module packages,
+    type sealed, call reach/hierarchy, complete, index and tool query also support it.
+    It excludes canonical home sources, not configured nonhome external paths.
+    type hierarchy, check --diagnose, tool tokens --resolve, tool code-action and
+    tool bench retain their workspace-only defaults (home sources excluded).
+    Library inclusion does not expand workspace-scoped rg candidate searches in
+    refs, impact, search find-test or search expect-actual. Group flags are unions.
+    tool query and call hierarchy are explicit root-relative operand exceptions.
+
+WORKSPACE OPTIONS:
+    --root selects module list/deps/files, tool graph/workspace/snapshot and android
+    activities, including nested modules and project metadata. Relative roots use cwd;
+    explicit roots must be existing directories. Empty projects do not fall back.
+    Without --root, modules search Gradle-settings ancestors; other commands keep
+    their existing .git/cwd discovery (nested module discovery still uses Gradle).
+    Snapshot excludes home sources by default; --include-libraries includes them.
+    Configured nonhome external sources remain selected. Snapshot does not use
+    --no-stdlib; tool group flags are a union, not per-member support.
+    tool tree, android composables, format and ordinary check use cwd-relative
+    file operands, not --root as a file base. Check --diagnose uses root for indexing.
+    File-only edit operands also stay cwd-relative; existing index/containment
+    policies are unchanged. capabilities and tool skills have no workspace operation.
+
+SEMANTIC SEARCH:
+    search <query> and search semantic <query> accept --json --json-envelope.
+    Default --json is a compact array; envelope adds only results and truncated.
+    truncated is true only when eligible matches exceed --limit (default 20).
+    Limit 0 returns no results, but truncated is true if any match exists.
+    Exact-limit and no-hit results are not truncated. Filters run before limiting.
+    --root selects the indexed workspace; --no-stdlib skips home sources.
+    Other search members and all other commands reject --json-envelope.
+
+CALL HIERARCHY:
+    NAME is an exact function/method name or unique Class.method, not fuzzy search.
+    Class is the nearest enclosing type (Inner.method for nested Outer.Inner).
+    FILE LINE COL selects a declaration (including override methods) or call identifier
+    (1-based UTF-16); properties are not callable.
+    Relative files use explicit --root, otherwise cwd; --no-stdlib skips home sources.
+    Direct edges only: default both, --incoming or --outgoing selects one direction.
+    Both flags selects both. No depth option; use call reach for recursive paths.
+    Compact JSON: name/incoming/outgoing; both arrays contain sorted unique string
+    graph keys (e.g. name or Class.method), not locations, snippets or call-site counts.
+    Outgoing keys can be unresolved/external. Missing/invalid/ambiguous lookup exits 1;
+    ambiguity includes candidates. Name-based grammar model, not overload binding.
+
+TOOL QUERY INPUT:
+    JSON array; one index for all items. --json returns a compact ordered array.
+    Types definition/references/summarize/implementations/subclasses take name.
+    Types hover/callers take file, line, col (1-based UTF-16).
+    Relative files use explicit --root, otherwise cwd. Hover signature is null
+    when unavailable or ambiguous. Callers accepts depth omitted or 1 only (max 20).
+    References refKind: call|read|write|override|import|type-use|declaration.
+    Omitted refKind, all, or reference matches normal smart refs: includes
+    declarations, excludes imports/packages and comments/string text. Use import
+    explicitly for imports. Interpolation expressions remain references. Swift
+    property bindings are declarations; assignment targets are writes.
+    Matching is name-based, not overload resolution.
+    Invalid items return an error in place; any item error exits 1.
+    Implementations/subclasses return at most 50 entries, sorted before limiting.
 
 EXAMPLES:
     kotlin-lsp find MyViewModel
@@ -1955,7 +2071,7 @@ pub(crate) fn help_command_lines() -> Vec<String> {
 /// Machine-readable capability manifest. Generated from `help_command_lines()`
 /// — the same command table `--help` prints and the consistency tests verify —
 /// so it cannot drift from the parser or `--help` (issue #231). Flags are
-/// stable per-command metadata kept separately.
+/// stable per-command metadata kept separately; group flags are member unions.
 pub(crate) fn capabilities_manifest() -> serde_json::Value {
     use std::collections::{BTreeSet, HashMap};
 
@@ -1966,6 +2082,7 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
                 "--limit",
                 "--json",
                 "--root",
+                "--no-stdlib",
                 "--fast",
                 "--smart",
                 "--absolute",
@@ -1983,6 +2100,7 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
                 "--limit",
                 "--json",
                 "--root",
+                "--no-stdlib",
                 "--fast",
                 "--smart",
                 "--absolute",
@@ -1994,40 +2112,64 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
                 "--flat",
             ],
         ),
-        ("hover", &["--json", "--root"]),
+        ("hover", &["--json", "--root", "--no-stdlib", "--smart"]),
         (
             "complete",
             &["--json", "--root", "--dot", "--eol", "--no-stdlib"],
         ),
-        ("context", &["--json", "--root", "--expand"]),
+        ("context", &["--json", "--root", "--expand", "--no-stdlib"]),
         ("check", &["--json", "--root"]),
-        ("impact", &["--json", "--root"]),
+        ("impact", &["--json", "--root", "--no-stdlib"]),
         ("index", &["--root", "--gradle", "--no-stdlib", "--lang"]),
         ("index-jars", &["--root"]),
         ("sources", &["--root"]),
         (
             "extract-sources",
-            &["--root", "--gradle-home", "--output", "--dry-run"],
+            &["--gradle-home", "--output", "--dry-run"],
         ),
         ("cache", &["--root"]),
         ("gradle-deps", &["--root", "--gradle"]),
-        ("docs", &["--limit", "--json", "--root"]),
+        ("docs", &["--limit", "--json", "--root", "--no-stdlib"]),
         ("capabilities", &["--json"]),
         (
             "call",
-            &["--json", "--root", "--incoming", "--outgoing", "--entry"],
+            &[
+                "--json",
+                "--root",
+                "--no-stdlib",
+                "--incoming",
+                "--outgoing",
+                "--entry",
+            ],
         ),
         (
             "type",
-            &["--json", "--root", "--subtypes", "--supertypes", "--graph"],
+            &[
+                "--json",
+                "--root",
+                "--subtypes",
+                "--supertypes",
+                "--graph",
+                "--no-stdlib",
+            ],
         ),
-        ("module", &["--json", "--root"]),
+        ("module", &["--json", "--root", "--no-stdlib"]),
         ("android", &["--json", "--root"]),
-        ("format", &["--root"]),
+        // Format expands cwd-relative files; it has no workspace-root operation.
+        ("format", &[]),
         (
             "search",
             &[
-                "--limit", "--json", "--root", "--fast", "--smart", "--cached", "--expand",
+                "--limit",
+                "--json",
+                "--json-envelope",
+                "--root",
+                "--no-stdlib",
+                "--kind",
+                "--fast",
+                "--smart",
+                "--cached",
+                "--expand",
             ],
         ),
         (
@@ -2059,6 +2201,7 @@ pub(crate) fn capabilities_manifest() -> serde_json::Value {
                 "--include-libraries",
                 "--limit",
                 "--exclude-relationships",
+                "--no-stdlib",
             ],
         ),
     ]

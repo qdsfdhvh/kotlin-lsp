@@ -17,9 +17,14 @@ struct ActualInfo {
     signature: String,
 }
 
-pub(crate) async fn run_expect_actual(name: &str, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let _index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_expect_actual(
+    name: &str,
+    json: bool,
+    explicit_root: Option<&std::path::Path>,
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, &PathBuf::from("."));
+    let _index = crate::cli::run::build_index(&root, no_stdlib).await;
     let candidates = find_files(name, &root);
     let mut expect: Option<(String, u32)> = None;
     let mut actuals = Vec::new();

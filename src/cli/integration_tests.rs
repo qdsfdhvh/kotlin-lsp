@@ -125,7 +125,8 @@ fn cli_rename_in_scope_replaces_occurrences() {
         crate::backend::rename::rename_in_scope(&lines, "x", "renamed", (0, lines.len()), false);
     assert!(!edits.is_empty(), "should find references to 'x'");
     // Apply edits
-    let result = crate::cli::edit::apply_text_edits_to_lines(&lines, &edits);
+    let result =
+        crate::cli::edit::apply_text_edits_to_lines(&lines, &edits).expect("valid edit ranges");
     let result_str = result.join("\n");
     assert!(
         result_str.contains("renamed"),
@@ -150,7 +151,8 @@ fn cli_rename_in_scope_skips_package() {
         false,
     );
     // Should only rename the 'example' in 'fun example()', not in 'package com.example'
-    let result = crate::cli::edit::apply_text_edits_to_lines(&lines, &edits);
+    let result =
+        crate::cli::edit::apply_text_edits_to_lines(&lines, &edits).expect("valid edit ranges");
     let result_str = result.join("\n");
     assert!(
         result_str.contains("package com.example"),

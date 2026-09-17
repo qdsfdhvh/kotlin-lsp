@@ -227,3 +227,21 @@ fn collect_relationships_dedupes_repeated_overrides() {
     let rels = collect_relationships(&idx);
     assert_eq!(rels.overrides.len(), 1);
 }
+
+#[test]
+fn is_library_path_accepts_uri_and_native_inputs_without_prefix_overmatch() {
+    // Construct paths from the platform home (including a Windows drive), never
+    // hardcode a Unix file URL or create/mutate any real home library files.
+    #[allow(deprecated)] // Match CLI home discovery without changing process env.
+    let home = std::env::home_dir().expect("platform home");
+    let library = home.join(".kotlin-lsp/sources");
+    let uri = tower_lsp::lsp_types::Url::from_directory_path(&library).expect("home directory URI");
+    assert!(is_library_path(library.to_str().expect("native home")));
+    assert!(is_library_path(uri.as_str()));
+    let neighbor = home.join(".kotlin-lsp/sources-neighbor % # 库");
+    let uri = tower_lsp::lsp_types::Url::from_directory_path(&neighbor).expect("neighbor URI");
+    assert!(!is_library_path(
+        neighbor.to_str().expect("native neighbor")
+    ));
+    assert!(!is_library_path(uri.as_str()));
+}

@@ -3,6 +3,7 @@
 //! Uses tree-sitter to examine the CST context of each reference location to determine
 //! whether it's a function call, field read, field write, override, import, or type use.
 
+use crate::queries::*;
 use tower_lsp::lsp_types::Location;
 
 /// Supported reference kinds.
@@ -50,7 +51,7 @@ impl RefKind {
 
 /// Classify a reference at a given location using tree-sitter.
 ///
-/// Returns the reference kind and also mutates `kind_out` to the classified kind string.
+/// Locations use zero-based UTF-16 columns.
 pub(crate) fn classify_reference(loc: &Location, name: &str) -> RefKind {
     let file_path = match loc.uri.to_file_path() {
         Ok(p) => p,
@@ -89,7 +90,14 @@ pub(crate) fn classify_reference(loc: &Location, name: &str) -> RefKind {
     let byte_col = crate::indexer::live_tree::utf16_col_to_byte(line_text, col);
     let point = tree_sitter::Point::new(line, byte_col);
 
-    let Some(start_node) = tree.root_node().descendant_for_point_range(point, point) else {
+    // A zero-width lookup at a Swift statement boundary can select the enclosing
+    // statements node. Include the first character to identify this occurrence.
+    let width = line_text
+        .get(byte_col..)
+        .and_then(|text| text.chars().next())
+        .map_or(0, char::len_utf8);
+    let end = tree_sitter::Point::new(line, byte_col + width);
+    let Some(start_node) = tree.root_node().descendant_for_point_range(point, end) else {
         return RefKind::Reference;
     };
 
@@ -97,93 +105,61 @@ pub(crate) fn classify_reference(loc: &Location, name: &str) -> RefKind {
 }
 
 /// Given a tree-sitter node at the reference position, determine the reference kind.
-fn classify_node(node: &tree_sitter::Node<'_>, name: &str, source: &str) -> RefKind {
-    // Walk up from the node to find the enclosing context.
-    let mut cur = *node;
+fn classify_node(node: &tree_sitter::Node<'_>, _name: &str, source: &str) -> RefKind {
+    // Kotlin soft keywords (e.g. `field`) have an anonymous token inside the
+    // identifier. Point lookup reaches that token; identity checks need its wrapper.
+    let identifier = node.parent().filter(|parent| {
+        !node.is_named() && matches!(parent.kind(), KIND_SIMPLE_IDENT | KIND_IDENTIFIER)
+    });
+    let node = identifier.as_ref().unwrap_or(node);
 
-    // Check immediate parent
-    if let Some(parent) = cur.parent() {
-        // call_expression → this is a call site
-        if parent.kind() == "call_expression" {
-            // Make sure we're the callee, not an argument
-            let callee_name = first_simple_identifier(&parent, source);
-            if callee_name == name {
-                return RefKind::Call;
-            }
+    // Import aliases can be type_identifier leaves; the enclosing import takes
+    // precedence over both type-use and other identifier contexts.
+    let mut ancestor = Some(*node);
+    while let Some(candidate) = ancestor {
+        if matches!(candidate.kind(), KIND_IMPORT_HEADER | KIND_IMPORT_DECL) {
+            return RefKind::Import;
         }
-
-        // navigation_expression inside call_expression → also a call site
-        if parent.kind() == "navigation_expression" {
-            if let Some(grandparent) = parent.parent() {
-                if grandparent.kind() == "call_expression" {
-                    let callee_name = last_simple_identifier(&parent, source);
-                    if callee_name == name {
-                        return RefKind::Call;
-                    }
-                }
-            }
-        }
+        ancestor = candidate.parent();
     }
 
-    // Walk up to find the usage context
-    loop {
-        match cur.kind() {
-            // Inside import → import reference
-            "import_header" | "import_declaration" => return RefKind::Import,
-
-            // Inside type annotation / supertype list → type use
-            "user_type" | "type_identifier" | "superclass" | "super_interfaces"
-            | "type_arguments" | "type_projection" | "function_type" | "nullable_type"
-            | "type_parameter" => {
-                return RefKind::TypeUse;
-            }
-
-            // Inside an assignment expression where this is the target → write
-            "assignment" => {
-                // Check if this node is on the LHS
-                if is_left_of_equals(&cur, node) {
-                    return RefKind::Write;
-                }
-                return RefKind::Read;
-            }
-
-            // Function/method declaration → check for override modifier
-            "function_declaration" | "method_declaration" => {
-                if has_modifier(&cur, source, "override") {
-                    return RefKind::Override;
-                }
-                return RefKind::Declaration;
-            }
-
-            // Property declaration
-            "property_declaration" => {
-                if has_modifier(&cur, source, "override") {
-                    return RefKind::Override;
-                }
-                return RefKind::Declaration;
-            }
-
-            // Class/interface/object declaration → declaration
-            "class_declaration"
-            | "interface_declaration"
-            | "object_declaration"
-            | "enum_declaration" => {
-                return RefKind::Declaration;
-            }
-
-            "source_file" | "program" => break,
-            _ => {}
+    // Kotlin class names are type_identifier nodes too; declaration identity
+    // takes precedence over the generic type-use context.
+    if let Some(parent) = node.parent() {
+        if matches!(
+            parent.kind(),
+            KIND_CLASS_DECL | KIND_INTERFACE_DECL | KIND_OBJECT_DECL | KIND_ENUM_DECL
+        ) && declaration_name(&parent).is_some_and(|name| name.id() == node.id())
+        {
+            return RefKind::Declaration;
         }
+    }
+    let mut cur = *node;
 
-        match cur.parent() {
-            Some(p) => cur = p,
-            None => break,
+    // Compare node identity, not just spelling: a receiver/argument with the
+    // same name as the callee is still a read.
+    let mut ancestor = Some(*node);
+    while let Some(candidate) = ancestor {
+        if matches!(candidate.kind(), KIND_CALL_EXPR | KIND_METHOD_INVOCATION) {
+            let callee = if candidate.kind() == KIND_METHOD_INVOCATION {
+                candidate.child_by_field_name("name")
+            } else {
+                candidate.named_child(0).and_then(last_identifier)
+            };
+            if callee.is_some_and(|callee| callee.id() == node.id()) {
+                return RefKind::Call;
+            }
+            break;
         }
+        if matches!(candidate.kind(), KIND_FUN_DECL | KIND_FUN_BODY | KIND_BLOCK) {
+            break;
+        }
+        ancestor = candidate.parent();
     }
 
     // Check for prefix/postfix increment/decrement → write
     if let Some(parent) = node.parent() {
-        if parent.kind() == "postfix_expression" || parent.kind() == "prefix_expression" {
+        if parent.kind() == KIND_POSTFIX_EXPR || parent.kind() == KIND_PREFIX_EXPR {
             // Check for ++/--
             if source
                 .get(parent.start_byte()..parent.end_byte())
@@ -195,25 +171,116 @@ fn classify_node(node: &tree_sitter::Node<'_>, name: &str, source: &str) -> RefK
         }
     }
 
-    RefKind::Reference
-}
+    // Walk up to find the usage context
+    loop {
+        match cur.kind() {
+            // Inside import → import reference
+            KIND_IMPORT_HEADER | KIND_IMPORT_DECL => return RefKind::Import,
 
-/// Check if `inner` is to the left of the `=` in an assignment node.
-#[allow(dead_code)]
-fn is_left_of_equals(assignment: &tree_sitter::Node<'_>, inner: &tree_sitter::Node<'_>) -> bool {
-    for child in children(assignment) {
-        if child.kind() == "eq" || child.kind() == "EQ" {
-            return inner.end_position().column <= child.start_position().column;
+            // Inside type annotation / supertype list → type use
+            KIND_USER_TYPE
+            | KIND_TYPE_IDENT
+            | KIND_SUPERCLASS
+            | KIND_SUPER_INTERFACES
+            | KIND_TYPE_ARGS
+            | KIND_TYPE_PROJECTION
+            | KIND_FUNCTION_TYPE
+            | KIND_NULLABLE_TYPE
+            | KIND_TYPE_PARAM => {
+                return RefKind::TypeUse;
+            }
+
+            // Inside an assignment expression where this is the target → write
+            KIND_ASSIGNMENT | KIND_ASSIGNMENT_EXPR => {
+                if is_assignment_target(&cur, node) {
+                    return RefKind::Write;
+                }
+                return RefKind::Read;
+            }
+
+            // Only the declaration's name is a declaration. Walking up from
+            // an initializer or function body must not label its reads as one.
+            KIND_FUN_DECL | KIND_METHOD_DECL | KIND_PROP_DECL | KIND_CLASS_DECL
+            | KIND_INTERFACE_DECL | KIND_OBJECT_DECL | KIND_ENUM_DECL | KIND_PARAMETER
+            | KIND_CLASS_PARAM | KIND_FORMAL_PARAM | KIND_VAR_DECLARATOR => {
+                let declared = declaration_name(&cur);
+                if declared.is_some_and(|declared| declared.id() == node.id()) {
+                    return if has_modifier(&cur, source, "override") {
+                        RefKind::Override
+                    } else {
+                        RefKind::Declaration
+                    };
+                }
+                return RefKind::Read;
+            }
+
+            KIND_SOURCE_FILE | KIND_PROGRAM => break,
+            _ => {}
+        }
+
+        match cur.parent() {
+            Some(p) => cur = p,
+            None => break,
         }
     }
-    false
+
+    RefKind::Read
+}
+
+fn declaration_name<'a>(node: &tree_sitter::Node<'a>) -> Option<tree_sitter::Node<'a>> {
+    node.child_by_field_name("name")
+        .map(|name| {
+            // Swift property names are patterns wrapping the actual bound identifier.
+            name.child_by_field_name("bound_identifier").unwrap_or(name)
+        })
+        .or_else(|| {
+            children(node).into_iter().find_map(|child| {
+                if matches!(
+                    child.kind(),
+                    KIND_SIMPLE_IDENT | KIND_IDENTIFIER | KIND_TYPE_IDENT
+                ) {
+                    Some(child)
+                } else if matches!(child.kind(), KIND_VAR_DECL | KIND_VAR_DECLARATOR) {
+                    child.named_child(0)
+                } else {
+                    None
+                }
+            })
+        })
+}
+
+/// Java exposes a `left` field; Kotlin's first named child is its target.
+/// Neither depends on the spelling of the assignment operator (`=`, `+=`, ...).
+fn is_assignment_target(assignment: &tree_sitter::Node<'_>, inner: &tree_sitter::Node<'_>) -> bool {
+    assignment
+        .child_by_field_name("left")
+        .or_else(|| assignment.named_child(0))
+        .and_then(assigned_identifier)
+        .is_some_and(|target| target.id() == inner.id())
+}
+
+/// Select only the assigned identifier, never identifiers evaluated to reach it.
+/// Kotlin's assignable wrapper can contain a flat sequence of navigation/index
+/// suffixes: only its final suffix matters. An index target assigns an element,
+/// not the array or any identifier inside the index, so it yields no identifier.
+fn assigned_identifier(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+    match node.kind() {
+        KIND_SIMPLE_IDENT | KIND_IDENTIFIER => Some(node),
+        KIND_FIELD_ACCESS => node.child_by_field_name("field"),
+        KIND_DIRECTLY_ASSIGNABLE_EXPR | KIND_NAV_EXPR | KIND_NAV_SUFFIX => {
+            let mut cursor = node.walk();
+            node.named_children(&mut cursor)
+                .last()
+                .and_then(assigned_identifier)
+        }
+        _ => None,
+    }
 }
 
 /// Check if a declaration node has a specific modifier keyword.
-#[allow(dead_code)]
 fn has_modifier(decl: &tree_sitter::Node<'_>, source: &str, modifier: &str) -> bool {
     for child in children(decl) {
-        if child.kind() == "modifiers" {
+        if child.kind() == KIND_MODIFIERS {
             let text = &source[child.start_byte()..child.end_byte()];
             return text.contains(modifier);
         }
@@ -221,25 +288,18 @@ fn has_modifier(decl: &tree_sitter::Node<'_>, source: &str, modifier: &str) -> b
     false
 }
 
-/// Get the first simple_identifier child's text.
-fn first_simple_identifier(node: &tree_sitter::Node<'_>, source: &str) -> String {
-    for child in children(node) {
-        if child.kind() == "simple_identifier" {
-            return child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-        }
+/// The terminal identifier in a callee, including a navigation suffix.
+fn last_identifier(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+    if matches!(
+        node.kind(),
+        KIND_SIMPLE_IDENT | KIND_IDENTIFIER | KIND_TYPE_IDENT
+    ) {
+        return Some(node);
     }
-    String::new()
-}
-
-/// Get the last simple_identifier child's text (for navigation_expression).
-fn last_simple_identifier(node: &tree_sitter::Node<'_>, source: &str) -> String {
-    let mut last = String::new();
-    for child in children(node) {
-        if child.kind() == "simple_identifier" {
-            last = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-        }
+    if matches!(node.kind(), KIND_NAV_EXPR | KIND_NAV_SUFFIX) {
+        return children(&node).into_iter().rev().find_map(last_identifier);
     }
-    last
+    None
 }
 
 /// Collect children into a Vec (borrowed).

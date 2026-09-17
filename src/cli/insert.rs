@@ -98,7 +98,7 @@ pub(crate) fn run_insert(
 
 // ─── semantic insert ──────────────────────────────────────────────────────────
 
-use tower_lsp::lsp_types::{Position, Range, TextEdit};
+use tower_lsp::lsp_types::TextEdit;
 
 use crate::cli::edit::{apply_file_edits, FileEdit};
 use crate::query::engine::WorkspaceQueryEngine;
@@ -146,7 +146,7 @@ pub(crate) fn find_class_body_insert_point(
         let mut cursor = class_node.walk();
         let first_member = class_node.children(&mut cursor).find(|c| {
             c.is_named()
-                && c.kind() != "class_body"
+                && c.kind() != crate::queries::KIND_CLASS_BODY
                 && c.start_position().row > class_node.start_position().row
         });
         if let Some(member) = first_member {
@@ -270,7 +270,11 @@ pub(crate) fn run_semantic_insert(
                         "file": file.to_string_lossy().into_owned(),
                         "fqn": imported_fqn,
                     });
-                    println!("{}", serde_json::to_string_pretty(&summary).unwrap());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&summary)
+                            .expect("serializable import summary")
+                    );
                 }
                 return;
             }
@@ -326,42 +330,17 @@ pub(crate) fn run_semantic_insert(
         }
     };
 
-    // Build the insert lines with proper indentation.
-    let insert_lines: Vec<String> = content_final
-        .split('\n')
-        .map(|c| {
-            if c.is_empty() {
-                String::new()
-            } else {
-                format!("{indent}{c}")
-            }
-        })
-        .collect();
-
-    let mut result: Vec<String> = lines.clone();
-    let insert_line_idx = insert_line as usize;
-
-    for (offset, ins_line) in insert_lines.iter().enumerate() {
-        result.insert(
-            (insert_line_idx).min(result.len()) + offset,
-            ins_line.clone(),
-        );
-    }
-
-    let new_content = result.join("\n");
-    let new_content = if original.ends_with('\n') && !new_content.ends_with('\n') {
-        format!("{new_content}\n")
-    } else {
-        new_content
-    };
-
-    let te = TextEdit {
-        range: Range {
-            start: Position::new(0, 0),
-            end: Position::new(lines.len() as u32, 0),
+    let te = semantic_insert_edit(&original, insert_line, &indent, &content_final).unwrap_or_else(
+        |error| {
+            eprintln!("insert: {error}");
+            std::process::exit(1);
         },
-        new_text: new_content.clone(),
-    };
+    );
+    let new_content = crate::cli::edit::apply_text_edits(&original, std::slice::from_ref(&te))
+        .unwrap_or_else(|error| {
+            eprintln!("insert: {error}");
+            std::process::exit(1);
+        });
     let file_edit = FileEdit {
         path: file.to_path_buf(),
         edits: vec![te],
@@ -370,12 +349,35 @@ pub(crate) fn run_semantic_insert(
     if json || dry_run {
         let summary = apply_file_edits(&[file_edit], None, true);
         println!("{}", serde_json::to_string(&summary).expect("json"));
+        summary.exit_if_failed();
     } else if apply {
         let summary = apply_file_edits(&[file_edit], None, false);
         println!("{}", serde_json::to_string(&summary).expect("json"));
+        summary.exit_if_failed();
     } else {
         println!("{new_content}");
     }
+}
+
+fn semantic_insert_edit(
+    original: &str,
+    insert_line: u32,
+    indent: &str,
+    content: &str,
+) -> Result<TextEdit, String> {
+    let inserted = content
+        .split('\n')
+        .map(|line| {
+            if line.is_empty() {
+                String::new()
+            } else {
+                format!("{indent}{line}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    crate::cli::edit::line_insertion_edit(original, insert_line, inserted)
 }
 
 /// Generate an override keyword + method stub for a given method name.

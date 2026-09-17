@@ -242,3 +242,44 @@ fn not_imported_different_package() {
     ));
     let _ = fs::remove_file(&path);
 }
+
+#[test]
+fn semantic_insert_preview_apply_preserves_crlf_and_no_final_newline() {
+    let dir = tempfile::tempdir().expect("fixture");
+    let path = dir.path().join("File.kt");
+    let source = "package app\r\n\r\nclass File";
+    std::fs::write(&path, source).expect("source");
+    let edit = super::semantic_insert_edit(source, 1, "", "import library.Alpha")
+        .expect("valid insertion");
+    let edits = [crate::cli::edit::FileEdit {
+        path: path.clone(),
+        edits: vec![edit],
+    }];
+    let preview = crate::cli::edit::preview_file_edits(&edits).expect("valid insertion preview");
+    assert_eq!(
+        preview[&path].1.concat(),
+        "package app\r\nimport library.Alpha\n\r\nclass File"
+    );
+    let summary = crate::cli::edit::apply_file_edits(&edits, None, false);
+    assert_eq!(summary.files_modified, 1);
+    assert_eq!(
+        std::fs::read(&path).expect("bytes"),
+        b"package app\r\nimport library.Alpha\n\r\nclass File"
+    );
+}
+
+#[test]
+fn semantic_insertion_empty_and_unterminated_eof_are_real_ranges() {
+    for (source, line, expected) in [
+        ("", 0, "x\n"),
+        ("漢", 1, "漢\nx\n"),
+        ("a\r\n", 1, "a\r\nx\n"),
+    ] {
+        let edit = super::semantic_insert_edit(source, line, "", "x").expect("generated insertion");
+        assert_eq!(
+            crate::cli::edit::apply_text_edits(source, &[edit]).expect("valid generated edit"),
+            expected
+        );
+    }
+    assert!(super::semantic_insert_edit("a", 4, "", "x").is_err());
+}
