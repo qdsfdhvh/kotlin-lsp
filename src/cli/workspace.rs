@@ -43,9 +43,9 @@ struct EntryPoint {
 
 // ── Entry point ─────────────────────────────────────────────────────────────
 
-pub(crate) fn run_workspace(json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let snapshot = collect_snapshot(&root);
+pub(crate) fn run_workspace(json: bool, explicit_root: Option<&Path>) {
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, &PathBuf::from("."));
+    let snapshot = collect_snapshot(&root, explicit_root);
 
     if json {
         println!(
@@ -77,8 +77,8 @@ pub(crate) fn run_workspace(json: bool) {
     }
 }
 
-fn collect_snapshot(root: &Path) -> WorkspaceSnapshot {
-    let modules = modules::discover_modules();
+fn collect_snapshot(root: &Path, explicit_root: Option<&Path>) -> WorkspaceSnapshot {
+    let modules = modules::discover_modules(explicit_root);
 
     let mut total_files = 0usize;
     let mut total_symbols = 0usize;

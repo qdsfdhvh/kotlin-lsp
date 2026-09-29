@@ -514,6 +514,9 @@ impl Indexer {
     /// Generation-safe: captures `root_generation` at the start and discards results
     /// if it changes during async I/O (root switch / explicit reindex).
     pub(crate) async fn index_source_paths(self: Arc<Self>, workspace_root: PathBuf) {
+        // Canonical identity for library/workspace classification and cache
+        // keys; `raw_paths` stays verbatim because the cache filename hashes it.
+        let workspace_root = crate::path_util::canonical_native(&workspace_root);
         let raw_paths = self.source_paths_raw.read().unwrap().clone();
         if raw_paths.is_empty() {
             return;
@@ -600,8 +603,11 @@ impl Indexer {
                 SymbolKind::OBJECT,
             ];
 
-            for (path_str, entry) in &lib_cache {
-                let Ok(uri) = Url::from_file_path(path_str) else {
+            for (raw_key, entry) in &lib_cache {
+                // Cache keys are native paths from an earlier run's spelling;
+                // canonicalize so restored URIs match the canonical index keys.
+                let canonical = crate::path_util::canonical_native(std::path::Path::new(raw_key));
+                let Ok(uri) = Url::from_file_path(&canonical) else {
                     continue;
                 };
                 let uri_str = uri.to_string();
@@ -613,7 +619,7 @@ impl Indexer {
                     batch.collect_entry(
                         &uri,
                         &uri_str,
-                        std::path::Path::new(path_str.as_str()),
+                        &canonical,
                         entry,
                         &class_kinds,
                         &workspace_root,
@@ -648,7 +654,12 @@ impl Indexer {
             }
             log::info!("Indexing source path: {}", source_path.display());
 
-            let files = find_source_files_unconstrained(source_path);
+            let mut files: Vec<PathBuf> = find_source_files_unconstrained(source_path)
+                .into_iter()
+                .map(|p| crate::path_util::canonical_native(&p))
+                .collect();
+            files.sort();
+            files.dedup();
             log::info!(
                 "  Found {} source files in {}",
                 files.len(),

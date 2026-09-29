@@ -49,9 +49,16 @@ struct CallerInfo {
 
 // ── Entry point ─────────────────────────────────────────────────────────────
 
-pub(crate) async fn run_impact(file: &Path, line: u32, col: u32, json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, file);
-    let index = crate::cli::run::build_index(&root, false).await;
+pub(crate) async fn run_impact(
+    file: &Path,
+    line: u32,
+    col: u32,
+    json: bool,
+    explicit_root: Option<&std::path::Path>,
+    no_stdlib: bool,
+) {
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, file);
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
     // Canonicalize so the URI matches the indexer's keys (it canonicalizes
     // file paths; a raw `absolute()` of a /tmp path yields /tmp vs the
     // indexer's /private/tmp on macOS and misses the file).
@@ -390,7 +397,9 @@ fn compute_risk(
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 fn extract_word_at_position(index: &Arc<Indexer>, uri: &Url, line: u32, col: u32) -> String {
-    let lines = index.mem_lines_for(uri.as_str());
+    let lines = index
+        .get_file(uri.as_str())
+        .map(|file| file.lines.filled_arc());
     lines
         .as_ref()
         .and_then(|l| {
@@ -404,7 +413,9 @@ fn extract_word_at_position(index: &Arc<Indexer>, uri: &Url, line: u32, col: u32
 
 fn guess_symbol_kind(index: &Arc<Indexer>, uri: &Url) -> String {
     // Just a rough guess from the file content.
-    let lines = index.mem_lines_for(uri.as_str());
+    let lines = index
+        .get_file(uri.as_str())
+        .map(|file| file.lines.filled_arc());
     lines
         .as_ref()
         .and_then(|lines| {

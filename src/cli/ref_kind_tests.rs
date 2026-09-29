@@ -89,3 +89,64 @@ fn test_classify(source: &str, name: &str, line: u32, col: u32, expected: RefKin
         expected.as_str()
     );
 }
+
+#[test]
+fn classify_body_reads_are_not_enclosing_declarations() {
+    test_classify(
+        "fun entry() { val x = target }",
+        "target",
+        0,
+        22,
+        RefKind::Read,
+    );
+    test_classify(
+        "fun entry() { consume(target) }",
+        "target",
+        0,
+        22,
+        RefKind::Read,
+    );
+}
+
+#[test]
+fn classify_navigation_receiver_is_read_not_call() {
+    test_classify(
+        "fun entry() { target.helper() }",
+        "target",
+        0,
+        14,
+        RefKind::Read,
+    );
+    test_classify(
+        "fun entry() { target.helper() }",
+        "helper",
+        0,
+        21,
+        RefKind::Call,
+    );
+}
+
+#[test]
+fn classify_assignment_lhs_member_identity() {
+    let source = "class Box(var field: Int)\nfun entry(target: Box) {\n    target.field = 1\n}";
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_kotlin_sg::LANGUAGE.into())
+        .expect("Kotlin grammar");
+    let tree = parser.parse(source, None).expect("Kotlin tree");
+    assert!(
+        !tree.root_node().has_error(),
+        "{}",
+        tree.root_node().to_sexp()
+    );
+    test_classify(source, "field", 0, 14, RefKind::Declaration);
+    test_classify(source, "target", 2, 4, RefKind::Read);
+    test_classify(source, "field", 2, 11, RefKind::Write);
+}
+
+#[test]
+fn classify_assignment_lhs_receiver_and_final_member() {
+    let source = "fun entry() {\n    target.member = 1\n}";
+    test_classify(source, "target", 1, 4, RefKind::Read);
+    test_classify(source, "member", 1, 11, RefKind::Write);
+}

@@ -6,6 +6,7 @@ mod batch;
 mod batch_query;
 mod call_diff;
 mod call_graph;
+mod call_hierarchy;
 mod call_steps;
 mod check;
 mod complete;

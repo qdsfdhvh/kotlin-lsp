@@ -9,6 +9,7 @@
 
 use tower_lsp::lsp_types::Url;
 
+use super::split_rg_fields;
 use crate::rg::{
     parse_rg_line, rg_find_definition, rg_find_references, IgnoreMatcher, RgSearchRequest,
 };
@@ -64,6 +65,62 @@ fn rg_line_relative_path_ignored() {
         parse_rg_line(line).is_none(),
         "relative paths must be ignored"
     );
+}
+
+// ─── split_rg_fields: Windows path shapes ────────────────────────────────
+
+#[test]
+fn split_fields_keep_plain_drive_prefix_out_of_the_separator_scan() {
+    let (file, line, col, content) =
+        split_rg_fields(r"C:\src\Use.kt:3:5:target()").expect("drive path line");
+    assert_eq!(file, r"C:\src\Use.kt");
+    assert_eq!((line, col), (3, 5));
+    assert_eq!(content, "target()");
+}
+
+#[test]
+fn split_fields_skip_verbatim_prefix_drive_colon() {
+    // `fs::canonicalize` roots make rg echo `\\?\C:\…`; the drive colon inside
+    // the prefix must not be read as the line-number separator (which left
+    // every references result empty on Windows CI).
+    let (file, line, col, content) =
+        split_rg_fields(r"\\?\C:\src\Use.kt:3:5:target()").expect("verbatim line");
+    assert_eq!(file, r"\\?\C:\src\Use.kt");
+    assert_eq!((line, col), (3, 5));
+    assert_eq!(content, "target()");
+}
+
+#[test]
+fn split_fields_skip_forward_slash_verbatim_prefix_drive_colon() {
+    let (file, line, col, content) =
+        split_rg_fields("//?/C:/src/Use.kt:3:5:target()").expect("forward verbatim line");
+    assert_eq!(file, "//?/C:/src/Use.kt");
+    assert_eq!((line, col), (3, 5));
+    assert_eq!(content, "target()");
+}
+
+#[test]
+fn split_fields_keep_unc_prefix_path_whole() {
+    // UNC has no embedded colon: nothing to skip, path stays whole.
+    let (file, line, col, content) =
+        split_rg_fields(r"\\?\UNC\server\share\Use.kt:1:2:x").expect("UNC line");
+    assert_eq!(file, r"\\?\UNC\server\share\Use.kt");
+    assert_eq!((line, col), (1, 2));
+    assert_eq!(content, "x");
+}
+
+#[test]
+fn split_fields_accept_unix_absolute_paths() {
+    let (file, line, col, content) = split_rg_fields("/home/u/Use.kt:12:1:v").expect("unix line");
+    assert_eq!(file, "/home/u/Use.kt");
+    assert_eq!((line, col), (12, 1));
+    assert_eq!(content, "v");
+}
+
+#[test]
+fn split_fields_reject_lines_without_parseable_line_number() {
+    assert!(split_rg_fields(r"\\?\C:\src\Use.kt:notanumber:x").is_none());
+    assert!(split_rg_fields(r"C:\src\Use.kt:notanumber:x").is_none());
 }
 
 // ─── rg_find_references scoping ──────────────────────────────────────────────

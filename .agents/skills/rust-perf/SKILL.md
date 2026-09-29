@@ -24,17 +24,30 @@
 
 **Measure first. Never guess.**
 
+For CLI measurements use Kotlin/Java/Swift inputs and validate exit status and
+known results on every sample. `tests/benchmark/benches_tests.rs` separates fresh
+workspace indexing, persisted-cache queries, and four single processes versus
+one four-query batch. Run the nonignored semantic smoke with `cargo test --test
+benches` before the explicit timing run below. Record profile, argv, fixture and
+batch sizes, iterations, timing boundaries and raw samples; debug/small-fixture
+numbers do not establish release/large-library latency or a speedup. `tool bench`
+emits text build/cache counts, even with `--json`; it is not the semantic harness.
+
+Local builds below are for profiling/testing only, not installation. The sizing
+and timing tables later in this skill are historical context, not measurements
+from the current checkout; remeasure before making optimization decisions.
+
 ```bash
 # Profile cold start (kotlin-lsp specific)
 cargo build --profile profiling
-samply record ./target/profiling/kotlin-lsp benchmark
+samply record ./target/profiling/kotlin-lsp tool bench --root /path/to/small-supported-workspace --no-stdlib
 
 # Binary size analysis
 cargo bloat --release --crates
 ls -lh target/release/kotlin-lsp
 
-# Micro-benchmark
-cargo bench
+# Validated CLI small-fixture baseline (debug, not release latency)
+cargo test --test benches -- --ignored --nocapture --test-threads=1
 ```
 
 ## Common Techniques
@@ -79,14 +92,14 @@ cargo build --profile profiling  # inherits release, debug=2, strip=false, lto=f
 
 ### 2. Record with samply (macOS)
 ```bash
-samply record ./target/profiling/kotlin-lsp benchmark
+samply record ./target/profiling/kotlin-lsp tool bench --root /path/to/small-supported-workspace --no-stdlib
 # Opens in Firefox Profiler
 ```
 
 ### 3. Generate flamegraph (Linux)
 ```bash
 cargo install flamegraph
-cargo flamegraph --bin kotlin-lsp -- benchmark
+cargo flamegraph --bin kotlin-lsp -- tool bench --root /path/to/small-supported-workspace --no-stdlib
 ```
 
 ### 4. Binary bloat analysis

@@ -1,9 +1,9 @@
 //! Symbol graph export — serializes the full relationship graph as JSON.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-pub(crate) async fn run_symbol_graph(json: bool) {
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
+pub(crate) async fn run_symbol_graph(json: bool, explicit_root: Option<&Path>) {
+    let root = crate::cli::run::resolve_root_for_file(explicit_root, &PathBuf::from("."));
     let index = crate::cli::run::build_index(&root, false).await;
 
     let mut call_edges: Vec<serde_json::Value> = Vec::new();
@@ -57,7 +57,7 @@ pub(crate) async fn run_symbol_graph(json: bool) {
             "imports": import_edges,
             "overrides": override_edges,
         },
-        "module": crate::cli::modules::discover_modules(),
+        "module": crate::cli::modules::discover_modules(explicit_root),
     });
 
     if json {

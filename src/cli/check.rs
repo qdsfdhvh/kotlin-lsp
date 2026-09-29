@@ -12,14 +12,44 @@ struct CheckError {
     message: String,
 }
 
-pub(crate) fn run_check(files: &[PathBuf], json: bool, when_exhaustive: bool) {
+/// A user-supplied input path that could not be processed at all (missing
+/// path, failed directory traversal, neither file nor directory).
+#[derive(Debug)]
+pub(crate) struct InputError {
+    pub(crate) file: String,
+    pub(crate) message: String,
+}
+
+/// Result of expanding user-supplied paths into concrete source files.
+/// `input_errors` must be surfaced as failures; `empty_dirs` are reported
+/// separately and are not errors.
+#[derive(Debug, Default)]
+pub(crate) struct ExpandedFiles {
+    pub(crate) files: Vec<PathBuf>,
+    pub(crate) input_errors: Vec<InputError>,
+    pub(crate) empty_dirs: Vec<PathBuf>,
+}
+
+pub(crate) fn run_check(expanded: &ExpandedFiles, json: bool, when_exhaustive: bool) {
     use crate::parser::parse_by_extension;
 
     let mut errors: Vec<CheckError> = Vec::new();
     let mut files_ok = 0u32;
     let mut files_err = 0u32;
 
-    for file in files {
+    // Unprocessable inputs (missing paths, failed traversals) are structured
+    // failures — they must make the run exit nonzero, never a silent success.
+    for input_error in &expanded.input_errors {
+        errors.push(CheckError {
+            file: input_error.file.clone(),
+            line: 0,
+            col: 0,
+            message: input_error.message.clone(),
+        });
+        files_err += 1;
+    }
+
+    for file in &expanded.files {
         let content = match std::fs::read_to_string(file) {
             Ok(c) => c,
             Err(e) => {
@@ -60,6 +90,11 @@ pub(crate) fn run_check(files: &[PathBuf], json: bool, when_exhaustive: bool) {
             "files_ok": files_ok,
             "files_with_errors": files_err,
             "errors": errors,
+            "empty_dirs": expanded
+                .empty_dirs
+                .iter()
+                .map(|d| d.to_string_lossy())
+                .collect::<Vec<_>>(),
         });
         println!(
             "{}",
@@ -69,6 +104,12 @@ pub(crate) fn run_check(files: &[PathBuf], json: bool, when_exhaustive: bool) {
         for e in &errors {
             println!("{}:{}:{}: {}", e.file, e.line, e.col, e.message);
         }
+        for d in &expanded.empty_dirs {
+            println!(
+                "note: {}: no checkable sources found in directory",
+                d.display()
+            );
+        }
         if errors.is_empty() {
             println!("All {} files OK.", files_ok);
         } else {
@@ -77,7 +118,7 @@ pub(crate) fn run_check(files: &[PathBuf], json: bool, when_exhaustive: bool) {
     }
 
     if when_exhaustive {
-        check_when_exhaustive(files);
+        check_when_exhaustive(&expanded.files);
     }
 
     if !errors.is_empty() {
@@ -85,30 +126,61 @@ pub(crate) fn run_check(files: &[PathBuf], json: bool, when_exhaustive: bool) {
     }
 }
 
-pub(crate) fn expand_file_list(paths: &[PathBuf]) -> Vec<PathBuf> {
-    let mut result = Vec::new();
+pub(crate) fn expand_file_list(paths: &[PathBuf]) -> ExpandedFiles {
+    let mut result = ExpandedFiles::default();
     for path in paths {
         if path.is_dir() {
-            let walker = walkdir::WalkDir::new(path)
-                .into_iter()
-                .filter_map(|e| e.ok());
-            for entry in walker {
+            expand_directory(path, &mut result);
+        } else if path.is_file() {
+            result.files.push(path.clone());
+        } else {
+            let message = if path.exists() {
+                "not a regular file or directory".to_string()
+            } else {
+                "no such file or directory".to_string()
+            };
+            result.input_errors.push(InputError {
+                file: path.to_string_lossy().into_owned(),
+                message,
+            });
+        }
+    }
+    result
+}
+
+fn expand_directory(dir: &Path, result: &mut ExpandedFiles) {
+    let mut found = 0usize;
+    let mut traversal_failed = false;
+    for entry in walkdir::WalkDir::new(dir) {
+        match entry {
+            Ok(entry) => {
                 let p = entry.path();
                 if p.is_file() {
                     if let Some(ext) = p.extension() {
                         if matches!(ext.to_str(), Some("kt" | "kts" | "java" | "swift")) {
-                            result.push(p.to_path_buf());
+                            result.files.push(p.to_path_buf());
+                            found += 1;
                         }
                     }
                 }
             }
-        } else if path.is_file() {
-            result.push(path.clone());
-        } else {
-            eprintln!("warning: {}: no such file or directory", path.display());
+            Err(err) => {
+                traversal_failed = true;
+                let path = err.path().unwrap_or(dir).to_string_lossy().into_owned();
+                let message = match err.io_error() {
+                    Some(io) => format!("traversal error: {io}"),
+                    None => "traversal error".to_string(),
+                };
+                result.input_errors.push(InputError {
+                    file: path,
+                    message,
+                });
+            }
         }
     }
-    result
+    if found == 0 && !traversal_failed {
+        result.empty_dirs.push(dir.to_path_buf());
+    }
 }
 
 // ── when exhaustiveness check ──────────────────────────────────────────────

@@ -439,6 +439,9 @@ pub(crate) const KIND_OBJECT_BODY: &str = "object_body";
 
 // ─── Java structural node kinds ───────────────────────────────────────────────
 pub(crate) const KIND_SCOPED_TYPE_IDENT: &str = "scoped_type_identifier";
+pub(crate) const KIND_METHOD_REFERENCE: &str = "method_reference";
+pub(crate) const KIND_OBJECT_CREATION_EXPR: &str = "object_creation_expression";
+pub(crate) const KIND_GENERIC_TYPE: &str = "generic_type";
 pub(crate) const KIND_VAR_DECLARATOR: &str = "variable_declarator";
 pub(crate) const KIND_ENUM_JAVA_DECL: &str = "enum_declaration";
 pub(crate) const KIND_FORMAL_PARAM: &str = "formal_parameter";
@@ -479,3 +482,14 @@ pub(crate) const KIND_TRY_EXPR: &str = "try_expression";
 pub(crate) const KIND_FINALLY_BLOCK: &str = "finally_block";
 pub(crate) const KIND_SECONDARY_CTOR: &str = "secondary_constructor";
 pub(crate) const KIND_ANON_INIT: &str = "anonymous_initializer";
+
+// Reference usage contexts.
+pub(crate) const KIND_ASSIGNMENT: &str = "assignment";
+pub(crate) const KIND_ASSIGNMENT_EXPR: &str = "assignment_expression";
+pub(crate) const KIND_DIRECTLY_ASSIGNABLE_EXPR: &str = "directly_assignable_expression";
+pub(crate) const KIND_FIELD_ACCESS: &str = "field_access";
+pub(crate) const KIND_POSTFIX_EXPR: &str = "postfix_expression";
+pub(crate) const KIND_TYPE_PROJECTION: &str = "type_projection";
+pub(crate) const KIND_FUNCTION_TYPE: &str = "function_type";
+pub(crate) const KIND_NULLABLE_TYPE: &str = "nullable_type";
+pub(crate) const KIND_PROGRAM: &str = "program";

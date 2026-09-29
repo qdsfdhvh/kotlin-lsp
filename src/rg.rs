@@ -809,15 +809,22 @@ pub(crate) fn parse_rg_line(line: &str) -> Option<Location> {
 /// Windows-aware: a leading `X:` drive prefix on the path is not treated as
 /// a field separator. Returns `None` if the line is malformed.
 fn split_rg_fields(line: &str) -> Option<(&str, u32, u32, &str)> {
-    // If the line starts with a Windows drive prefix (`X:` followed by `\` or
-    // `/`), advance past the colon so it isn't mistaken for the line-number
-    // separator.
-    let scan_from = if line.len() >= 3
-        && line.as_bytes()[0].is_ascii_alphabetic()
-        && line.as_bytes()[1] == b':'
-        && (line.as_bytes()[2] == b'\\' || line.as_bytes()[2] == b'/')
-    {
-        2 // skip the drive colon when looking for field separators
+    let bytes = line.as_bytes();
+    let drive_colon_at = |i: usize| -> bool {
+        bytes.len() >= i + 3
+            && bytes[i].is_ascii_alphabetic()
+            && bytes[i + 1] == b':'
+            && (bytes[i + 2] == b'\\' || bytes[i + 2] == b'/')
+    };
+    // Skip a Windows drive colon (`X:` followed by `\` or `/`) so it isn't
+    // mistaken for the line-number separator. Canonical search roots make rg
+    // echo verbatim-prefixed paths (`\\?\C:\…` — also the `//?/C:/…` spelling),
+    // whose embedded colon sits behind the prefix; skip prefix + colon there.
+    // UNC paths (`\\?\UNC\…`) have no embedded colon and need no skip.
+    let scan_from = if drive_colon_at(0) {
+        2
+    } else if (bytes.starts_with(b"\\\\?\\") || bytes.starts_with(b"//?/")) && drive_colon_at(4) {
+        6
     } else {
         0
     };

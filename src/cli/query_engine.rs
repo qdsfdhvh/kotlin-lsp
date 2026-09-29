@@ -38,6 +38,29 @@ impl IndexQueryEngine {
     pub(crate) fn new(index: Arc<Indexer>) -> Self {
         Self { index }
     }
+
+    pub(crate) fn references_with_kind(
+        &self,
+        name: &str,
+        ref_kind: Option<&str>,
+    ) -> Result<Vec<Location>, String> {
+        use super::ref_kind::{classify_reference, RefKind};
+        let wanted = match ref_kind {
+            None | Some("all" | "reference") => None,
+            Some(value) => {
+                Some(RefKind::from_arg(value).ok_or_else(|| format!("invalid refKind: {value}"))?)
+            }
+        };
+        let locations = if wanted == Some(RefKind::Import) {
+            crate::query::references::reference_locations(&self.index, name, true)
+        } else {
+            self.references(name)
+        };
+        Ok(locations
+            .into_iter()
+            .filter(|loc| wanted.is_none_or(|kind| classify_reference(loc, name) == kind))
+            .collect())
+    }
 }
 
 impl QueryEngine for IndexQueryEngine {
@@ -46,7 +69,7 @@ impl QueryEngine for IndexQueryEngine {
     }
 
     fn references(&self, name: &str) -> Vec<Location> {
-        self.index.definition_locations(name)
+        crate::query::references::reference_locations(&self.index, name, false)
     }
 
     fn find_symbols(&self, name: &str, filters: &ResultFilters) -> Vec<CliResult> {
@@ -103,12 +126,7 @@ impl QueryEngine for IndexQueryEngine {
         let lines: Vec<&str> = content.lines().collect();
         let line_idx = (line as usize).saturating_sub(1);
         let line_text = lines.get(line_idx)?;
-        let col_idx = (col as usize).saturating_sub(1).min(line_text.len());
-        let before = &line_text[..col_idx];
-        let word = before
-            .rsplit(|c: char| !c.is_alphanumeric() && c != '_')
-            .next()
-            .unwrap_or("");
+        let word = crate::StrExt::word_at_utf16_col(*line_text, col.saturating_sub(1) as usize);
         if word.is_empty() {
             return None;
         }

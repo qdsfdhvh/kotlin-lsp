@@ -29,6 +29,9 @@ fn check_valid_file_exits_zero() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(dir.path(), "src/Ok.kt", "class Ok(val x: Int)");
     let output = Command::new(BIN)
+        .env("HOME", dir.path())
+        .env("USERPROFILE", dir.path())
+        .env("XDG_CACHE_HOME", dir.path().join("cache"))
         .args(["check", &dir.path().join("src/Ok.kt").to_string_lossy()])
         .output()
         .unwrap();
@@ -40,10 +43,15 @@ fn check_syntax_error_exits_one() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(dir.path(), "src/Bad.kt", "class Bad {");
     let output = Command::new(BIN)
+        .env("HOME", dir.path())
+        .env("USERPROFILE", dir.path())
+        .env("XDG_CACHE_HOME", dir.path().join("cache"))
         .args(["check", &dir.path().join("src/Bad.kt").to_string_lossy()])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "check bad file should exit 1");
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Bad.kt:1:1:"), "{stdout}");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("error"),
@@ -57,6 +65,9 @@ fn check_json_output() {
     let dir = tempfile::tempdir().unwrap();
     write_fixture(dir.path(), "src/Bad.kt", "class Bad {");
     let output = Command::new(BIN)
+        .env("HOME", dir.path())
+        .env("USERPROFILE", dir.path())
+        .env("XDG_CACHE_HOME", dir.path().join("cache"))
         .args([
             "check",
             "--json",
@@ -68,6 +79,31 @@ fn check_json_output() {
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(v["files_ok"], 0);
     assert_eq!(v["files_with_errors"], 1);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    let errors = v["errors"].as_array().expect("diagnostics");
+    assert!(!errors.is_empty());
+    let text_output = Command::new(BIN)
+        .env("HOME", dir.path())
+        .env("USERPROFILE", dir.path())
+        .env("XDG_CACHE_HOME", dir.path().join("cache"))
+        .arg("check")
+        .arg(dir.path().join("src/Bad.kt"))
+        .output()
+        .expect("text syntax diagnostics");
+    assert_eq!(text_output.status.code(), Some(1));
+    let text = String::from_utf8_lossy(&text_output.stdout);
+    for error in errors {
+        assert_eq!(
+            error["file"],
+            dir.path().join("src/Bad.kt").to_string_lossy().as_ref()
+        );
+        assert_eq!(error["line"], 1);
+        assert_eq!(error["col"], 1);
+        let message = error["message"].as_str().expect("diagnostic message");
+        assert!(!message.is_empty());
+        assert!(text.contains(&format!("Bad.kt:1:1: {message}")), "{text}");
+    }
 }
 
 // ── organize-imports ─────────────────────────────────────────────────────────

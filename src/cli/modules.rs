@@ -31,8 +31,8 @@ struct DepsOutput {
 
 // ── Entry points ────────────────────────────────────────────────────────────
 
-pub(crate) fn run_modules(json: bool) {
-    let modules = discover_modules();
+pub(crate) fn run_modules(json: bool, explicit_root: Option<&Path>) {
+    let modules = discover_modules(explicit_root);
     if json {
         let output = ModulesOutput { modules };
         println!(
@@ -52,8 +52,13 @@ pub(crate) fn run_modules(json: bool) {
     }
 }
 
-pub(crate) fn run_module_deps(module: &str, direction: &str, json: bool) {
-    let modules = discover_modules();
+pub(crate) fn run_module_deps(
+    module: &str,
+    direction: &str,
+    json: bool,
+    explicit_root: Option<&Path>,
+) {
+    let modules = discover_modules(explicit_root);
 
     let deps = modules
         .iter()
@@ -94,9 +99,8 @@ pub(crate) fn run_module_deps(module: &str, direction: &str, json: bool) {
     }
 }
 
-pub(crate) fn run_module_files(module: &str, json: bool) {
-    let root = find_project_root();
-    let modules = discover_modules_in_root(&root);
+pub(crate) fn run_module_files(module: &str, json: bool, explicit_root: Option<&Path>) {
+    let modules = discover_modules(explicit_root);
 
     let module = modules.iter().find(|m| m.name == module);
     let files = module
@@ -120,8 +124,10 @@ pub(crate) fn run_module_files(module: &str, json: bool) {
 
 // ── Module discovery ────────────────────────────────────────────────────────
 
-pub(crate) fn discover_modules() -> Vec<ModuleInfo> {
-    let root = find_project_root();
+pub(crate) fn discover_modules(explicit_root: Option<&Path>) -> Vec<ModuleInfo> {
+    let root = explicit_root
+        .map(Path::to_path_buf)
+        .unwrap_or_else(find_project_root);
     discover_modules_in_root(&root)
 }
 

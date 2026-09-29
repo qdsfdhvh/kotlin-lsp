@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use tower_lsp::lsp_types::{Position, Range, TextEdit, Url};
+use tower_lsp::lsp_types::{TextEdit, Url};
 
 use crate::cli::edit::{apply_file_edits, FileEdit};
 use crate::query::engine::WorkspaceQueryEngine;
@@ -302,19 +302,14 @@ pub(crate) fn run_batch_imports(
         } else {
             format!("{stmt}\n")
         };
-        text_edits.push(TextEdit {
-            range: Range {
-                start: Position {
-                    line: import_line,
-                    character: 0,
+        text_edits.push(
+            crate::cli::edit::line_insertion_edit(&content, import_line, new_text).unwrap_or_else(
+                |error| {
+                    eprintln!("imports: {error}");
+                    std::process::exit(1);
                 },
-                end: Position {
-                    line: import_line,
-                    character: 0,
-                },
-            },
-            new_text,
-        });
+            ),
+        );
     }
 
     // Sort descending so earlier insertions don't shift later positions.
@@ -330,7 +325,17 @@ pub(crate) fn run_batch_imports(
         let (old_lines, new_lines) = if file_edit.edits.is_empty() {
             (lines.clone(), lines.clone())
         } else {
-            let new = crate::cli::edit::apply_text_edits_to_lines(&lines, &file_edit.edits);
+            let preview = crate::cli::edit::preview_file_edits(std::slice::from_ref(&file_edit))
+                .unwrap_or_else(|error| {
+                    eprintln!("preview error: {error}");
+                    std::process::exit(1);
+                });
+            let new = preview[&file_edit.path]
+                .1
+                .concat()
+                .lines()
+                .map(str::to_string)
+                .collect();
             (lines.clone(), new)
         };
         let result = serde_json::json!({
@@ -356,6 +361,7 @@ pub(crate) fn run_batch_imports(
     } else if apply && !dry_run {
         let summary = apply_file_edits(&[file_edit], None, false);
         println!("{}", serde_json::to_string(&summary).expect("json"));
+        summary.exit_if_failed();
     } else {
         println!(
             "{}: {} unique imports",

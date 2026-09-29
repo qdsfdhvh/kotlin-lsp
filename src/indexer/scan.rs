@@ -309,6 +309,17 @@ fn discover_workspace_paths(
     } else {
         find_source_files(root, matcher_ref)
     };
+    // Canonical native identity: one file discovered through different root
+    // spellings (8.3 short names, `\\?\` verbatim prefixes, symlinked or
+    // relative roots) must yield one index URI and one cache key, matching the
+    // canonicalized cursor operands every CLI query resolves. Dedupe collapses
+    // same-file spellings that would otherwise duplicate indexed symbols.
+    paths = paths
+        .into_iter()
+        .map(|p| crate::path_util::canonical_native(&p))
+        .collect();
+    paths.sort();
+    paths.dedup();
     let total = paths.len();
     let effective_max = if cache.as_ref().is_some_and(|c| c.complete_scan) {
         MAX_FILES_UNLIMITED

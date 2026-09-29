@@ -1,12 +1,15 @@
-//! Batch query CLI — `kotlin-lsp query` accepts a JSON array of query specs
+//! Batch query CLI — `kotlin-lsp tool query` accepts a JSON array of query specs
 //! via stdin and returns results in order. Loads the index only once.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use super::query_engine::{IndexQueryEngine, QueryEngine};
 use crate::indexer::Indexer;
+use crate::query::references::sort_locations;
+use crate::StrExt;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -44,76 +47,118 @@ struct QueryResult {
     data: serde_json::Value,
 }
 
-pub(crate) async fn run_query(json: bool) {
+pub(crate) async fn run_query(json: bool, explicit_root: Option<&Path>, no_stdlib: bool) {
     let mut input = String::new();
-    std::io::Read::read_to_string(&mut std::io::stdin(), &mut input).expect("failed to read stdin");
-
-    let specs: Vec<QuerySpec> = serde_json::from_str(&input).unwrap_or_else(|e| {
+    if let Err(error) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input) {
+        eprintln!("Failed to read query stdin: {error}");
+        std::process::exit(1);
+    }
+    let specs: Vec<serde_json::Value> = serde_json::from_str(&input).unwrap_or_else(|e| {
         eprintln!("Invalid query JSON: {e}");
         std::process::exit(1);
     });
-
-    let root = crate::cli::run::resolve_root_for_file(None, &PathBuf::from("."));
-    let index = crate::cli::run::build_index(&root, false).await;
-
-    let mut results: Vec<QueryResult> = Vec::new();
-
-    for spec in &specs {
-        let result = execute_query(spec, &index, &root);
+    let root = crate::cli::run::resolve_root(explicit_root);
+    let root = root.canonicalize().unwrap_or_else(|error| {
+        eprintln!("Invalid query root {}: {error}", root.display());
+        std::process::exit(1);
+    });
+    if !root.is_dir() {
+        eprintln!("Invalid query root {}: not a directory", root.display());
+        std::process::exit(1);
+    }
+    // Without --root, retain ordinary cwd-relative file operands even when
+    // workspace discovery finds a .git ancestor.
+    let file_base = explicit_root.unwrap_or_else(|| Path::new("."));
+    let index = crate::cli::run::build_index(&root, no_stdlib).await;
+    let engine = IndexQueryEngine::new(Arc::clone(&index));
+    let mut results = Vec::with_capacity(specs.len());
+    for value in specs {
+        let query_type = value
+            .get("type")
+            .and_then(|t| t.as_str())
+            .unwrap_or("unknown")
+            .to_owned();
+        let result = serde_json::from_value::<QuerySpec>(value)
+            .map_err(|error| error.to_string())
+            .and_then(|spec| execute_query(&spec, &index, &engine, file_base))
+            .unwrap_or_else(|error| QueryResult {
+                query_type,
+                data: serde_json::json!({ "error": error }),
+            });
         results.push(result);
     }
-
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&results).expect("serialize JSON")
+            serde_json::to_string(&results).expect("serialize JSON")
         );
     } else {
         for r in &results {
-            println!(
-                "[{}] {}",
-                r.query_type,
-                serde_json::to_string(&r.data).unwrap_or_default()
-            );
+            println!("[{}] {}", r.query_type, r.data);
         }
+    }
+    if results
+        .iter()
+        .any(|result| result.data.get("error").is_some())
+    {
+        std::process::exit(1);
     }
 }
 
-fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path) -> QueryResult {
-    match spec {
+/// Resolve file operands against the batch root and validate human UTF-16 positions.
+fn word_at(root: &Path, file: &str, line: u32, col: u32) -> Result<(PathBuf, String), String> {
+    if line == 0 || col == 0 {
+        return Err("line and col must be 1-based".into());
+    }
+    let path = root
+        .join(file)
+        .canonicalize()
+        .map_err(|error| format!("{file}: {error}"))?;
+    let source = std::fs::read_to_string(&path).map_err(|error| format!("{file}: {error}"))?;
+    let text = source
+        .lines()
+        .nth(line as usize - 1)
+        .ok_or("line is outside the file")?;
+    if col as usize > text.encode_utf16().count() + 1 {
+        return Err("col is outside the line".into());
+    }
+    let word = text.word_at_utf16_col(col as usize - 1);
+    if word.is_empty() {
+        return Err("no identifier at position".into());
+    }
+    Ok((path, word))
+}
+
+fn location_results(mut locations: Vec<tower_lsp::lsp_types::Location>) -> Vec<serde_json::Value> {
+    sort_locations(&mut locations);
+    locations
+        .iter()
+        .map(|loc| {
+            serde_json::json!({
+                "file": loc.uri.to_file_path().map(|p| p.display().to_string()).unwrap_or_default(),
+                "line": loc.range.start.line + 1,
+                "col": loc.range.start.character + 1,
+            })
+        })
+        .collect()
+}
+
+fn execute_query(
+    spec: &QuerySpec,
+    index: &Arc<Indexer>,
+    engine: &IndexQueryEngine,
+    root: &Path,
+) -> Result<QueryResult, String> {
+    Ok(match spec {
         QuerySpec::Definition { name } => {
-            let locs = index.definition_locations(name);
-            let results: Vec<serde_json::Value> = locs
-                .iter()
-                .map(|loc| {
-                    serde_json::json!({
-                        "file": loc.uri.to_file_path().map(|p| p.display().to_string()).unwrap_or_default(),
-                        "line": loc.range.start.line + 1,
-                        "col": loc.range.start.character + 1,
-                    })
-                })
-                .collect();
+            let results = location_results(engine.definitions(name));
             QueryResult {
                 query_type: "definition".to_string(),
                 data: serde_json::json!({ "results": results }),
             }
         }
         QuerySpec::References { name, ref_kind } => {
-            let _filters = crate::cli::args::ResultFilters {
-                ref_kind: ref_kind.clone(),
-                ..Default::default()
-            };
-            let locs = index.definition_locations(name);
-            let results: Vec<serde_json::Value> = locs
-                .iter()
-                .map(|loc| {
-                    serde_json::json!({
-                        "file": loc.uri.to_file_path().map(|p| p.display().to_string()).unwrap_or_default(),
-                        "line": loc.range.start.line + 1,
-                        "col": loc.range.start.character + 1,
-                    })
-                })
-                .collect();
+            let results = location_results(engine.references_with_kind(name, ref_kind.as_deref())?);
             QueryResult {
                 query_type: "references".to_string(),
                 data: serde_json::json!({
@@ -123,39 +168,27 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
             }
         }
         QuerySpec::Hover { file, line, col } => {
-            let path = std::path::Path::new(file);
-            let _uri = tower_lsp::lsp_types::Url::from_file_path(path)
-                .unwrap_or_else(|_| tower_lsp::lsp_types::Url::parse("file:///").unwrap());
-            // Simple word extraction: re-read the file
-            let word = std::fs::read_to_string(path)
-                .ok()
-                .and_then(|src| {
-                    let lines: Vec<&str> = src.lines().collect();
-                    let line_idx = (*line as usize).saturating_sub(1);
-                    lines.get(line_idx).and_then(|l| {
-                        let col_idx = (*col as usize).saturating_sub(1);
-                        let before = &l[..col_idx.min(l.len())];
-                        before
-                            .rsplit(|c: char| !c.is_alphanumeric() && c != '_')
-                            .next()
-                            .map(|s| s.to_string())
-                    })
-                })
-                .unwrap_or_default();
-            let locs = index.definition_locations(&word);
-            let signature = locs.first().map(|loc| {
-                let uri_str = loc.uri.to_string();
-                index
-                    .files
-                    .get(&uri_str)
-                    .and_then(|f| {
-                        f.symbols
-                            .iter()
-                            .find(|s| s.name == word)
-                            .map(|s| s.detail.clone())
-                    })
-                    .unwrap_or_default()
-            });
+            let (_path, word) = word_at(root, file, *line, *col)?;
+            let mut locations = engine.definitions(&word);
+            sort_locations(&mut locations);
+            // Reuse signature enrichment to load cached source lines. Empty detail
+            // is not a signature; ambiguous name-only matches remain honest misses.
+            let signature = if locations.len() == 1 {
+                use crate::indexer::resolution::{
+                    enrich_at_location, ResolveOptions, SubstitutionContext,
+                };
+                enrich_at_location(
+                    index.as_ref(),
+                    &locations[0],
+                    &word,
+                    SubstitutionContext::None,
+                    &ResolveOptions::hover(),
+                )
+                .map(|symbol| symbol.signature)
+                .filter(|signature| !signature.is_empty())
+            } else {
+                None
+            };
             QueryResult {
                 query_type: "hover".to_string(),
                 data: serde_json::json!({
@@ -165,10 +198,11 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
             }
         }
         QuerySpec::Summarize { name } => {
-            let locs = index.definition_locations(name);
+            let mut locs = engine.definitions(name);
+            sort_locations(&mut locs);
             let summary: serde_json::Value = if let Some(loc) = locs.first() {
                 let uri_str = loc.uri.to_string();
-                if let Some(file_ref) = index.files.get(&uri_str) {
+                if let Some(file_ref) = index.get_file(&uri_str) {
                     let sym = file_ref.symbols.iter().find(|s| s.name == *name);
                     if let Some(sym) = sym {
                         serde_json::json!({
@@ -198,36 +232,19 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
             col,
             depth,
         } => {
-            let path = std::path::Path::new(file);
-            let _uri = tower_lsp::lsp_types::Url::from_file_path(path)
-                .unwrap_or_else(|_| tower_lsp::lsp_types::Url::parse("file:///").unwrap());
-            let word = std::fs::read_to_string(path)
-                .ok()
-                .and_then(|src| {
-                    let lines: Vec<&str> = src.lines().collect();
-                    let line_idx = (*line as usize).saturating_sub(1);
-                    lines.get(line_idx).and_then(|l| {
-                        let col_idx = (*col as usize).saturating_sub(1);
-                        let before = &l[..col_idx.min(l.len())];
-                        before
-                            .rsplit(|c: char| !c.is_alphanumeric() && c != '_')
-                            .next()
-                            .map(|s| s.to_string())
-                    })
-                })
-                .unwrap_or_default();
             let depth = depth.unwrap_or(1);
-            let callers: Vec<serde_json::Value> = index
-                .call_edges
-                .get(&word)
-                .map(|entries| {
-                    entries
-                        .iter()
-                        .take(20)
-                        .map(|(file, name)| serde_json::json!({ "name": name, "file": file }))
-                        .collect()
-                })
-                .unwrap_or_default();
+            if depth != 1 {
+                return Err("callers depth supports only 1 (or omitted)".into());
+            }
+            let (_path, word) = word_at(root, file, *line, *col)?;
+            let mut entries = engine.callers_of(&word);
+            entries.sort();
+            entries.dedup();
+            let callers: Vec<serde_json::Value> = entries
+                .iter()
+                .take(20)
+                .map(|(file, name)| serde_json::json!({ "name": name, "file": file }))
+                .collect();
             QueryResult {
                 query_type: "callers".to_string(),
                 data: serde_json::json!({
@@ -240,7 +257,9 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
         QuerySpec::Implementations { name } => {
             let results: Vec<serde_json::Value> =
                 if let Some(locs) = index.subtypes.get(name.as_str()) {
-                    locs.value()
+                    let mut locations = locs.value().clone();
+                    sort_locations(&mut locations);
+                    locations
                         .iter()
                         .take(50)
                         .map(|loc| {
@@ -261,7 +280,9 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
         QuerySpec::Subclasses { name } => {
             let results: Vec<serde_json::Value> =
                 if let Some(locs) = index.subtypes.get(name.as_str()) {
-                    locs.value()
+                    let mut locations = locs.value().clone();
+                    sort_locations(&mut locations);
+                    locations
                         .iter()
                         .take(50)
                         .map(|loc| {
@@ -279,5 +300,5 @@ fn execute_query(spec: &QuerySpec, index: &Arc<Indexer>, _root: &std::path::Path
                 data: serde_json::json!({ "name": name, "results": results }),
             }
         }
-    }
+    })
 }

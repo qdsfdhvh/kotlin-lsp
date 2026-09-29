@@ -823,6 +823,7 @@ dependencies = [
  "ignore",
  "lexopt",
  "log",
+ "same-file",
  "serde",
  "serde_json",
  "sha2",
