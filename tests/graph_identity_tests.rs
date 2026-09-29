@@ -2,7 +2,9 @@
 //! docs/codebase/GRAPH_IDENTITY.md and P6 observation artifacts, not as blessed results.
 #[path = "support/p6_fixture.rs"]
 mod p6_fixture;
-use p6_fixture::{expected_path, success, Fixture};
+use p6_fixture::{
+    canonical_fixture_file, canonical_reported_file, expected_path, success, Fixture,
+};
 use serde_json::{json, Value};
 
 fn identity_case(
@@ -156,20 +158,69 @@ fn unique_control_has_exact_reach_graph_snapshot_edges_cold_and_warm() {
         );
         std::fs::write(f.dir.path().join("cwd/Decoy.kt"), "fun foreignDecoy() {}\n")
             .expect("decoy");
-        let file = expected_path(&f.root.join("Unique.kt"));
-        let uri = tower_lsp::lsp_types::Url::from_file_path(&file)
-            .expect("URI")
-            .to_string();
+        let canonical = canonical_fixture_file(&f.root.join("Unique.kt"));
         for warm in [false, true] {
             assert_eq!(f.root.join(".cache/kotlin-lsp/index.bin").exists(), warm);
             let mut args = command.clone();
             args.push("--json");
             let data = success(&f.run(&args, None));
+            // Reported path spellings differ per command and platform (native
+            // path, full `file://` URI, `/C:/…` URL tail, 8.3 short names);
+            // compare canonical filesystem identity and keep every non-path
+            // field, key set and result-set size exact.
             match command[1] {
-                "reach" => assert_eq!(
-                    data,
-                    json!({"entry":"uniqueEntry","target":"uniqueLeaf","truncated":false,"paths":[{"nodes":[{"file":uri,"line":2,"name":"uniqueEntry"},{"file":uri,"line":1,"name":"uniqueLeaf"}]}]})
-                ),
+                "reach" => {
+                    let mut keys: Vec<&str> = data
+                        .as_object()
+                        .expect("reach object")
+                        .keys()
+                        .map(String::as_str)
+                        .collect();
+                    keys.sort_unstable();
+                    assert_eq!(keys, ["entry", "paths", "target", "truncated"], "{data}");
+                    assert_eq!(data["entry"], "uniqueEntry", "{data}");
+                    assert_eq!(data["target"], "uniqueLeaf", "{data}");
+                    assert_eq!(data["truncated"], false, "{data}");
+                    let paths = data["paths"].as_array().expect("paths");
+                    assert_eq!(paths.len(), 1, "{data}");
+                    // Path spellings forced whole-object equality to be replaced
+                    // with per-field checks, but the key sets of nested objects
+                    // stay exact: an unexpected field must still fail.
+                    let mut path_keys: Vec<&str> = paths[0]
+                        .as_object()
+                        .expect("path object")
+                        .keys()
+                        .map(String::as_str)
+                        .collect();
+                    path_keys.sort_unstable();
+                    assert_eq!(path_keys, ["nodes"], "{data}");
+                    let nodes = paths[0]["nodes"].as_array().expect("nodes");
+                    assert_eq!(nodes.len(), 2, "{data}");
+                    for node in nodes {
+                        let mut node_keys: Vec<&str> = node
+                            .as_object()
+                            .expect("node object")
+                            .keys()
+                            .map(String::as_str)
+                            .collect();
+                        node_keys.sort_unstable();
+                        assert_eq!(node_keys, ["file", "line", "name"], "{data}");
+                    }
+                    let files: Vec<&str> = nodes
+                        .iter()
+                        .map(|node| node["file"].as_str().expect("URI"))
+                        .collect();
+                    assert!(
+                        files.iter().all(|file| file.starts_with("file:")),
+                        "reach nodes report file URIs: {files:?}"
+                    );
+                    assert_eq!(files[0], files[1], "{data}");
+                    assert_eq!(canonical_reported_file(files[0]), canonical, "{data}");
+                    assert_eq!(nodes[0]["name"], "uniqueEntry", "{data}");
+                    assert_eq!(nodes[0]["line"], 2, "{data}");
+                    assert_eq!(nodes[1]["name"], "uniqueLeaf", "{data}");
+                    assert_eq!(nodes[1]["line"], 1, "{data}");
+                }
                 "graph" => {
                     let mut symbols: Vec<_> = data["symbols"]
                         .as_array()
@@ -179,10 +230,31 @@ fn unique_control_has_exact_reach_graph_snapshot_edges_cold_and_warm() {
                         .collect();
                     symbols.sort_unstable();
                     assert_eq!(symbols, ["uniqueEntry", "uniqueLeaf"]);
+                    let edges = data["edges"].as_object().expect("edges");
+                    let mut edge_keys: Vec<&str> = edges.keys().map(String::as_str).collect();
+                    edge_keys.sort_unstable();
                     assert_eq!(
-                        data["edges"],
-                        json!({"calls":[{"callee":"uniqueLeaf","caller":"uniqueEntry","caller_file":uri}],"imports":[],"inheritance":[],"overrides":[]})
+                        edge_keys,
+                        ["calls", "imports", "inheritance", "overrides"],
+                        "{data}"
                     );
+                    let calls = edges["calls"].as_array().expect("calls");
+                    assert_eq!(calls.len(), 1, "{data}");
+                    let call = calls[0].as_object().expect("call");
+                    let mut call_keys: Vec<&str> = call.keys().map(String::as_str).collect();
+                    call_keys.sort_unstable();
+                    assert_eq!(call_keys, ["callee", "caller", "caller_file"], "{data}");
+                    assert_eq!(call["callee"], "uniqueLeaf", "{data}");
+                    assert_eq!(call["caller"], "uniqueEntry", "{data}");
+                    let caller_file = call["caller_file"].as_str().expect("URI");
+                    assert!(
+                        caller_file.starts_with("file:"),
+                        "graph caller_file is a URI: {caller_file}"
+                    );
+                    assert_eq!(canonical_reported_file(caller_file), canonical, "{data}");
+                    for empty in ["imports", "inheritance", "overrides"] {
+                        assert_eq!(edges[empty], json!([]), "{data}");
+                    }
                 }
                 "snapshot" => {
                     assert_eq!(
@@ -197,7 +269,7 @@ fn unique_control_has_exact_reach_graph_snapshot_edges_cold_and_warm() {
                             (
                                 s["name"].as_str().expect("name"),
                                 s["line"].as_u64().expect("line"),
-                                s["file"].as_str().expect("file"),
+                                canonical_reported_file(s["file"].as_str().expect("file")),
                             )
                         })
                         .collect();
@@ -205,8 +277,8 @@ fn unique_control_has_exact_reach_graph_snapshot_edges_cold_and_warm() {
                     assert_eq!(
                         symbols,
                         [
-                            ("uniqueEntry", 2, file.as_str()),
-                            ("uniqueLeaf", 1, file.as_str())
+                            ("uniqueEntry", 2, canonical.clone()),
+                            ("uniqueLeaf", 1, canonical.clone())
                         ]
                     );
                 }

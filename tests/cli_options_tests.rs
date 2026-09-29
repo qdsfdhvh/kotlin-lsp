@@ -71,18 +71,14 @@ fn success(output: &Output) -> Value {
     assert!(output.stderr.is_empty(), "{output:?}");
     serde_json::from_slice(&output.stdout).expect("JSON response")
 }
+#[path = "support/p6_fixture.rs"]
+mod p6_fixture;
+
 fn path_identity(value: &Value) -> PathBuf {
-    let text = value.as_str().expect("path or URI");
-    let path = if text.starts_with("file:") {
-        tower_lsp::lsp_types::Url::parse(text)
-            .expect("URI")
-            .to_file_path()
-            .expect("file URI")
-    } else {
-        PathBuf::from(text)
-    };
-    path.canonicalize()
-        .unwrap_or_else(|error| panic!("existing full identity {text:?}: {error}"))
+    // Semantic search retains escaped URI tails (`/C:/…` on Windows), while
+    // other commands report native paths or complete URIs. Compare the full
+    // filesystem identity; never discard directories or decode native `%`.
+    p6_fixture::canonical_reported_file(value.as_str().expect("path or URI"))
 }
 fn assert_path(value: &Value, expected: &Path) {
     assert_eq!(

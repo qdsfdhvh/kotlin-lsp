@@ -237,7 +237,9 @@ successful items even if the process exits 1 for another item's `error`.
   call edges (max 20), not overload-resolved identities. Subtype results cap at 50.
 
 `--no-stdlib` excludes `~/.kotlin-lsp/sources`; `--root` selects the indexed
-workspace even when cwd differs. See the project's `docs/commands.md` for item fields.
+workspace even when cwd differs. Supply an existing directory: missing or file
+roots fail before indexing, with stderr and no results. See the project's
+`docs/commands.md` for item fields.
 
 ## Flag scope
 

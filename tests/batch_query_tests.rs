@@ -785,6 +785,28 @@ fn missing_explicit_root_fails_on_stderr_without_results() {
 }
 
 #[test]
+fn file_explicit_root_fails_before_indexing_in_text_and_json() {
+    let f = Fixture::new();
+    f.write("File.kt", "fun target() {}\n");
+    for json in [false, true] {
+        let mut cmd = f.command();
+        cmd.args(["tool", "query", "--no-stdlib", "--root"])
+            .arg(f.root.join("File.kt"));
+        if json {
+            cmd.arg("--json");
+        }
+        let out = f.raw_query(cmd, br#"[{"type":"definition","name":"target"}]"#);
+        assert_eq!(out.status.code(), Some(1), "{out:?}");
+        assert!(out.stdout.is_empty(), "{out:?}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains("Invalid query root"), "{stderr}");
+        assert!(stderr.contains("not a directory"), "{stderr}");
+        assert!(!stderr.contains("Cache:"), "{stderr}");
+    }
+    assert!(!f.root.join(".cache").exists());
+}
+
+#[test]
 fn hover_identifier_end_empty_and_surrogate_boundaries() {
     let f = Fixture::new();
     f.write("Use.kt", "fun café() {}\n\n;\nval text = \"😀\"\n");

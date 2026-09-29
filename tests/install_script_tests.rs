@@ -44,6 +44,13 @@ fn run_installer(os: &str, arch: &str, version: &str) -> (tempfile::TempDir, Out
     ] {
         std::os::unix::fs::symlink(path, root.join("bin").join(name)).expect("tool link");
     }
+    // GNU tar resolves `gzip` from PATH for -z; bsdtar (macOS) does not, so
+    // link the host gzip explicitly and keep every other PATH entry closed.
+    let gzip = ["/usr/bin/gzip", "/bin/gzip"]
+        .into_iter()
+        .find(|candidate| Path::new(candidate).exists())
+        .expect("host gzip executable beside the closed-PATH tools");
+    std::os::unix::fs::symlink(gzip, root.join("bin").join("gzip")).expect("gzip link");
     executable(&root.join("bin/uname"), "#!/bin/sh\ncase \"$1\" in -s) echo \"$TEST_OS\";; -m) echo \"$TEST_ARCH\";; *) exit 99;; esac\n");
     executable(&root.join("bin/curl"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$RECEIPT/download\"\nwhile [ \"$#\" -gt 0 ]; do\n if [ \"$1\" = -o ]; then shift; /bin/cp \"$RECEIPT/dummy.tar.gz\" \"$1\"; fi\n shift\ndone\n");
     executable(

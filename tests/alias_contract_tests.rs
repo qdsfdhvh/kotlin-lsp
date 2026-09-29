@@ -1,7 +1,7 @@
 //! Public parser aliases, error channel and real grouped-command controls.
 #[path = "support/p6_fixture.rs"]
 mod p6_fixture;
-use p6_fixture::{expected_path, success, Fixture};
+use p6_fixture::{canonical_fixture_file, canonical_reported_file, success, Fixture};
 use serde_json::Value;
 
 #[test]
@@ -80,17 +80,9 @@ fn docs_and_search_shorthands_are_live_with_nonempty_semantic_results() {
         assert_eq!(items[0]["name"], "beacon");
         assert_eq!(items[0]["line"], 3);
         let file = items[0]["file"].as_str().expect("file");
-        let path = if file.starts_with("file:") {
-            tower_lsp::lsp_types::Url::parse(file)
-                .expect("URI")
-                .to_file_path()
-                .expect("path")
-        } else {
-            file.into()
-        };
         assert_eq!(
-            expected_path(&path),
-            expected_path(&f.root.join("Beacon.kt"))
+            canonical_reported_file(file),
+            canonical_fixture_file(&f.root.join("Beacon.kt"))
         );
     }
 }

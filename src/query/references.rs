@@ -74,18 +74,26 @@ pub(crate) fn reference_locations(
         let Ok(uri) = Url::parse(&candidate) else {
             continue;
         };
-        let Ok(path) = uri.to_file_path() else {
-            continue;
-        };
-        let source = std::fs::read_to_string(&path).ok().or_else(|| {
-            index
-                .mem_lines_for(&candidate)
-                .map(|lines| lines.join("\n"))
-        });
+        // The native path is best-effort: content-only engines (and tests)
+        // carry URIs without a native path — `file:///test/…` has no drive
+        // letter on Windows — so in-memory lines must stay reachable.
+        let native_path = uri.to_file_path().ok();
+        let source = native_path
+            .as_deref()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .or_else(|| {
+                index
+                    .mem_lines_for(&candidate)
+                    .map(|lines| lines.join("\n"))
+            });
         let Some(source) = source else {
             continue;
         };
-        let language = match crate::Language::from_path(path.to_str().unwrap_or("")) {
+        let path_label = native_path
+            .as_deref()
+            .and_then(|path| path.to_str())
+            .unwrap_or(candidate.as_str());
+        let language = match crate::Language::from_path(path_label) {
             crate::Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
             crate::Language::Java => tree_sitter_java::LANGUAGE.into(),
             crate::Language::Swift => tree_sitter_swift::LANGUAGE.into(),

@@ -1,7 +1,9 @@
 //! Real CLI small-fixture baseline. Timings have no pass/fail threshold.
 #[path = "../support/p6_fixture.rs"]
 mod p6_fixture;
-use p6_fixture::{execute, expected_path, success, Fixture};
+use p6_fixture::{
+    canonical_fixture_file, canonical_reported_file, execute, expected_path, success, Fixture,
+};
 use serde_json::{json, Value};
 use std::time::Duration;
 
@@ -162,9 +164,8 @@ fn exercise(receipt: bool) {
     for symbol in symbols {
         let path = symbol["file"].as_str().expect("file");
         assert!(
-            SOURCES
-                .iter()
-                .any(|(file, _)| expected_path(&f.root.join(file)) == path),
+            SOURCES.iter().any(|(file, _)| canonical_reported_file(path)
+                == canonical_fixture_file(&f.root.join(file))),
             "decoy: {symbol}"
         );
     }
@@ -179,9 +180,25 @@ fn exercise(receipt: bool) {
         ],
         None,
     ));
+    let hits = find.as_array().expect("array");
+    assert_eq!(hits.len(), 1, "{find}");
+    let hit = hits[0].as_object().expect("object");
+    let mut keys: Vec<&str> = hit.keys().map(String::as_str).collect();
+    keys.sort_unstable();
     assert_eq!(
-        find,
-        json!([{"file":expected_path(&f.root.join("Bench.kt")),"name":"kotlinBeacon","line":3,"col":5,"kind":"function","relativePath":"Bench.kt"}])
+        keys,
+        ["col", "file", "kind", "line", "name", "relativePath"],
+        "{find}"
+    );
+    assert_eq!(hit["name"], "kotlinBeacon", "{find}");
+    assert_eq!(hit["line"], 3, "{find}");
+    assert_eq!(hit["col"], 5, "{find}");
+    assert_eq!(hit["kind"], "function", "{find}");
+    assert_eq!(hit["relativePath"], "Bench.kt", "{find}");
+    assert_eq!(
+        canonical_reported_file(hit["file"].as_str().expect("file")),
+        canonical_fixture_file(&f.root.join("Bench.kt")),
+        "{find}"
     );
 }
 

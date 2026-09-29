@@ -591,3 +591,93 @@ Semantic-insert flat parser branches remain unregistered; plain grouped insert
 and unrelated batch/format writers are not migrated. Planning/acceptance and
 fresh read-only review remain parent-owned. P5-only diff, prerequisite hashes,
 case matrix, exact RED/GREEN/gate logs and manual byte smokes accompany the report.
+
+## Cross-platform repair validation (PR #335)
+
+Keep local verification isolated: set temporary `HOME`, `USERPROFILE`, and
+`XDG_CACHE_HOME`/`XDG_CONFIG_HOME`/`XDG_DATA_HOME`, retain the real `CARGO_HOME`
+and `RUSTUP_HOME`, and clear inherited `GIT_*` variables. Capture the actual
+Cargo exit code (not a `grep`/`head` pipeline's status), save complete logs, and
+bound the entire test process group. A moved checkout may require rebuilding
+package artifacts because integration binaries embed `CARGO_BIN_EXE` paths.
+Do not move the user's real library sources to make tests pass.
+
+The initial CI failures are tracked separately from the historical P5/P6
+macOS receipts below. The repair coverage is:
+
+- `rg::tests::split_fields_*`: native, verbatim drive, UNC and Unix rg output;
+  drive colons must not discard references.
+- `cli::query_engine_tests::references_resolve_mem_only_uris_without_native_paths`:
+  references remain available from in-memory content without a native path.
+- `path_identity_tests::alternate_root_spellings_keep_cold_and_warm_query_identity`:
+  successive raw/canonical/dotted roots must retain exactly two symbols, one
+  call edge and a working cursor lookup, including escaped filenames.
+- Existing `cli_options_tests`, `workspace_options_tests`, `search_output_tests`
+  and P6 fixtures retain exact results; URI-tail fields are not silently changed
+  into native paths. Search's percent-encoding assertion is a compatibility gate.
+- Existing `cli::edit::tests` and `edit_safety_tests` cover replacement, identity
+  conflicts, partial failures and byte preservation. Destination identity handles
+  stay alive through the final comparison, then are released before Windows
+  replacement; directory/temp handles remain for guarded cleanup. The final
+  check-to-rename race is still not eliminated.
+- `batch_query_tests::file_explicit_root_fails_before_indexing_in_text_and_json`:
+  existing-file roots fail before indexing/results in both output modes; the
+  missing-root control remains separate.
+- `install_script_tests`: hermetic GNU tar fixtures include `gzip` on PATH.
+
+Run `cargo fmt --all -- --check`, `cargo test --all-features --no-fail-fast` and
+`cargo clippy --all-targets --all-features -- -D warnings` under that isolation.
+Only exact-head Ubuntu/macOS/Windows CI establishes cross-platform acceptance;
+local macOS results and platform source inspection alone do not.
+
+## P6 baseline and identity gate
+
+macOS verification of this gate, 2026-09-17, development build. P6 makes
+README/installer GitHub-Releases-only, aligns command aliases with the real
+parser, replaces the old Rust benchmark harness with real-fixture CLI
+baselines, and documents the call-graph identity boundary in
+[GRAPH_IDENTITY.md](GRAPH_IDENTITY.md) — known lossy reach/snapshot behavior
+stays documented there, never asserted as correct. Windows/Linux have **not**
+run locally. The first push CI run (35167953203, head 043d097) failed exactly
+where this gate's fixtures were representation-bound, and the fixes are fixture
+scope only: Ubuntu GNU tar could not exec `gzip` from the closed fixture PATH
+(2 installer tests), and Windows compared CLI-reported path spellings (`/C:/…`
+URI tails, 8.3 `RUNNER~1` short names, percent-encoding) against native
+spellings in the alias semantic test, the benchmark decoy/find controls and the
+unique reach/graph/snapshot control. Assertions now decode every reported
+representation to canonical filesystem identity while retaining URI-shape
+checks, exact non-path fields, exact key sets, complete result sets and
+wrong-workspace negatives. The same run's Windows production failures (empty
+refs, missing cursor lookup, duplicate graph symbols/calls, edit atomic replace
+`Access is denied`) are **not** test-only, stay outside P6, and remain a
+separate parent-owned prerequisite; they are not claimed fixed here.
+
+### Behavior → test → command/result matrix (this gate's macOS run)
+
+| Behavior | Test | Command (offline) | Result |
+|---|---|---|---|
+| Release-only installer: exact-PREFIX verify, never cargo or stale PATH binary | `install_script_tests::release_only_installer_verifies_exact_destination_not_stale_path` | `cargo test --test install_script_tests` | 3 passed, exit 0 |
+| Darwin x86_64 stops before download; no Intel→arm64/Rosetta falsehood | `install_script_tests::unsupported_darwin_x86_environment_stops_before_download` | same run | included above |
+| Pinned version uses pipeline asset name | `install_script_tests::pinned_linux_release_uses_pipeline_asset_name` | same run | included above |
+| Installer shell syntax | — | `bash -n scripts/install.sh` | exit 0 |
+| 36 removed flat aliases refuse before execution, no JSON envelope | `alias_contract_tests::removed_flat_aliases_fail_before_execution_even_with_json` | `cargo test --test alias_contract_tests` | 3 passed, exit 0 |
+| `docs`/`search` shorthands live with real semantic results | `alias_contract_tests::docs_and_search_shorthands_are_live_with_nonempty_semantic_results` | same run | included above |
+| `tool bench` real nonzero fixture counts + help/capabilities advertisement | `alias_contract_tests::tool_bench_current_command_reports_real_nonzero_fixture_counts` | same run | included above |
+| Benchmarks: real Kotlin/Java/Swift fixtures, per-invocation status+semantics, cache-byte/mtime invariance, decoys, empty/wrong-workspace negatives | `benches_tests::benchmark_fixture_semantics_cold_warm_batch_and_decoys`, `benchmark_contract_rejects_empty_success_and_wrong_workspace` | `cargo test --test benches` | 2 passed, 1 ignored (timing receipt), exit 0 |
+| Graph identity: package/class-name/overload/same-line/source-set boundaries, ambiguity refusal with exact candidates, cold+warm × positional+name | `graph_identity_tests` (6 `identity_case` tests) | `cargo test --test graph_identity_tests` | 7 passed, exit 0 |
+| Unique control: exact reach/graph/snapshot edges cold+warm, no cwd decoy | `graph_identity_tests::unique_control_has_exact_reach_graph_snapshot_edges_cold_and_warm` | same run | included above |
+| Help guardrails not weakened | `args::tests::help_*` | `cargo test --bin kotlin-lsp args::tests::help_` | 7 passed, exit 0 |
+
+### Explicit timing receipt (not a performance claim)
+
+Benchmark timings execute explicitly; they are debug-profile, small synthetic
+fixture receipts with no release, large-library or threshold claim:
+`cargo test --offline --test benches -- --ignored --nocapture --test-threads=1`
+→ exit 0, 1 passed, 21 per-invocation receipts (3 iterations × fresh check,
+cold single query, 4 warm single queries, warm four-query batch) plus 3
+aggregate `startup-amortization-samples-not-speedup-claim` summaries (24 total
+records). This run: check-fresh
+344–1061ms, cold single query 224–226ms, warm single 14–32ms, warm batch
+15–16ms; cold/warm/batch stay clearly distinguished. `cargo fmt --all --
+--check` and `cargo clippy --offline --all-targets -- -D warnings` pass with
+zero warnings for this gate's files.

@@ -675,7 +675,8 @@ pub(crate) async fn run_search(
         let file_path = file_entry.key();
         let file_data = file_entry.value();
 
-        // Compute a display path (relative to root when possible)
+        // Preserve the existing escaped URI-tail representation, not a native
+        // filesystem path (notably `/C:/…` on Windows).
         let display_path = file_path
             .strip_prefix("file://")
             .unwrap_or(file_path)

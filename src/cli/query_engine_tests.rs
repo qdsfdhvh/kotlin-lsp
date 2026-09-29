@@ -54,6 +54,29 @@ fn references_returns_empty_for_unknown() {
     assert!(locs.is_empty());
 }
 
+#[test]
+fn references_resolve_mem_only_uris_without_native_paths() {
+    // A non-file URI has no native path on any platform (file://host would
+    // instead be a valid UNC path on Windows). In-memory content must still
+    // supply occurrences, as for drive-less file:///test/… URIs on Windows.
+    let idx = std::sync::Arc::new(crate::indexer::Indexer::new());
+    let uri = Url::parse("untitled:Ref.kt").expect("mem-only URI");
+    assert!(
+        uri.to_file_path().is_err(),
+        "fixture URI must have no native filesystem path"
+    );
+    idx.index_content(
+        &uri,
+        "package com.example\nfun topLevel() {}\nfun entry() { topLevel() }",
+    );
+    let engine = IndexQueryEngine::new(idx);
+    let locs = engine.references("topLevel");
+    assert!(
+        locs.iter().any(|loc| loc.range.start.line == 2),
+        "mem-only occurrences must not require a native filesystem path"
+    );
+}
+
 // ── find_symbols ─────────────────────────────────────────────────────────
 
 #[test]

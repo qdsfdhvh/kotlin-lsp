@@ -1,4 +1,8 @@
 //! Shared disposable process boundary for P6 tests (no global environment mutation).
+// Every including test binary compiles this module wholesale, but each uses a
+// different subset of the shared fixture/path helpers; the rest stay here so
+// all binaries assert the same canonical-identity contract.
+#![allow(dead_code)]
 use serde_json::Value;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -74,4 +78,41 @@ pub fn expected_path(path: &Path) -> String {
         .to_str()
         .expect("UTF8 fixture")
         .to_owned()
+}
+
+/// Test-only decoding of CLI-reported file values. Producers report different
+/// representations (native path, full `file://` URI, or the URL path tail
+/// `/C:/…` on Windows); decode each to its canonical filesystem identity so
+/// comparisons stay full-path — never basename or prefix-stripped.
+pub fn canonical_reported_file(reported: &str) -> PathBuf {
+    let decoded = if windows_drive_uri_tail(reported) {
+        tower_lsp::lsp_types::Url::parse(&format!("file://{}", reported))
+            .expect("reported URI tail")
+            .to_file_path()
+            .expect("reported URI tail path")
+    } else if reported.starts_with("file:") {
+        tower_lsp::lsp_types::Url::parse(reported)
+            .expect("reported file URI")
+            .to_file_path()
+            .expect("reported URI path")
+    } else {
+        PathBuf::from(reported)
+    };
+    decoded.canonicalize().expect("canonical reported file")
+}
+
+/// `/C:/…` URL path tail (the `Url::path()` spelling), not a native path.
+fn windows_drive_uri_tail(reported: &str) -> bool {
+    let bytes = reported.as_bytes();
+    bytes.len() >= 3
+        && bytes[0] == b'/'
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b':'
+        && (bytes.len() == 3 || bytes[3] == b'/')
+}
+
+/// Test-only canonical identity of a fixture path, matching the normalization
+/// `canonical_reported_file` applies to CLI-reported values.
+pub fn canonical_fixture_file(path: &Path) -> PathBuf {
+    path.canonicalize().expect("canonical fixture file")
 }

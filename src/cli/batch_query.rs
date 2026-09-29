@@ -62,6 +62,10 @@ pub(crate) async fn run_query(json: bool, explicit_root: Option<&Path>, no_stdli
         eprintln!("Invalid query root {}: {error}", root.display());
         std::process::exit(1);
     });
+    if !root.is_dir() {
+        eprintln!("Invalid query root {}: not a directory", root.display());
+        std::process::exit(1);
+    }
     // Without --root, retain ordinary cwd-relative file operands even when
     // workspace discovery finds a .git ancestor.
     let file_base = explicit_root.unwrap_or_else(|| Path::new("."));

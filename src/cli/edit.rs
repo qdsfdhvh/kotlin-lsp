@@ -509,7 +509,7 @@ fn apply_file_edits_with_hook<F: FnMut(usize, CommitStage, Option<&Path>)>(
                     hook(index, CommitStage::BeforeCommit, None);
                 }
                 prepared.recheck(&root_identities).and_then(|()| {
-                    replace_file(&prepared, &root_identities, |temp| {
+                    replace_file(prepared, &root_identities, |temp| {
                         hook(index, CommitStage::BeforeReplace, Some(temp))
                     })
                 })
@@ -575,7 +575,7 @@ fn cleanup_temporary(
 }
 
 fn replace_file<F: FnMut(&Path)>(
-    prepared: &PreparedEdit,
+    mut prepared: PreparedEdit,
     root: &[PathIdentity],
     mut hook: F,
 ) -> Result<(), String> {
@@ -612,6 +612,13 @@ fn replace_file<F: FnMut(&Path)>(
     if let Err(error) = ready {
         return Err(cleanup_temporary(temp, &handle, &parents, error));
     }
+    // Keep target handles alive through the final identity/content comparison,
+    // then release our own handles before replacing it. On Windows an open
+    // destination can block MoveFileExW(REPLACE_EXISTING), even with delete
+    // sharing. Parent/temp identities remain held for guarded error cleanup.
+    // This retains the documented final check-to-rename race; it is not a
+    // cross-process lock or permission to skip any preflight/recheck.
+    prepared.identities.clear();
     match temp.persist(&prepared.target) {
         Ok(_) => Ok(()),
         Err(error) => Err(cleanup_temporary(

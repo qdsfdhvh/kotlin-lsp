@@ -169,7 +169,8 @@ printf '%s\n' '[{"type":"definition","name":"target"},{"type":"references","name
 
 Reads a JSON array from stdin, loads one index for all items, and emits a compact
 JSON array in request order. `--root` selects the indexed workspace regardless
-of cwd; `--no-stdlib` skips `~/.kotlin-lsp/sources`. Relative file operands resolve
+of cwd and must be an existing directory; missing or file roots fail on stderr
+before indexing or results. `--no-stdlib` skips `~/.kotlin-lsp/sources`. Relative file operands resolve
 against an explicit `--root`, otherwise cwd. File paths are canonicalized;
 `line` and `col` are **1-based UTF-16**, not byte offsets.
 

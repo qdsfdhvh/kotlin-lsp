@@ -83,8 +83,10 @@
 `src/cli/edit.rs` prepares all requested raw UTF-8 texts and strict UTF-16 edits
 before writing, then rechecks contents, permissions and retained filesystem
 identities. Each changed target is replaced through a same-directory create-new
-`tempfile`; `same-file` handles stay open during comparisons. Temporary cleanup
-is identity-checked, including persist failures; uncertain paths are retained with
+`tempfile`; `same-file` handles stay open during comparisons. Destination handles
+are released after the final check so Windows can replace the target; parent and
+temporary-file handles remain for cleanup checks. Temporary cleanup is
+identity-checked, including persist failures; uncertain paths are retained with
 an explicit error instead of blindly removed. The internal generic commit hook
 is a zero-cost no-op in production and permits deterministic real-filesystem
 conflict tests, without CLI/environment test switches.

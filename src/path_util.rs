@@ -84,6 +84,18 @@ pub(crate) fn strip_unc_prefix(path: PathBuf) -> PathBuf {
     path
 }
 
+/// Resolve a path to its canonical native spelling: `fs::canonicalize` when the
+/// entry exists, with the Windows `\\?\` verbatim prefix stripped.
+///
+/// Used at workspace/library discovery boundaries so indexed URIs match
+/// canonicalized cursor operands, including Windows 8.3 and verbatim paths.
+/// Falls back to the input spelling if canonicalization fails, stripping a
+/// drive-letter verbatim prefix in either case.
+pub(crate) fn canonical_native(path: &Path) -> PathBuf {
+    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    strip_unc_prefix(canonical)
+}
+
 /// Extract the file stem (basename without extension) from a `file://` URL.
 ///
 /// Prefers `Url::to_file_path()` (which handles percent-decoding correctly)
